@@ -16,6 +16,13 @@ export interface StartOptions {
   disallowedTools?: string[];
 }
 
+export interface UsageData {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+}
+
 export interface ClaudeRunnerEvents {
   started: (data: { pid: number }) => void;
   text: (data: { text: string }) => void;
@@ -24,6 +31,7 @@ export interface ClaudeRunnerEvents {
   tool_result: (data: { toolUseId: string; content: string; isError: boolean }) => void;
   result: (data: { result: string; sessionId?: string }) => void;
   system: (data: { subtype?: string; sessionId?: string; tools?: string[]; model?: string; permissionMode?: string; cwd?: string }) => void;
+  usage: (data: UsageData) => void;
   error: (data: { type: 'stderr' | 'process' | 'parse'; message: string; error?: Error }) => void;
   exit: (data: { code: number | null; signal: string | null }) => void;
 }
@@ -187,6 +195,16 @@ export class ClaudeRunner extends EventEmitter {
           input: block.input,
         });
       }
+    }
+
+    // Emit usage info if available
+    if (event.message.usage) {
+      this.emit('usage', {
+        inputTokens: event.message.usage.input_tokens,
+        outputTokens: event.message.usage.output_tokens,
+        cacheCreationInputTokens: event.message.usage.cache_creation_input_tokens,
+        cacheReadInputTokens: event.message.usage.cache_read_input_tokens,
+      });
     }
   }
 

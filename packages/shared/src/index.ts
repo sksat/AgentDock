@@ -101,6 +101,8 @@ export type ServerMessage =
   | ResultMessage
   // System info
   | SystemInfoMessage
+  // Usage info
+  | UsageInfoMessage
   // Permission request
   | PermissionRequestMessage
   // AskUserQuestion
@@ -170,6 +172,15 @@ export interface SystemInfoMessage {
   permissionMode?: string;
   cwd?: string;
   tools?: string[];
+}
+
+export interface UsageInfoMessage {
+  type: 'usage_info';
+  sessionId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
 }
 
 export interface PermissionRequestMessage {

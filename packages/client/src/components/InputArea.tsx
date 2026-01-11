@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface InputAreaProps {
   onSend: (message: string) => void;
   onInterrupt?: () => void;
@@ -11,7 +16,7 @@ export interface InputAreaProps {
   permissionMode?: string;
   model?: string;
   sessionId?: string;
-  contextUsage?: number; // 0-100
+  tokenUsage?: TokenUsage;
   thinkingEnabled?: boolean;
   onToggleThinking?: () => void;
 }
@@ -25,7 +30,7 @@ export function InputArea({
   permissionMode = 'default',
   model,
   sessionId,
-  contextUsage,
+  tokenUsage,
   thinkingEnabled = false,
   onToggleThinking,
 }: InputAreaProps) {
@@ -138,24 +143,14 @@ export function InputArea({
               </div>
             )}
 
-            {/* Context usage */}
-            {contextUsage !== undefined && (
+            {/* Token usage */}
+            {tokenUsage && (
               <div className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                  <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
-                  <circle
-                    cx="8"
-                    cy="8"
-                    r="6"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeDasharray={`${(contextUsage / 100) * 37.7} 37.7`}
-                    transform="rotate(-90 8 8)"
-                    className="text-accent-primary"
-                  />
+                  <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
+                  <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
-                <span>{contextUsage}% used</span>
+                <span>{(tokenUsage.inputTokens + tokenUsage.outputTokens).toLocaleString()} tokens</span>
               </div>
             )}
 

@@ -12,12 +12,14 @@ function App() {
     sessions,
     activeSessionId,
     session,
+    sessionsLoaded,
     messages,
     pendingPermission,
     pendingQuestion,
     isLoading,
     error,
     systemInfo,
+    usageInfo,
     listSessions,
     createSession,
     selectSession,
@@ -57,10 +59,10 @@ function App() {
 
   // Create a session after getting the list if no sessions exist
   useEffect(() => {
-    if (isConnected && sessions.length === 0 && activeSessionId === null) {
+    if (isConnected && sessionsLoaded && sessions.length === 0 && activeSessionId === null) {
       createSession('New Session');
     }
-  }, [isConnected, sessions.length, activeSessionId, createSession]);
+  }, [isConnected, sessionsLoaded, sessions.length, activeSessionId, createSession]);
 
   const handleAllow = useCallback(
     (requestId: string, updatedInput: unknown) => {
@@ -169,6 +171,7 @@ function App() {
             permissionMode={systemInfo?.permissionMode}
             model={systemInfo?.model}
             sessionId={session?.claudeSessionId}
+            tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
             thinkingEnabled={thinkingEnabled}
             onToggleThinking={handleToggleThinking}
           />

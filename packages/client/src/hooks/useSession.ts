@@ -25,11 +25,19 @@ export interface SystemInfo {
   tools?: string[];
 }
 
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
   activeSessionId: string | null;
   session: SessionInfo | null;
+  sessionsLoaded: boolean;
 
   // Active session state
   messages: MessageStreamItem[];
@@ -38,6 +46,7 @@ export interface UseSessionReturn {
   isLoading: boolean;
   error: string | null;
   systemInfo: SystemInfo | null;
+  usageInfo: UsageInfo | null;
 
   // Session management
   listSessions: () => void;
@@ -77,6 +86,7 @@ export function useSession(): UseSessionReturn {
   // Session list and active session
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
 
   // Messages stored per session
   const [sessionMessages, setSessionMessages] = useState<SessionMessages>(new Map());
@@ -87,6 +97,7 @@ export function useSession(): UseSessionReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
 
   // Computed values
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
@@ -107,6 +118,7 @@ export function useSession(): UseSessionReturn {
 
   // Session management
   const listSessions = useCallback(() => {
+    setSessionsLoaded(false);
     send({ type: 'list_sessions' });
   }, [send]);
 
@@ -217,6 +229,7 @@ export function useSession(): UseSessionReturn {
       switch (message.type) {
         case 'session_list':
           setSessions(message.sessions);
+          setSessionsLoaded(true);
           break;
 
         case 'session_created': {
@@ -392,6 +405,15 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'usage_info':
+          setUsageInfo({
+            inputTokens: message.inputTokens,
+            outputTokens: message.outputTokens,
+            cacheCreationInputTokens: message.cacheCreationInputTokens,
+            cacheReadInputTokens: message.cacheReadInputTokens,
+          });
+          break;
+
         case 'error':
           setError(message.message);
           setIsLoading(false);
@@ -405,12 +427,14 @@ export function useSession(): UseSessionReturn {
     sessions,
     activeSessionId,
     session,
+    sessionsLoaded,
     messages,
     pendingPermission,
     pendingQuestion,
     isLoading,
     error,
     systemInfo,
+    usageInfo,
     listSessions,
     createSession,
     selectSession,

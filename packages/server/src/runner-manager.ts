@@ -92,6 +92,7 @@ export class RunnerManager {
       'tool_result',
       'result',
       'system',
+      'usage',
       'error',
       'exit',
     ];

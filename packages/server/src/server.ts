@@ -133,6 +133,24 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
         break;
       }
+
+      case 'usage': {
+        const usageData = eventData as {
+          inputTokens: number;
+          outputTokens: number;
+          cacheCreationInputTokens?: number;
+          cacheReadInputTokens?: number;
+        };
+        sendToSession(sessionId, {
+          type: 'usage_info',
+          sessionId,
+          inputTokens: usageData.inputTokens,
+          outputTokens: usageData.outputTokens,
+          cacheCreationInputTokens: usageData.cacheCreationInputTokens,
+          cacheReadInputTokens: usageData.cacheReadInputTokens,
+        });
+        break;
+      }
     }
   }
 
