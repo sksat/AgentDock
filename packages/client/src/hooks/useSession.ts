@@ -294,6 +294,33 @@ export function useSession(): UseSessionReturn {
           break;
         }
 
+        case 'thinking_output': {
+          const sessionId = message.sessionId;
+          updateSessionMessages(sessionId, (prev) => {
+            // If last message is thinking, append to it
+            const lastMessage = prev[prev.length - 1];
+            if (lastMessage?.type === 'thinking' && typeof lastMessage.content === 'string') {
+              return [
+                ...prev.slice(0, -1),
+                {
+                  ...lastMessage,
+                  content: lastMessage.content + message.thinking,
+                },
+              ];
+            }
+            // Otherwise create new thinking message
+            return [
+              ...prev,
+              {
+                type: 'thinking',
+                content: message.thinking,
+                timestamp: new Date().toISOString(),
+              },
+            ];
+          });
+          break;
+        }
+
         case 'tool_use': {
           const sessionId = message.sessionId;
           updateSessionMessages(sessionId, (prev) => [

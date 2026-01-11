@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'tool_use' | 'tool_result';
+  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result';
   content: unknown;
   timestamp: string;
 }
@@ -38,6 +39,8 @@ function MessageItem({ message }: MessageItemProps) {
       return <UserMessage content={message.content as string} />;
     case 'assistant':
       return <AssistantMessage content={message.content as string} />;
+    case 'thinking':
+      return <ThinkingMessage content={message.content as string} />;
     case 'tool_use':
       return <ToolUseMessage content={message.content as ToolUseContent} />;
     case 'tool_result':
@@ -62,6 +65,35 @@ function AssistantMessage({ content }: { content: string }) {
     <div data-testid="message-item" className="flex justify-start">
       <div className="max-w-[80%] px-4 py-3 rounded-lg bg-bg-tertiary text-text-primary whitespace-pre-wrap">
         {content}
+      </div>
+    </div>
+  );
+}
+
+function ThinkingMessage({ content }: { content: string }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  return (
+    <div data-testid="message-item" className="flex justify-start">
+      <div className="max-w-[90%] rounded-lg border border-border/50 overflow-hidden">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full px-4 py-2 bg-bg-secondary/50 border-b border-border/50 text-sm
+                     flex items-center gap-2 text-text-secondary hover:bg-bg-secondary transition-colors"
+        >
+          <span className={clsx(
+            'transition-transform',
+            isExpanded ? 'rotate-90' : 'rotate-0'
+          )}>
+            ▶
+          </span>
+          <span className="italic">Thinking</span>
+        </button>
+        {isExpanded && (
+          <div className="p-4 bg-bg-secondary/30 text-text-secondary text-sm whitespace-pre-wrap italic">
+            {content}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -87,6 +87,7 @@ export class RunnerManager {
     const events: RunnerEventType[] = [
       'started',
       'text',
+      'thinking',
       'tool_use',
       'tool_result',
       'result',

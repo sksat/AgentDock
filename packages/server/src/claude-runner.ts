@@ -19,6 +19,7 @@ export interface StartOptions {
 export interface ClaudeRunnerEvents {
   started: (data: { pid: number }) => void;
   text: (data: { text: string }) => void;
+  thinking: (data: { thinking: string }) => void;
   tool_use: (data: { id: string; name: string; input: unknown }) => void;
   tool_result: (data: { toolUseId: string; content: string; isError: boolean }) => void;
   result: (data: { result: string; sessionId?: string }) => void;
@@ -174,6 +175,8 @@ export class ClaudeRunner extends EventEmitter {
     for (const block of event.message.content) {
       if (block.type === 'text') {
         this.emit('text', { text: block.text });
+      } else if (block.type === 'thinking') {
+        this.emit('thinking', { thinking: block.thinking });
       } else if (block.type === 'tool_use') {
         this.emit('tool_use', {
           id: block.id,

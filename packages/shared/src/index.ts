@@ -95,6 +95,7 @@ export type ServerMessage =
   | SessionDeletedMessage
   // Agent output
   | TextOutputMessage
+  | ThinkingOutputMessage
   | ToolUseMessage
   | ToolResultMessage
   | ResultMessage
@@ -130,6 +131,12 @@ export interface TextOutputMessage {
   type: 'text_output';
   sessionId: string;
   text: string;
+}
+
+export interface ThinkingOutputMessage {
+  type: 'thinking_output';
+  sessionId: string;
+  thinking: string;
 }
 
 export interface ToolUseMessage {
@@ -194,7 +201,7 @@ export interface MessageItem {
   timestamp: string;
 }
 
-export type MessageItemType = 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'permission' | 'question';
+export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'permission' | 'question';
 
 export interface QuestionItem {
   question: string;

@@ -55,6 +55,14 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
         break;
 
+      case 'thinking':
+        sendToSession(sessionId, {
+          type: 'thinking_output',
+          sessionId,
+          thinking: (eventData as { thinking: string }).thinking,
+        });
+        break;
+
       case 'tool_use':
         sendToSession(sessionId, {
           type: 'tool_use',

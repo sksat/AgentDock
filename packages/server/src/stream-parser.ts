@@ -5,6 +5,16 @@ export interface TextBlock {
   text: string;
 }
 
+export interface ThinkingBlock {
+  type: 'thinking';
+  thinking: string;
+}
+
+export interface RedactedThinkingBlock {
+  type: 'redacted_thinking';
+  data: string;
+}
+
 export interface ToolUseBlock {
   type: 'tool_use';
   id: string;
@@ -19,7 +29,7 @@ export interface ToolResultBlock {
   is_error?: boolean;
 }
 
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | RedactedThinkingBlock | ToolUseBlock | ToolResultBlock;
 
 export interface AssistantMessage {
   role: 'assistant';
