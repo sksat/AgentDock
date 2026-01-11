@@ -48,15 +48,35 @@ describe('PermissionRequest', () => {
     expect(onDeny).toHaveBeenCalledWith(defaultProps.requestId, expect.any(String));
   });
 
-  it('should display Write tool input with file path', () => {
+  it('should display Write tool with DiffView', () => {
     const writeInput = {
       file_path: '/home/user/test.txt',
       content: 'Hello World',
     };
     render(<PermissionRequest {...defaultProps} toolName="Write" input={writeInput} />);
 
-    expect(screen.getByText('Write')).toBeInTheDocument();
+    // "Write" appears in both PermissionRequest header and DiffView header
+    const writeElements = screen.getAllByText('Write');
+    expect(writeElements.length).toBe(2);
     expect(screen.getByText(/\/home\/user\/test.txt/)).toBeInTheDocument();
+    // Should show "新規作成" indicator for Write without old content
+    expect(screen.getByText(/新規作成/)).toBeInTheDocument();
+  });
+
+  it('should display Edit tool with DiffView showing changes', () => {
+    const editInput = {
+      file_path: '/home/user/code.ts',
+      old_string: 'const x = 1;',
+      new_string: 'const x = 2;',
+    };
+    render(<PermissionRequest {...defaultProps} toolName="Edit" input={editInput} />);
+
+    // "Edit" appears in both PermissionRequest header and DiffView header
+    const editElements = screen.getAllByText('Edit');
+    expect(editElements.length).toBe(2);
+    expect(screen.getByText('/home/user/code.ts')).toBeInTheDocument();
+    // Should have a diff container
+    expect(screen.getByTestId('diff-container')).toBeInTheDocument();
   });
 
   it('should disable buttons after clicking allow', () => {

@@ -3,6 +3,7 @@ import type {
   ServerMessage,
   SessionInfo,
   ClientMessage,
+  QuestionItem,
 } from '@claude-bridge/shared';
 import type { MessageStreamItem } from '../components/MessageStream';
 
@@ -10,6 +11,11 @@ export interface PendingPermission {
   requestId: string;
   toolName: string;
   input: unknown;
+}
+
+export interface PendingQuestion {
+  requestId: string;
+  questions: QuestionItem[];
 }
 
 export interface UseSessionReturn {
@@ -21,6 +27,7 @@ export interface UseSessionReturn {
   // Active session state
   messages: MessageStreamItem[];
   pendingPermission: PendingPermission | null;
+  pendingQuestion: PendingQuestion | null;
   isLoading: boolean;
   error: string | null;
 
@@ -37,6 +44,8 @@ export interface UseSessionReturn {
     requestId: string,
     response: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }
   ) => void;
+  respondToQuestion: (requestId: string, answers: Record<string, string>) => void;
+  interrupt: () => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -66,6 +75,7 @@ export function useSession(): UseSessionReturn {
 
   // Active session state
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +115,7 @@ export function useSession(): UseSessionReturn {
         setActiveSessionId(sessionId);
         setError(null);
         setPendingPermission(null);
+        setPendingQuestion(null);
         // Request session history if not already loaded
         if (!sessionMessages.has(sessionId)) {
           send({ type: 'attach_session', sessionId });
@@ -164,6 +175,33 @@ export function useSession(): UseSessionReturn {
     },
     [activeSessionId, send]
   );
+
+  const respondToQuestion = useCallback(
+    (requestId: string, answers: Record<string, string>) => {
+      if (!activeSessionId) return;
+
+      send({
+        type: 'question_response',
+        sessionId: activeSessionId,
+        requestId,
+        answers,
+      });
+      setPendingQuestion(null);
+    },
+    [activeSessionId, send]
+  );
+
+  const interrupt = useCallback(() => {
+    if (!activeSessionId) return;
+
+    send({
+      type: 'interrupt',
+      sessionId: activeSessionId,
+    });
+    setIsLoading(false);
+    setPendingPermission(null);
+    setPendingQuestion(null);
+  }, [activeSessionId, send]);
 
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
@@ -302,6 +340,13 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'ask_user_question':
+          setPendingQuestion({
+            requestId: message.requestId,
+            questions: message.questions,
+          });
+          break;
+
         case 'error':
           setError(message.message);
           setIsLoading(false);
@@ -317,6 +362,7 @@ export function useSession(): UseSessionReturn {
     session,
     messages,
     pendingPermission,
+    pendingQuestion,
     isLoading,
     error,
     listSessions,
@@ -326,6 +372,8 @@ export function useSession(): UseSessionReturn {
     renameSession,
     sendMessage,
     respondToPermission,
+    respondToQuestion,
+    interrupt,
     handleServerMessage,
     setSend,
   };

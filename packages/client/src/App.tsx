@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
-import { MessageStream, InputArea, PermissionRequest, Sidebar } from './components';
+import { AskUserQuestion, MessageStream, InputArea, PermissionRequest, Sidebar } from './components';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -14,6 +14,7 @@ function App() {
     session,
     messages,
     pendingPermission,
+    pendingQuestion,
     isLoading,
     error,
     listSessions,
@@ -23,6 +24,8 @@ function App() {
     renameSession,
     sendMessage,
     respondToPermission,
+    respondToQuestion,
+    interrupt,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -134,13 +137,31 @@ function App() {
             </div>
           )}
 
-          {/* Loading indicator */}
-          {isLoading && !pendingPermission && (
-            <div className="px-4 py-2 border-t border-border">
+          {/* Pending question */}
+          {pendingQuestion && (
+            <div className="p-4 border-t border-border">
+              <AskUserQuestion
+                requestId={pendingQuestion.requestId}
+                questions={pendingQuestion.questions}
+                onSubmit={respondToQuestion}
+              />
+            </div>
+          )}
+
+          {/* Loading indicator with interrupt button */}
+          {isLoading && !pendingPermission && !pendingQuestion && (
+            <div className="px-4 py-2 border-t border-border flex items-center justify-between">
               <div className="flex items-center gap-2 text-text-secondary">
                 <span className="animate-pulse">●</span>
                 <span>処理中...</span>
               </div>
+              <button
+                onClick={interrupt}
+                className="px-3 py-1 text-sm bg-accent-danger/20 text-accent-danger rounded-lg
+                           hover:bg-accent-danger/30 transition-colors"
+              >
+                中断
+              </button>
             </div>
           )}
 

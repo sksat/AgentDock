@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import clsx from 'clsx';
+import { DiffView } from './DiffView';
 
 export interface PermissionRequestProps {
   requestId: string;
@@ -7,6 +8,42 @@ export interface PermissionRequestProps {
   input: unknown;
   onAllow: (requestId: string, updatedInput: unknown) => void;
   onDeny: (requestId: string, message: string) => void;
+}
+
+// Type guards for file operation tools
+interface WriteInput {
+  file_path: string;
+  content: string;
+}
+
+interface EditInput {
+  file_path: string;
+  old_string: string;
+  new_string: string;
+}
+
+function isWriteInput(input: unknown): input is WriteInput {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'file_path' in input &&
+    'content' in input &&
+    typeof (input as WriteInput).file_path === 'string' &&
+    typeof (input as WriteInput).content === 'string'
+  );
+}
+
+function isEditInput(input: unknown): input is EditInput {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'file_path' in input &&
+    'old_string' in input &&
+    'new_string' in input &&
+    typeof (input as EditInput).file_path === 'string' &&
+    typeof (input as EditInput).old_string === 'string' &&
+    typeof (input as EditInput).new_string === 'string'
+  );
 }
 
 export function PermissionRequest({
@@ -28,6 +65,27 @@ export function PermissionRequest({
     onDeny(requestId, 'User denied permission');
   }, [requestId, onDeny]);
 
+  // Determine if this is a file operation that should show a diff
+  const diffViewData = useMemo(() => {
+    if (toolName === 'Write' && isWriteInput(input)) {
+      return {
+        toolName: 'Write' as const,
+        filePath: input.file_path,
+        newContent: input.content,
+        oldContent: undefined,
+      };
+    }
+    if (toolName === 'Edit' && isEditInput(input)) {
+      return {
+        toolName: 'Edit' as const,
+        filePath: input.file_path,
+        oldContent: input.old_string,
+        newContent: input.new_string,
+      };
+    }
+    return null;
+  }, [toolName, input]);
+
   return (
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
       <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
@@ -36,9 +94,18 @@ export function PermissionRequest({
       </div>
 
       <div className="p-4">
-        <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">
-          {JSON.stringify(input, null, 2)}
-        </pre>
+        {diffViewData ? (
+          <DiffView
+            toolName={diffViewData.toolName}
+            filePath={diffViewData.filePath}
+            oldContent={diffViewData.oldContent}
+            newContent={diffViewData.newContent}
+          />
+        ) : (
+          <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">
+            {JSON.stringify(input, null, 2)}
+          </pre>
+        )}
       </div>
 
       <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3">
