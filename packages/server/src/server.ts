@@ -111,11 +111,26 @@ export function createServer(options: ServerOptions): BridgeServer {
         break;
 
       case 'system': {
-        const systemData = eventData as { sessionId?: string };
+        const systemData = eventData as {
+          sessionId?: string;
+          model?: string;
+          permissionMode?: string;
+          cwd?: string;
+          tools?: string[];
+        };
         // Capture Claude session ID from system init event
         if (systemData.sessionId) {
           sessionManager.setClaudeSessionId(sessionId, systemData.sessionId);
         }
+        // Send system info to client
+        sendToSession(sessionId, {
+          type: 'system_info',
+          sessionId,
+          model: systemData.model,
+          permissionMode: systemData.permissionMode,
+          cwd: systemData.cwd,
+          tools: systemData.tools,
+        });
         break;
       }
     }

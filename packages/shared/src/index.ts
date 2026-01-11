@@ -99,6 +99,8 @@ export type ServerMessage =
   | ToolUseMessage
   | ToolResultMessage
   | ResultMessage
+  // System info
+  | SystemInfoMessage
   // Permission request
   | PermissionRequestMessage
   // AskUserQuestion
@@ -159,6 +161,15 @@ export interface ResultMessage {
   type: 'result';
   sessionId: string;
   result: string;
+}
+
+export interface SystemInfoMessage {
+  type: 'system_info';
+  sessionId: string;
+  model?: string;
+  permissionMode?: string;
+  cwd?: string;
+  tools?: string[];
 }
 
 export interface PermissionRequestMessage {

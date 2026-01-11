@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, PermissionRequest, Sidebar } from './components';
@@ -17,6 +17,7 @@ function App() {
     pendingQuestion,
     isLoading,
     error,
+    systemInfo,
     listSessions,
     createSession,
     selectSession,
@@ -29,6 +30,8 @@ function App() {
     handleServerMessage,
     setSend,
   } = useSession();
+
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   const { isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
@@ -72,6 +75,10 @@ function App() {
     },
     [respondToPermission]
   );
+
+  const handleToggleThinking = useCallback(() => {
+    setThinkingEnabled((prev) => !prev);
+  }, []);
 
   // Convert SessionInfo to SidebarSession
   const sidebarSessions: SidebarSession[] = sessions.map((s) => ({
@@ -148,15 +155,22 @@ function App() {
             </div>
           )}
 
-          {/* Loading indicator with interrupt button */}
+          {/* Loading indicator with vibing message */}
           {isLoading && !pendingPermission && !pendingQuestion && (
-            <LoadingIndicator onInterrupt={interrupt} />
+            <LoadingIndicator />
           )}
 
-          {/* Input area */}
+          {/* Input area with status bar */}
           <InputArea
             onSend={sendMessage}
-            disabled={!isConnected || !session || isLoading}
+            onInterrupt={interrupt}
+            disabled={!isConnected || !session}
+            isLoading={isLoading}
+            permissionMode={systemInfo?.permissionMode}
+            model={systemInfo?.model}
+            sessionId={session?.claudeSessionId}
+            thinkingEnabled={thinkingEnabled}
+            onToggleThinking={handleToggleThinking}
           />
         </main>
       </div>

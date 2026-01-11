@@ -23,7 +23,7 @@ export interface ClaudeRunnerEvents {
   tool_use: (data: { id: string; name: string; input: unknown }) => void;
   tool_result: (data: { toolUseId: string; content: string; isError: boolean }) => void;
   result: (data: { result: string; sessionId?: string }) => void;
-  system: (data: { subtype?: string; sessionId?: string; tools?: string[] }) => void;
+  system: (data: { subtype?: string; sessionId?: string; tools?: string[]; model?: string; permissionMode?: string; cwd?: string }) => void;
   error: (data: { type: 'stderr' | 'process' | 'parse'; message: string; error?: Error }) => void;
   exit: (data: { code: number | null; signal: string | null }) => void;
 }
@@ -148,6 +148,9 @@ export class ClaudeRunner extends EventEmitter {
           subtype: event.subtype,
           sessionId: event.session_id,
           tools: event.tools,
+          model: event.model,
+          permissionMode: event.permissionMode,
+          cwd: event.cwd,
         });
         break;
 

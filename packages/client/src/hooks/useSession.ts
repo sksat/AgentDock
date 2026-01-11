@@ -18,6 +18,13 @@ export interface PendingQuestion {
   questions: QuestionItem[];
 }
 
+export interface SystemInfo {
+  model?: string;
+  permissionMode?: string;
+  cwd?: string;
+  tools?: string[];
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -30,6 +37,7 @@ export interface UseSessionReturn {
   pendingQuestion: PendingQuestion | null;
   isLoading: boolean;
   error: string | null;
+  systemInfo: SystemInfo | null;
 
   // Session management
   listSessions: () => void;
@@ -78,6 +86,7 @@ export function useSession(): UseSessionReturn {
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
   // Computed values
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
@@ -374,6 +383,15 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'system_info':
+          setSystemInfo({
+            model: message.model,
+            permissionMode: message.permissionMode,
+            cwd: message.cwd,
+            tools: message.tools,
+          });
+          break;
+
         case 'error':
           setError(message.message);
           setIsLoading(false);
@@ -392,6 +410,7 @@ export function useSession(): UseSessionReturn {
     pendingQuestion,
     isLoading,
     error,
+    systemInfo,
     listSessions,
     createSession,
     selectSession,

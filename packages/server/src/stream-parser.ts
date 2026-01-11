@@ -62,6 +62,9 @@ export interface SystemEvent {
   subtype?: string;
   session_id?: string;
   tools?: string[];
+  model?: string;
+  permissionMode?: string;
+  cwd?: string;
   [key: string]: unknown;
 }
 
