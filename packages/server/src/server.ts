@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import type { ClientMessage, ServerMessage } from '@claude-bridge/shared';
 import { SessionManager } from './session-manager.js';
+import { RunnerManager, RunnerEventType } from './runner-manager.js';
 
 export interface ServerOptions {
   port: number;
@@ -15,6 +16,7 @@ export interface BridgeServer {
   start(): Promise<void>;
   stop(): Promise<void>;
   getSessionManager(): SessionManager;
+  getRunnerManager(): RunnerManager;
 }
 
 export function createServer(options: ServerOptions): BridgeServer {
@@ -22,8 +24,91 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   const app = new Hono();
   const sessionManager = new SessionManager();
+  const runnerManager = new RunnerManager();
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
+
+  // Map session ID to WebSocket for sending events
+  const sessionWebSockets = new Map<string, WebSocket>();
+
+  // Send message to session's WebSocket
+  function sendToSession(sessionId: string, message: ServerMessage): void {
+    const ws = sessionWebSockets.get(sessionId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  }
+
+  // Handle runner events and forward to WebSocket
+  function handleRunnerEvent(sessionId: string, eventType: RunnerEventType, data: unknown): void {
+    const eventData = data as Record<string, unknown>;
+
+    switch (eventType) {
+      case 'text':
+        sendToSession(sessionId, {
+          type: 'text_output',
+          sessionId,
+          text: (eventData as { text: string }).text,
+        });
+        break;
+
+      case 'tool_use':
+        sendToSession(sessionId, {
+          type: 'tool_use',
+          sessionId,
+          toolName: (eventData as { name: string }).name,
+          toolUseId: (eventData as { id: string }).id,
+          input: (eventData as { input: unknown }).input,
+        });
+        break;
+
+      case 'tool_result':
+        sendToSession(sessionId, {
+          type: 'tool_result',
+          sessionId,
+          toolUseId: (eventData as { toolUseId: string }).toolUseId,
+          content: (eventData as { content: string }).content,
+          isError: (eventData as { isError: boolean }).isError,
+        });
+        break;
+
+      case 'result': {
+        const resultData = eventData as { result: string; sessionId: string };
+        // Update session with Claude's session ID
+        if (resultData.sessionId) {
+          sessionManager.setClaudeSessionId(sessionId, resultData.sessionId);
+        }
+        sendToSession(sessionId, {
+          type: 'result',
+          sessionId,
+          result: resultData.result,
+        });
+        sessionManager.updateSessionStatus(sessionId, 'idle');
+        break;
+      }
+
+      case 'error':
+        sendToSession(sessionId, {
+          type: 'error',
+          sessionId,
+          message: (eventData as { message: string }).message,
+        });
+        break;
+
+      case 'exit':
+        sessionManager.updateSessionStatus(sessionId, 'idle');
+        break;
+
+      case 'system': {
+        const systemData = eventData as { sessionId?: string };
+        // Capture Claude session ID from system init event
+        if (systemData.sessionId) {
+          sessionManager.setClaudeSessionId(sessionId, systemData.sessionId);
+        }
+        break;
+      }
+    }
+  }
 
   // CORS middleware
   app.use('*', cors());
@@ -118,21 +203,76 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'user_message': {
-        // TODO: Implement Claude CLI execution
-        response = {
-          type: 'error',
-          sessionId: message.sessionId,
-          message: 'Not implemented yet',
-        };
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Store WebSocket for this session
+        sessionWebSockets.set(message.sessionId, ws);
+
+        // Check if already running
+        if (runnerManager.hasRunningSession(message.sessionId)) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session is already running',
+          };
+          break;
+        }
+
+        // Add user message to history
+        sessionManager.addToHistory(message.sessionId, {
+          type: 'user',
+          content: message.content,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update session status
+        sessionManager.updateSessionStatus(message.sessionId, 'running');
+
+        // Start Claude CLI
+        try {
+          runnerManager.startSession(message.sessionId, message.content, {
+            workingDir: session.workingDir,
+            claudeSessionId: session.claudeSessionId,
+            onEvent: handleRunnerEvent,
+          });
+          // Don't send response here - events will be sent via handleRunnerEvent
+          return;
+        } catch (error) {
+          sessionManager.updateSessionStatus(message.sessionId, 'idle');
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: error instanceof Error ? error.message : 'Failed to start Claude',
+          };
+        }
         break;
       }
 
       case 'interrupt': {
-        // TODO: Implement interrupt
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        runnerManager.stopSession(message.sessionId);
+        sessionManager.updateSessionStatus(message.sessionId, 'idle');
         response = {
-          type: 'error',
+          type: 'result',
           sessionId: message.sessionId,
-          message: 'Not implemented yet',
+          result: 'Interrupted',
         };
         break;
       }
@@ -212,9 +352,9 @@ export function createServer(options: ServerOptions): BridgeServer {
             headers,
           });
 
-          app.fetch(fetchRequest).then(async (response) => {
+          Promise.resolve(app.fetch(fetchRequest)).then(async (response: Response) => {
             res.statusCode = response.status;
-            response.headers.forEach((value, key) => {
+            response.headers.forEach((value: string, key: string) => {
               res.setHeader(key, value);
             });
             const body = await response.text();
@@ -230,6 +370,8 @@ export function createServer(options: ServerOptions): BridgeServer {
 
     async stop() {
       return new Promise((resolve) => {
+        // Stop all running Claude processes
+        runnerManager.stopAll();
         wss?.close();
         httpServer?.close(() => {
           resolve();
@@ -239,6 +381,10 @@ export function createServer(options: ServerOptions): BridgeServer {
 
     getSessionManager() {
       return sessionManager;
+    },
+
+    getRunnerManager() {
+      return runnerManager;
     },
   };
 }

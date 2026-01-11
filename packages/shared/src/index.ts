@@ -172,6 +172,7 @@ export interface SessionInfo {
   createdAt: string;
   workingDir: string;
   status: SessionStatus;
+  claudeSessionId?: string; // Claude CLI's session ID for --resume
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';

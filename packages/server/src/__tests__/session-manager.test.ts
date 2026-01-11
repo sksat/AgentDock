@@ -112,4 +112,37 @@ describe('SessionManager', () => {
       expect(sessionManager.getSession(session.id)?.status).toBe('running');
     });
   });
+
+  describe('setClaudeSessionId', () => {
+    it('should set Claude session ID', () => {
+      const session = sessionManager.createSession();
+      const result = sessionManager.setClaudeSessionId(session.id, 'claude-abc123');
+
+      expect(result).toBe(true);
+      expect(sessionManager.getSession(session.id)?.claudeSessionId).toBe('claude-abc123');
+    });
+
+    it('should return false for non-existent session', () => {
+      const result = sessionManager.setClaudeSessionId('non-existent', 'claude-abc123');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('addToHistory', () => {
+    it('should add message to history', () => {
+      const session = sessionManager.createSession();
+      const message = {
+        type: 'user' as const,
+        content: 'Hello',
+        timestamp: new Date().toISOString(),
+      };
+
+      sessionManager.addToHistory(session.id, message);
+      const history = sessionManager.getHistory(session.id);
+
+      expect(history).toHaveLength(1);
+      expect(history[0]).toEqual(message);
+    });
+  });
 });

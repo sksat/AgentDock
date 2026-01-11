@@ -25,7 +25,7 @@ describe('BridgeServer', () => {
 
     it('should list sessions via REST API', async () => {
       const response = await fetch(`http://localhost:${TEST_PORT}/api/sessions`);
-      const data = await response.json();
+      const data = await response.json() as { sessions: unknown[] };
 
       expect(response.status).toBe(200);
       expect(Array.isArray(data.sessions)).toBe(true);

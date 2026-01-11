@@ -51,6 +51,7 @@ export interface SystemEvent {
   type: 'system';
   subtype?: string;
   session_id?: string;
+  tools?: string[];
   [key: string]: unknown;
 }
 

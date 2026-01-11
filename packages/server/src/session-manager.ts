@@ -72,4 +72,17 @@ export class SessionManager {
       history.push(message);
     }
   }
+
+  addToHistory(id: string, message: MessageItem): void {
+    this.addMessage(id, message);
+  }
+
+  setClaudeSessionId(id: string, claudeSessionId: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return false;
+    }
+    session.claudeSessionId = claudeSessionId;
+    return true;
+  }
 }

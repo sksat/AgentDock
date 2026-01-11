@@ -74,6 +74,7 @@ describe('StreamJsonParser', () => {
       const event: StreamEvent = {
         type: 'assistant',
         message: {
+          role: 'assistant',
           content: [
             { type: 'text', text: 'Hello, ' },
             { type: 'text', text: 'world!' }
@@ -105,6 +106,7 @@ describe('StreamJsonParser', () => {
       const event: StreamEvent = {
         type: 'assistant',
         message: {
+          role: 'assistant',
           content: [{
             type: 'tool_use',
             id: 'tool-123',
