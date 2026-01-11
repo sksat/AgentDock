@@ -1,4 +1,5 @@
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents } from './claude-runner.js';
+import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions } from './claude-runner.js';
+import { EventEmitter } from 'events';
 
 export type RunnerEventType = keyof ClaudeRunnerEvents;
 export type RunnerEventHandler = (
@@ -16,9 +17,42 @@ export interface StartSessionOptions {
   onEvent: RunnerEventHandler;
 }
 
+/**
+ * Interface for Claude runner implementations (real or mock)
+ */
+export interface IClaudeRunner extends EventEmitter {
+  readonly isRunning: boolean;
+  start(prompt: string, options?: StartOptions): void;
+  stop(): void;
+  sendInput(input: string): void;
+  on<K extends keyof ClaudeRunnerEvents>(event: K, listener: ClaudeRunnerEvents[K]): this;
+}
+
+/**
+ * Factory function type for creating runner instances
+ */
+export type RunnerFactory = (options: ClaudeRunnerOptions) => IClaudeRunner;
+
+/**
+ * Default factory that creates real ClaudeRunner instances
+ */
+export const defaultRunnerFactory: RunnerFactory = (options) => new ClaudeRunner(options);
+
 export class RunnerManager {
-  private runners: Map<string, ClaudeRunner> = new Map();
+  private runners: Map<string, IClaudeRunner> = new Map();
   private eventHandlers: Map<string, RunnerEventHandler> = new Map();
+  private runnerFactory: RunnerFactory;
+
+  constructor(runnerFactory: RunnerFactory = defaultRunnerFactory) {
+    this.runnerFactory = runnerFactory;
+  }
+
+  /**
+   * Set a custom runner factory (useful for testing with mock)
+   */
+  setRunnerFactory(factory: RunnerFactory): void {
+    this.runnerFactory = factory;
+  }
 
   startSession(sessionId: string, prompt: string, options: StartSessionOptions): void {
     // Check if session is already running
@@ -34,7 +68,7 @@ export class RunnerManager {
       permissionToolName: options.permissionToolName,
     };
 
-    const runner = new ClaudeRunner(runnerOptions);
+    const runner = this.runnerFactory(runnerOptions);
     this.runners.set(sessionId, runner);
     this.eventHandlers.set(sessionId, options.onEvent);
 
@@ -60,7 +94,7 @@ export class RunnerManager {
     }
   }
 
-  getRunner(sessionId: string): ClaudeRunner | undefined {
+  getRunner(sessionId: string): IClaudeRunner | undefined {
     return this.runners.get(sessionId);
   }
 
@@ -81,7 +115,7 @@ export class RunnerManager {
 
   private setupEventForwarding(
     sessionId: string,
-    runner: ClaudeRunner,
+    runner: IClaudeRunner,
     onEvent: RunnerEventHandler
   ): void {
     const events: RunnerEventType[] = [

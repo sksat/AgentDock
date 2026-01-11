@@ -1,10 +1,13 @@
-import { useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
 import clsx from 'clsx';
+import { ModelSelector } from './ModelSelector';
 
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
 }
+
+export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
 
 export interface InputAreaProps {
   onSend: (message: string) => void;
@@ -14,7 +17,9 @@ export interface InputAreaProps {
   placeholder?: string;
   // Status bar info
   permissionMode?: string;
+  onPermissionModeChange?: (mode: PermissionMode) => void;
   model?: string;
+  onModelChange?: (model: string) => void;
   sessionId?: string;
   tokenUsage?: TokenUsage;
   thinkingEnabled?: boolean;
@@ -27,15 +32,50 @@ export function InputArea({
   disabled = false,
   isLoading = false,
   placeholder = 'Type a message...',
-  permissionMode = 'default',
+  permissionMode = 'ask',
+  onPermissionModeChange,
   model,
+  onModelChange,
   sessionId,
   tokenUsage,
   thinkingEnabled = false,
   onToggleThinking,
 }: InputAreaProps) {
   const [value, setValue] = useState('');
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Permission mode cycling: ask -> auto-edit -> plan -> ask
+  const cyclePermissionMode = useCallback(() => {
+    if (!onPermissionModeChange) return;
+    const modes: PermissionMode[] = ['ask', 'auto-edit', 'plan'];
+    const currentIndex = modes.indexOf(permissionMode as PermissionMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    onPermissionModeChange(modes[nextIndex]);
+  }, [permissionMode, onPermissionModeChange]);
+
+  // Handle model selection
+  const handleModelSelect = useCallback((modelId: string) => {
+    if (onModelChange) {
+      onModelChange(modelId);
+    }
+    setShowModelSelector(false);
+    // Clear /model command if it was used
+    if (value.trim() === '/model') {
+      setValue('');
+    }
+  }, [onModelChange, value]);
+
+  // Handle input change - detect /model command
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setValue(newValue);
+
+    // Detect /model command
+    if (newValue.trim() === '/model' && onModelChange) {
+      setShowModelSelector(true);
+    }
+  }, [onModelChange]);
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
@@ -52,13 +92,18 @@ export function InputArea({
         e.preventDefault();
         handleSend();
       }
-      // Tab to toggle thinking mode
-      if (e.key === 'Tab' && onToggleThinking) {
+      // Shift+Tab to cycle permission mode
+      if (e.key === 'Tab' && e.shiftKey && onPermissionModeChange) {
+        e.preventDefault();
+        cyclePermissionMode();
+      }
+      // Tab (without Shift) to toggle thinking mode
+      if (e.key === 'Tab' && !e.shiftKey && onToggleThinking) {
         e.preventDefault();
         onToggleThinking();
       }
     },
-    [handleSend, onToggleThinking]
+    [handleSend, onToggleThinking, onPermissionModeChange, cyclePermissionMode]
   );
 
   // Auto-resize textarea
@@ -73,10 +118,13 @@ export function InputArea({
   // Format permission mode for display
   const formatPermissionMode = (mode: string) => {
     switch (mode) {
+      case 'ask':
       case 'default':
-        return 'Ask permission';
+        return 'Ask before edits';
       case 'auto-edit':
         return 'Edit automatically';
+      case 'plan':
+        return 'Plan mode';
       case 'full-auto':
         return 'Full auto';
       default:
@@ -108,7 +156,7 @@ export function InputArea({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
@@ -127,19 +175,52 @@ export function InputArea({
           {/* Left side - status info */}
           <div className="flex items-center gap-4">
             {/* Permission mode */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-accent-primary">▶▶</span>
-              <span>{formatPermissionMode(permissionMode)}</span>
-            </div>
+            {onPermissionModeChange ? (
+              <button
+                onClick={cyclePermissionMode}
+                className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                aria-label={formatPermissionMode(permissionMode)}
+              >
+                <span className="text-accent-primary">▶▶</span>
+                <span>{formatPermissionMode(permissionMode)}</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <span className="text-accent-primary">▶▶</span>
+                <span>{formatPermissionMode(permissionMode)}</span>
+              </div>
+            )}
 
             {/* Model info */}
             {model && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-text-secondary">&lt;/&gt;</span>
-                <span>
-                  {formatModel(model)}
-                  {sessionId && ` (${formatSessionId(sessionId)})`}
-                </span>
+              <div className="relative">
+                {onModelChange ? (
+                  <button
+                    onClick={() => setShowModelSelector(!showModelSelector)}
+                    className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                    aria-label={formatModel(model) ?? model}
+                  >
+                    <span className="text-text-secondary">&lt;/&gt;</span>
+                    <span>
+                      {formatModel(model)}
+                      {sessionId && ` (${formatSessionId(sessionId)})`}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-text-secondary">&lt;/&gt;</span>
+                    <span>
+                      {formatModel(model)}
+                      {sessionId && ` (${formatSessionId(sessionId)})`}
+                    </span>
+                  </div>
+                )}
+                <ModelSelector
+                  currentModel={model}
+                  onSelectModel={handleModelSelect}
+                  isOpen={showModelSelector}
+                  onClose={() => setShowModelSelector(false)}
+                />
               </div>
             )}
 

@@ -2,6 +2,8 @@
 
 // ==================== Client → Server ====================
 
+export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
+
 export type ClientMessage =
   // Session management
   | CreateSessionMessage
@@ -13,6 +15,9 @@ export type ClientMessage =
   // User input
   | UserMessageMessage
   | InterruptMessage
+  // Settings
+  | SetPermissionModeMessage
+  | SetModelMessage
   // Permission response (from frontend)
   | PermissionResponseMessage
   // AskUserQuestion response
@@ -60,6 +65,18 @@ export interface UserMessageMessage {
 export interface InterruptMessage {
   type: 'interrupt';
   sessionId: string;
+}
+
+export interface SetPermissionModeMessage {
+  type: 'set_permission_mode';
+  sessionId: string;
+  mode: PermissionMode;
+}
+
+export interface SetModelMessage {
+  type: 'set_model';
+  sessionId: string;
+  model: string;
 }
 
 export interface PermissionResponseMessage {
@@ -213,6 +230,8 @@ export interface SessionInfo {
   workingDir: string;
   status: SessionStatus;
   claudeSessionId?: string; // Claude CLI's session ID for --resume
+  permissionMode?: PermissionMode;
+  model?: string;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';

@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { SessionInfo, SessionStatus, MessageItem } from '@claude-bridge/shared';
+import type { SessionInfo, SessionStatus, MessageItem, PermissionMode } from '@claude-bridge/shared';
 
 export interface CreateSessionOptions {
   name?: string;
@@ -83,6 +83,24 @@ export class SessionManager {
       return false;
     }
     session.claudeSessionId = claudeSessionId;
+    return true;
+  }
+
+  setPermissionMode(id: string, mode: PermissionMode): boolean {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return false;
+    }
+    session.permissionMode = mode;
+    return true;
+  }
+
+  setModel(id: string, model: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return false;
+    }
+    session.model = model;
     return true;
   }
 }

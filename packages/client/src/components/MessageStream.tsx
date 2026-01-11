@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import clsx from 'clsx';
+import { useThinkingPreference } from '../hooks/useThinkingPreference';
 
 export interface MessageStreamItem {
   type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result';
@@ -12,6 +12,8 @@ export interface MessageStreamProps {
 }
 
 export function MessageStream({ messages }: MessageStreamProps) {
+  const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
@@ -23,7 +25,12 @@ export function MessageStream({ messages }: MessageStreamProps) {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {messages.map((message, index) => (
-        <MessageItem key={index} message={message} />
+        <MessageItem
+          key={index}
+          message={message}
+          thinkingExpanded={thinkingExpanded}
+          onToggleThinking={toggleThinkingExpanded}
+        />
       ))}
     </div>
   );
@@ -31,16 +38,18 @@ export function MessageStream({ messages }: MessageStreamProps) {
 
 interface MessageItemProps {
   message: MessageStreamItem;
+  thinkingExpanded: boolean;
+  onToggleThinking: () => void;
 }
 
-function MessageItem({ message }: MessageItemProps) {
+function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageItemProps) {
   switch (message.type) {
     case 'user':
       return <UserMessage content={message.content as string} />;
     case 'assistant':
       return <AssistantMessage content={message.content as string} />;
     case 'thinking':
-      return <ThinkingMessage content={message.content as string} />;
+      return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
     case 'tool_use':
       return <ToolUseMessage content={message.content as ToolUseContent} />;
     case 'tool_result':
@@ -70,14 +79,18 @@ function AssistantMessage({ content }: { content: string }) {
   );
 }
 
-function ThinkingMessage({ content }: { content: string }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+interface ThinkingMessageProps {
+  content: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
 
+function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps) {
   return (
     <div data-testid="message-item" className="flex justify-start">
       <div className="max-w-[90%] rounded-lg border border-border/50 overflow-hidden">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={onToggle}
           className="w-full px-4 py-2 bg-bg-secondary/50 border-b border-border/50 text-sm
                      flex items-center gap-2 text-text-secondary hover:bg-bg-secondary transition-colors"
         >

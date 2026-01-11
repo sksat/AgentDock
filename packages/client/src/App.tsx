@@ -29,6 +29,8 @@ function App() {
     respondToPermission,
     respondToQuestion,
     interrupt,
+    setPermissionMode,
+    setModel,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -168,8 +170,10 @@ function App() {
             onInterrupt={interrupt}
             disabled={!isConnected || !session}
             isLoading={isLoading}
-            permissionMode={systemInfo?.permissionMode}
+            permissionMode={systemInfo?.permissionMode ?? 'ask'}
+            onPermissionModeChange={setPermissionMode}
             model={systemInfo?.model}
+            onModelChange={setModel}
             sessionId={session?.claudeSessionId}
             tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
             thinkingEnabled={thinkingEnabled}

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 
 describe('MessageStream', () => {
@@ -82,5 +82,90 @@ describe('MessageStream', () => {
     expect(items[0]).toHaveTextContent('First message');
     expect(items[1]).toHaveTextContent('Second message');
     expect(items[2]).toHaveTextContent('Third message');
+  });
+});
+
+describe('ThinkingMessage persistence', () => {
+  const STORAGE_KEY = 'claude-bridge:thinking-expanded';
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('should render thinking message with content', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'thinking', content: 'Let me think about this...', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('Let me think about this...')).toBeInTheDocument();
+  });
+
+  it('should read initial expanded state from localStorage', () => {
+    localStorage.setItem(STORAGE_KEY, 'false');
+
+    const messages: MessageStreamItem[] = [
+      { type: 'thinking', content: 'Thinking content', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Content should not be visible when collapsed
+    expect(screen.queryByText('Thinking content')).not.toBeInTheDocument();
+    // But the "Thinking" button should still be visible
+    expect(screen.getByText('Thinking')).toBeInTheDocument();
+  });
+
+  it('should save expanded state to localStorage on toggle', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'thinking', content: 'Thinking content', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Initially expanded (default)
+    expect(screen.getByText('Thinking content')).toBeInTheDocument();
+
+    // Click to collapse
+    fireEvent.click(screen.getByRole('button', { name: /Thinking/ }));
+
+    // Content should be hidden
+    expect(screen.queryByText('Thinking content')).not.toBeInTheDocument();
+    // State should be saved to localStorage
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('false');
+  });
+
+  it('should apply saved state to new thinking blocks', () => {
+    localStorage.setItem(STORAGE_KEY, 'false');
+
+    const messages: MessageStreamItem[] = [
+      { type: 'thinking', content: 'First thinking', timestamp: '2024-01-01T00:00:00Z' },
+      { type: 'thinking', content: 'Second thinking', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Both thinking blocks should be collapsed
+    expect(screen.queryByText('First thinking')).not.toBeInTheDocument();
+    expect(screen.queryByText('Second thinking')).not.toBeInTheDocument();
+    // But their headers should be visible
+    expect(screen.getAllByText('Thinking')).toHaveLength(2);
+  });
+
+  it('should toggle all thinking blocks when one is toggled (global setting)', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'thinking', content: 'First thinking', timestamp: '2024-01-01T00:00:00Z' },
+      { type: 'thinking', content: 'Second thinking', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Initially both expanded
+    expect(screen.getByText('First thinking')).toBeInTheDocument();
+    expect(screen.getByText('Second thinking')).toBeInTheDocument();
+
+    // Click the first thinking block's toggle
+    const buttons = screen.getAllByRole('button', { name: /Thinking/ });
+    fireEvent.click(buttons[0]);
+
+    // Both should now be collapsed
+    expect(screen.queryByText('First thinking')).not.toBeInTheDocument();
+    expect(screen.queryByText('Second thinking')).not.toBeInTheDocument();
   });
 });

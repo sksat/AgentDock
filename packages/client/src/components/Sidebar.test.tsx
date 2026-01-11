@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Sidebar, type SidebarSession } from './Sidebar';
 
@@ -176,5 +176,98 @@ describe('Sidebar', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onRenameSession).toHaveBeenCalledWith('session-1', 'Renamed Session');
+  });
+});
+
+describe('Sidebar collapse', () => {
+  const STORAGE_KEY = 'claude-bridge:sidebar-collapsed';
+
+  const mockSessions: SidebarSession[] = [
+    {
+      id: 'session-1',
+      name: 'Session 1',
+      status: 'idle',
+      createdAt: '2024-01-01T00:00:00Z',
+    },
+  ];
+
+  const defaultProps = {
+    sessions: mockSessions,
+    activeSessionId: 'session-1',
+    onSelectSession: vi.fn(),
+    onCreateSession: vi.fn(),
+    onDeleteSession: vi.fn(),
+    onRenameSession: vi.fn(),
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('should render collapse toggle button', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    expect(screen.getByRole('button', { name: /collapse/i })).toBeInTheDocument();
+  });
+
+  it('should toggle collapsed state on button click', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    const collapseButton = screen.getByRole('button', { name: /collapse/i });
+
+    // Initially expanded - session name should be visible
+    expect(screen.getByText('Session 1')).toBeInTheDocument();
+
+    // Click to collapse
+    fireEvent.click(collapseButton);
+
+    // Session name should not be visible (only icon)
+    expect(screen.queryByText('Session 1')).not.toBeInTheDocument();
+  });
+
+  it('should show only icons when collapsed', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    const collapseButton = screen.getByRole('button', { name: /collapse/i });
+    fireEvent.click(collapseButton);
+
+    // Should have collapsed width indicator
+    const sidebar = screen.getByTestId('sidebar');
+    expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+  });
+
+  it('should persist collapsed state to localStorage', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    const collapseButton = screen.getByRole('button', { name: /collapse/i });
+    fireEvent.click(collapseButton);
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('true');
+  });
+
+  it('should restore collapsed state from localStorage', () => {
+    localStorage.setItem(STORAGE_KEY, 'true');
+
+    render(<Sidebar {...defaultProps} />);
+
+    // Should start collapsed
+    const sidebar = screen.getByTestId('sidebar');
+    expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.queryByText('Session 1')).not.toBeInTheDocument();
+  });
+
+  it('should expand when clicking collapse button while collapsed', () => {
+    localStorage.setItem(STORAGE_KEY, 'true');
+
+    render(<Sidebar {...defaultProps} />);
+
+    const expandButton = screen.getByRole('button', { name: /expand/i });
+    fireEvent.click(expandButton);
+
+    // Should now be expanded
+    const sidebar = screen.getByTestId('sidebar');
+    expect(sidebar).not.toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByText('Session 1')).toBeInTheDocument();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('false');
   });
 });

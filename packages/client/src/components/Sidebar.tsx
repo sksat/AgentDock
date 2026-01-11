@@ -1,5 +1,7 @@
 import { useState, useCallback, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
+
+const STORAGE_KEY = 'claude-bridge:sidebar-collapsed';
 import type { SessionStatus } from '@claude-bridge/shared';
 
 export interface SidebarSession {
@@ -28,6 +30,18 @@ export function Sidebar({
 }: SidebarProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === 'true';
+  });
+
+  const toggleCollapsed = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const newValue = !prev;
+      localStorage.setItem(STORAGE_KEY, String(newValue));
+      return newValue;
+    });
+  }, []);
 
   const handleDoubleClick = useCallback((session: SidebarSession) => {
     setRenamingId(session.id);
@@ -57,43 +71,84 @@ export function Sidebar({
   );
 
   return (
-    <aside className="w-64 h-full flex flex-col bg-bg-secondary border-r border-border">
+    <aside
+      data-testid="sidebar"
+      data-collapsed={isCollapsed ? 'true' : undefined}
+      className={clsx(
+        'h-full flex flex-col bg-bg-secondary border-r border-border transition-all',
+        isCollapsed ? 'w-12' : 'w-64'
+      )}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-medium text-text-secondary">Sessions</h2>
-        <button
-          onClick={onCreateSession}
-          aria-label="New Session"
-          className={clsx(
-            'w-8 h-8 flex items-center justify-center rounded-lg',
-            'text-text-secondary hover:text-text-primary',
-            'hover:bg-bg-tertiary',
-            'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-            'transition-colors'
+      <div className={clsx(
+        'flex items-center border-b border-border',
+        isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-4 py-3'
+      )}>
+        {!isCollapsed && <h2 className="text-sm font-medium text-text-secondary">Sessions</h2>}
+        <div className="flex items-center gap-1">
+          {!isCollapsed && (
+            <button
+              onClick={onCreateSession}
+              aria-label="New Session"
+              className={clsx(
+                'w-8 h-8 flex items-center justify-center rounded-lg',
+                'text-text-secondary hover:text-text-primary',
+                'hover:bg-bg-tertiary',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors'
+              )}
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </button>
           )}
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          <button
+            onClick={toggleCollapsed}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={clsx(
+              'w-8 h-8 flex items-center justify-center rounded-lg',
+              'text-text-secondary hover:text-text-primary',
+              'hover:bg-bg-tertiary',
+              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+              'transition-colors'
+            )}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-        </button>
+            <svg
+              className={clsx('w-4 h-4 transition-transform', isCollapsed ? 'rotate-180' : '')}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto p-2">
         {sessions.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-text-secondary text-sm">
-            No sessions
-          </div>
+          !isCollapsed && (
+            <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+              No sessions
+            </div>
+          )
         ) : (
           <div className="space-y-1">
             {sessions.map((session) => (
@@ -102,6 +157,7 @@ export function Sidebar({
                 session={session}
                 isActive={session.id === activeSessionId}
                 isRenaming={session.id === renamingId}
+                isCollapsed={isCollapsed}
                 renameValue={renameValue}
                 onSelect={() => onSelectSession(session.id)}
                 onDelete={() => onDeleteSession(session.id)}
@@ -122,6 +178,7 @@ interface SessionItemProps {
   session: SidebarSession;
   isActive: boolean;
   isRenaming: boolean;
+  isCollapsed: boolean;
   renameValue: string;
   onSelect: () => void;
   onDelete: () => void;
@@ -135,6 +192,7 @@ function SessionItem({
   session,
   isActive,
   isRenaming,
+  isCollapsed,
   renameValue,
   onSelect,
   onDelete,
@@ -155,7 +213,7 @@ function SessionItem({
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      onDoubleClick={onDoubleClick}
+      onDoubleClick={isCollapsed ? undefined : onDoubleClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -164,8 +222,9 @@ function SessionItem({
       }}
       data-active={isActive || undefined}
       className={clsx(
-        'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left',
+        'w-full flex items-center rounded-lg text-left',
         'transition-colors group cursor-pointer',
+        isCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2',
         isActive
           ? 'bg-accent-primary/20 text-text-primary'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
@@ -178,31 +237,33 @@ function SessionItem({
         className={clsx('w-2 h-2 rounded-full flex-shrink-0', statusColor)}
       />
 
-      {/* Session name */}
-      <div className="flex-1 min-w-0">
-        {isRenaming ? (
-          <input
-            type="text"
-            value={renameValue}
-            onChange={(e) => onRenameChange(e.target.value)}
-            onKeyDown={onRenameKeyDown}
-            onBlur={onRenameSubmit}
-            autoFocus
-            className={clsx(
-              'w-full px-2 py-0.5 rounded text-sm',
-              'bg-bg-tertiary text-text-primary',
-              'border border-accent-primary',
-              'focus:outline-none'
-            )}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <span className="block truncate text-sm">{session.name}</span>
-        )}
-      </div>
+      {/* Session name (hidden when collapsed) */}
+      {!isCollapsed && (
+        <div className="flex-1 min-w-0">
+          {isRenaming ? (
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => onRenameChange(e.target.value)}
+              onKeyDown={onRenameKeyDown}
+              onBlur={onRenameSubmit}
+              autoFocus
+              className={clsx(
+                'w-full px-2 py-0.5 rounded text-sm',
+                'bg-bg-tertiary text-text-primary',
+                'border border-accent-primary',
+                'focus:outline-none'
+              )}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="block truncate text-sm">{session.name}</span>
+          )}
+        </div>
+      )}
 
-      {/* Delete button (shown on hover, not for active or running sessions) */}
-      {!isActive && session.status === 'idle' && (
+      {/* Delete button (shown on hover, not for active, running, or collapsed sessions) */}
+      {!isCollapsed && !isActive && session.status === 'idle' && (
         <button
           onClick={(e) => {
             e.stopPropagation();

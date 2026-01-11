@@ -5,11 +5,16 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import type { ClientMessage, ServerMessage } from '@claude-bridge/shared';
 import { SessionManager } from './session-manager.js';
-import { RunnerManager, RunnerEventType } from './runner-manager.js';
+import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
+import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 
 export interface ServerOptions {
   port: number;
   host?: string;
+  /** Use mock runner instead of real Claude CLI */
+  useMock?: boolean;
+  /** Custom scenarios for mock runner */
+  mockScenarios?: Scenario[];
 }
 
 export interface BridgeServer {
@@ -20,11 +25,26 @@ export interface BridgeServer {
 }
 
 export function createServer(options: ServerOptions): BridgeServer {
-  const { port, host = '0.0.0.0' } = options;
+  const { port, host = '0.0.0.0', useMock = false, mockScenarios = [] } = options;
 
   const app = new Hono();
   const sessionManager = new SessionManager();
-  const runnerManager = new RunnerManager();
+
+  // Create runner factory based on mock mode
+  let runnerFactory: RunnerFactory = defaultRunnerFactory;
+  if (useMock) {
+    runnerFactory = () => {
+      const mock = new MockClaudeRunner();
+      // Add custom scenarios
+      for (const scenario of mockScenarios) {
+        mock.addScenario(scenario);
+      }
+      return mock;
+    };
+    console.log('[Server] Using mock Claude runner');
+  }
+
+  const runnerManager = new RunnerManager(runnerFactory);
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
 
@@ -235,6 +255,48 @@ export function createServer(options: ServerOptions): BridgeServer {
           response = {
             type: 'session_created', // Reuse for update notification
             session,
+          };
+        } else {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+        }
+        break;
+      }
+
+      case 'set_permission_mode': {
+        const session = sessionManager.getSession(message.sessionId);
+        if (session) {
+          // Store the permission mode for the session
+          sessionManager.setPermissionMode(message.sessionId, message.mode);
+          // Send back the updated system info
+          response = {
+            type: 'system_info',
+            sessionId: message.sessionId,
+            permissionMode: message.mode,
+          };
+        } else {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+        }
+        break;
+      }
+
+      case 'set_model': {
+        const session = sessionManager.getSession(message.sessionId);
+        if (session) {
+          // Store the model for the session
+          sessionManager.setModel(message.sessionId, message.model);
+          // Send back the updated system info
+          response = {
+            type: 'system_info',
+            sessionId: message.sessionId,
+            model: message.model,
           };
         } else {
           response = {

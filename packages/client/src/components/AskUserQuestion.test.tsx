@@ -126,7 +126,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByLabelText('dayjs'));
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /回答を送信/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit answers/i }));
 
     expect(onSubmit).toHaveBeenCalledWith('req-1', {
       Library: 'dayjs',
@@ -148,14 +148,14 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByLabelText('Offline mode'));
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /回答を送信/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit answers/i }));
 
     expect(onSubmit).toHaveBeenCalledWith('req-1', {
       Features: 'Dark mode,Offline mode',
     });
   });
 
-  it('renders multiple questions', () => {
+  it('renders multiple questions with tabs', () => {
     render(
       <AskUserQuestion
         requestId="req-1"
@@ -164,16 +164,18 @@ describe('AskUserQuestion', () => {
       />
     );
 
-    expect(screen.getByText('Framework')).toBeInTheDocument();
+    // Both tab headers should be visible
+    expect(screen.getByRole('tab', { name: 'Framework' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Styling' })).toBeInTheDocument();
+
+    // First question content should be visible (default tab)
     expect(screen.getByText('Which framework?')).toBeInTheDocument();
-    expect(screen.getByText('Styling')).toBeInTheDocument();
-    expect(screen.getByText('Which styling approach?')).toBeInTheDocument();
   });
 
   it('disables submit button when no options selected', () => {
     render(<AskUserQuestion {...defaultProps} />);
 
-    const submitButton = screen.getByRole('button', { name: /回答を送信/i });
+    const submitButton = screen.getByRole('button', { name: /Submit answers/i });
     expect(submitButton).toBeDisabled();
   });
 
@@ -186,12 +188,15 @@ describe('AskUserQuestion', () => {
       />
     );
 
-    const submitButton = screen.getByRole('button', { name: /回答を送信/i });
+    const submitButton = screen.getByRole('button', { name: /Submit answers/i });
     expect(submitButton).toBeDisabled();
 
-    // Select for first question
+    // Select for first question (Framework tab is active by default)
     fireEvent.click(screen.getByLabelText('React'));
     expect(submitButton).toBeDisabled();
+
+    // Switch to second tab
+    fireEvent.click(screen.getByRole('tab', { name: 'Styling' }));
 
     // Select for second question
     fireEvent.click(screen.getByLabelText('Tailwind'));
@@ -233,10 +238,118 @@ describe('AskUserQuestion', () => {
     fireEvent.change(textInput, { target: { value: 'moment.js' } });
 
     // Submit
-    fireEvent.click(screen.getByRole('button', { name: /回答を送信/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit answers/i }));
 
     expect(onSubmit).toHaveBeenCalledWith('req-1', {
       Library: 'moment.js',
+    });
+  });
+
+  // Tab-style UI tests for multiple questions
+  describe('Tab-style UI', () => {
+    it('renders tabs for multiple questions', () => {
+      render(
+        <AskUserQuestion
+          requestId="req-1"
+          questions={multipleQuestions}
+          onSubmit={vi.fn()}
+        />
+      );
+
+      // Should have tab buttons for each question
+      expect(screen.getByRole('tab', { name: 'Framework' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Styling' })).toBeInTheDocument();
+    });
+
+    it('shows first question by default', () => {
+      render(
+        <AskUserQuestion
+          requestId="req-1"
+          questions={multipleQuestions}
+          onSubmit={vi.fn()}
+        />
+      );
+
+      // First question content should be visible
+      expect(screen.getByText('Which framework?')).toBeInTheDocument();
+      expect(screen.getByLabelText('React')).toBeInTheDocument();
+
+      // Second question content should NOT be visible
+      expect(screen.queryByText('Which styling approach?')).not.toBeInTheDocument();
+    });
+
+    it('switches between tabs on click', () => {
+      render(
+        <AskUserQuestion
+          requestId="req-1"
+          questions={multipleQuestions}
+          onSubmit={vi.fn()}
+        />
+      );
+
+      // Click on second tab
+      fireEvent.click(screen.getByRole('tab', { name: 'Styling' }));
+
+      // Second question content should now be visible
+      expect(screen.getByText('Which styling approach?')).toBeInTheDocument();
+      expect(screen.getByLabelText('Tailwind')).toBeInTheDocument();
+
+      // First question content should NOT be visible
+      expect(screen.queryByText('Which framework?')).not.toBeInTheDocument();
+    });
+
+    it('shows single question without tabs', () => {
+      render(<AskUserQuestion {...defaultProps} />);
+
+      // Should not have tab buttons for single question
+      expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+
+      // Question should still be visible
+      expect(screen.getByText('Which library should we use for date formatting?')).toBeInTheDocument();
+    });
+
+    it('indicates answered tabs visually', () => {
+      render(
+        <AskUserQuestion
+          requestId="req-1"
+          questions={multipleQuestions}
+          onSubmit={vi.fn()}
+        />
+      );
+
+      // Select option for first question
+      fireEvent.click(screen.getByLabelText('React'));
+
+      // First tab should be marked as answered
+      const firstTab = screen.getByRole('tab', { name: 'Framework' });
+      expect(firstTab).toHaveAttribute('data-answered', 'true');
+
+      // Second tab should not be marked
+      const secondTab = screen.getByRole('tab', { name: 'Styling' });
+      expect(secondTab).not.toHaveAttribute('data-answered', 'true');
+    });
+  });
+
+  describe('Close button', () => {
+    it('renders close button', () => {
+      render(<AskUserQuestion {...defaultProps} onClose={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: /close/i })).toBeInTheDocument();
+    });
+
+    it('calls onClose when close button is clicked', () => {
+      const onClose = vi.fn();
+      render(<AskUserQuestion {...defaultProps} onClose={onClose} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not render close button when onClose is not provided', () => {
+      render(<AskUserQuestion {...defaultProps} />);
+
+      expect(screen.queryByRole('button', { name: /close/i })).not.toBeInTheDocument();
     });
   });
 });

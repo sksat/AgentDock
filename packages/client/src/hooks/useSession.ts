@@ -4,6 +4,7 @@ import type {
   SessionInfo,
   ClientMessage,
   QuestionItem,
+  PermissionMode,
 } from '@claude-bridge/shared';
 import type { MessageStreamItem } from '../components/MessageStream';
 
@@ -63,6 +64,10 @@ export interface UseSessionReturn {
   ) => void;
   respondToQuestion: (requestId: string, answers: Record<string, string>) => void;
   interrupt: () => void;
+
+  // Settings
+  setPermissionMode: (mode: PermissionMode) => void;
+  setModel: (model: string) => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -222,6 +227,32 @@ export function useSession(): UseSessionReturn {
     setIsLoading(false);
     setPendingPermission(null);
     setPendingQuestion(null);
+  }, [activeSessionId, send]);
+
+  const setPermissionMode = useCallback((mode: PermissionMode) => {
+    if (!activeSessionId) return;
+
+    send({
+      type: 'set_permission_mode',
+      sessionId: activeSessionId,
+      mode,
+    });
+
+    // Update local systemInfo immediately for responsive UI
+    setSystemInfo((prev) => prev ? { ...prev, permissionMode: mode } : { permissionMode: mode });
+  }, [activeSessionId, send]);
+
+  const setModel = useCallback((model: string) => {
+    if (!activeSessionId) return;
+
+    send({
+      type: 'set_model',
+      sessionId: activeSessionId,
+      model,
+    });
+
+    // Update local systemInfo immediately for responsive UI
+    setSystemInfo((prev) => prev ? { ...prev, model } : { model });
   }, [activeSessionId, send]);
 
   const handleServerMessage = useCallback(
@@ -444,6 +475,8 @@ export function useSession(): UseSessionReturn {
     respondToPermission,
     respondToQuestion,
     interrupt,
+    setPermissionMode,
+    setModel,
     handleServerMessage,
     setSend,
   };
