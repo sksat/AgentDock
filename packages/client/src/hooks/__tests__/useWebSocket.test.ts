@@ -12,6 +12,7 @@ class MockWebSocket {
   static CLOSING = 2;
   static CLOSED = 3;
 
+  url: string;
   readyState = MockWebSocket.CONNECTING;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
@@ -19,7 +20,8 @@ class MockWebSocket {
   onerror: ((event: Event) => void) | null = null;
   sendMock = vi.fn();
 
-  constructor(public url: string) {
+  constructor(url: string) {
+    this.url = url;
     mockInstances.push(this);
     // Simulate async connection
     queueMicrotask(() => {
