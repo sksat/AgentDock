@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
-import { spawn, ChildProcess } from 'child_process';
+import * as pty from 'node-pty';
+import type { IPty } from 'node-pty';
 import { StreamJsonParser, StreamEvent } from './stream-parser.js';
 
 export interface ClaudeRunnerOptions {
@@ -28,7 +29,7 @@ export interface ClaudeRunnerEvents {
 
 export class ClaudeRunner extends EventEmitter {
   private options: ClaudeRunnerOptions;
-  private process: ChildProcess | null = null;
+  private ptyProcess: IPty | null = null;
   private parser: StreamJsonParser;
   private buffer: string = '';
   private _isRunning: boolean = false;
@@ -51,54 +52,47 @@ export class ClaudeRunner extends EventEmitter {
   start(prompt: string, options: StartOptions = {}): void {
     const args = this.buildArgs(prompt, options);
 
-    this.process = spawn(this.options.claudePath!, args, {
+    console.log('[ClaudeRunner] Starting with PTY:', this.options.claudePath, args.join(' '));
+
+    this.ptyProcess = pty.spawn(this.options.claudePath!, args, {
+      name: 'xterm-color',
+      cols: 200,
+      rows: 50,
       cwd: this.options.workingDir,
-      env: process.env,
+      env: process.env as { [key: string]: string },
     });
+
+    console.log('[ClaudeRunner] PTY process started with PID:', this.ptyProcess.pid);
 
     this._isRunning = true;
 
-    this.emit('started', { pid: this.process.pid! });
+    this.emit('started', { pid: this.ptyProcess.pid });
 
-    this.process.stdout?.on('data', (data: Buffer) => {
-      this.handleStdout(data.toString());
+    this.ptyProcess.onData((data: string) => {
+      this.handleStdout(data);
     });
 
-    this.process.stderr?.on('data', (data: Buffer) => {
-      this.emit('error', {
-        type: 'stderr',
-        message: data.toString(),
-      });
-    });
-
-    this.process.on('error', (error: Error) => {
-      this.emit('error', {
-        type: 'process',
-        message: error.message,
-        error,
-      });
-    });
-
-    this.process.on('exit', (code, signal) => {
+    this.ptyProcess.onExit(({ exitCode, signal }) => {
+      console.log('[ClaudeRunner] PTY process exited:', exitCode, signal);
       this._isRunning = false;
-      this.emit('exit', { code, signal });
+      this.emit('exit', { code: exitCode, signal: signal !== undefined ? String(signal) : null });
     });
   }
 
   stop(): void {
-    if (this.process) {
-      this.process.kill('SIGINT');
+    if (this.ptyProcess) {
+      this.ptyProcess.kill();
     }
   }
 
   sendInput(input: string): void {
-    if (this.process?.stdin) {
-      this.process.stdin.write(input + '\n');
+    if (this.ptyProcess) {
+      this.ptyProcess.write(input + '\n');
     }
   }
 
   private buildArgs(prompt: string, options: StartOptions): string[] {
-    const args: string[] = ['-p', prompt, '--output-format', 'stream-json'];
+    const args: string[] = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
     if (options.sessionId) {
       args.push('--resume', options.sessionId);
@@ -128,8 +122,11 @@ export class ClaudeRunner extends EventEmitter {
     this.buffer = lines.pop() ?? '';
 
     for (const line of lines) {
-      if (line.trim()) {
-        this.parseLine(line);
+      const trimmed = line.trim();
+      // Filter out ANSI escape sequences and control characters
+      const cleanLine = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\r/g, '');
+      if (cleanLine && cleanLine.startsWith('{')) {
+        this.parseLine(cleanLine);
       }
     }
   }
@@ -139,10 +136,7 @@ export class ClaudeRunner extends EventEmitter {
       const event = JSON.parse(line) as StreamEvent;
       this.processEvent(event);
     } catch {
-      this.emit('error', {
-        type: 'parse',
-        message: `Failed to parse line: ${line}`,
-      });
+      // Ignore non-JSON lines (likely terminal control sequences)
     }
   }
 
