@@ -13,11 +13,15 @@
   },
   "dependencies": {
     "@claude-bridge/shared": "workspace:*",
+    "@tailwindcss/vite": "^4.1.18",
+    "clsx": "^2.1.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
