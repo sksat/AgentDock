@@ -31,6 +31,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to WebSocket for sending events
   const sessionWebSockets = new Map<string, WebSocket>();
 
+  // Map request ID to WebSocket for permission responses (from MCP server)
+  const pendingPermissionRequests = new Map<string, WebSocket>();
+
   // Send message to session's WebSocket
   function sendToSession(sessionId: string, message: ServerMessage): void {
     const ws = sessionWebSockets.get(sessionId);
@@ -278,13 +281,57 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'permission_response': {
-        // TODO: Implement permission response handling
-        response = {
-          type: 'error',
-          sessionId: message.sessionId,
-          message: 'Not implemented yet',
-        };
+        // Forward permission response to waiting MCP server
+        const mcpWs = pendingPermissionRequests.get(message.requestId);
+        if (mcpWs && mcpWs.readyState === WebSocket.OPEN) {
+          mcpWs.send(JSON.stringify({
+            type: 'permission_response',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            response: message.response,
+          }));
+          pendingPermissionRequests.delete(message.requestId);
+          // No response needed back to client
+          return;
+        } else {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Permission request not found or expired',
+          };
+        }
         break;
+      }
+
+      case 'permission_request': {
+        // Permission request from MCP server - forward to client and store WS for response
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Store MCP WebSocket for response
+        pendingPermissionRequests.set(message.requestId, ws);
+
+        // Update session status
+        sessionManager.updateSessionStatus(message.sessionId, 'waiting_permission');
+
+        // Forward to client
+        sendToSession(message.sessionId, {
+          type: 'permission_request',
+          sessionId: message.sessionId,
+          requestId: message.requestId,
+          toolName: message.toolName,
+          input: message.input,
+        });
+
+        // No immediate response - MCP server waits for permission_response
+        return;
       }
 
       case 'question_response': {

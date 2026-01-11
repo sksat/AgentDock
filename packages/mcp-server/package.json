@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "ws": "^8.18.2"
+    "nanoid": "^5.1.5",
+    "ws": "^8.18.2",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

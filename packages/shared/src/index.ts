@@ -13,10 +13,12 @@ export type ClientMessage =
   // User input
   | UserMessageMessage
   | InterruptMessage
-  // Permission response
+  // Permission response (from frontend)
   | PermissionResponseMessage
   // AskUserQuestion response
-  | QuestionResponseMessage;
+  | QuestionResponseMessage
+  // Permission request (from MCP server)
+  | McpPermissionRequestMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -72,6 +74,15 @@ export interface QuestionResponseMessage {
   sessionId: string;
   requestId: string;
   answers: Record<string, string>;
+}
+
+// MCP Server → Bridge Server (permission request from claude CLI)
+export interface McpPermissionRequestMessage {
+  type: 'permission_request';
+  sessionId: string;
+  requestId: string;
+  toolName: string;
+  input: unknown;
 }
 
 // ==================== Server → Client ====================

@@ -1,48 +1,56 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PermissionHandler, PermissionRequest, PermissionResponse } from '../permission-handler.js';
-import { EventEmitter } from 'events';
 
-// Mock WebSocket
-class MockWebSocket extends EventEmitter {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+// Use vi.hoisted to declare mock instances that can be accessed from both
+// the mock factory and the tests
+const { mockInstances, MockWebSocket } = vi.hoisted(() => {
+  const mockInstances: any[] = [];
+  const { EventEmitter } = require('events');
 
-  readyState = MockWebSocket.CONNECTING;
-  url: string;
-  sendMock = vi.fn();
+  class MockWebSocket extends EventEmitter {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
 
-  constructor(url: string) {
-    super();
-    this.url = url;
-    // Simulate async connection
-    queueMicrotask(() => {
-      this.readyState = MockWebSocket.OPEN;
-      this.emit('open');
-    });
+    readyState = 0;
+    url: string;
+    sendMock = vi.fn();
+
+    constructor(url: string) {
+      super();
+      this.url = url;
+      mockInstances.push(this);
+      queueMicrotask(() => {
+        this.readyState = 1;
+        this.emit('open');
+      });
+    }
+
+    send(data: string) {
+      this.sendMock(data);
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
   }
 
-  send(data: string) {
-    this.sendMock(data);
-  }
-
-  close() {
-    this.readyState = MockWebSocket.CLOSED;
-    this.emit('close');
-  }
-}
+  return { mockInstances, MockWebSocket };
+});
 
 vi.mock('ws', () => ({
   WebSocket: MockWebSocket,
 }));
 
+import { PermissionHandler, type PermissionRequest, type PermissionResponse } from '../permission-handler.js';
+
 describe('PermissionHandler', () => {
   let handler: PermissionHandler;
-  let mockWs: MockWebSocket;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInstances.length = 0;
   });
 
   afterEach(async () => {
@@ -71,31 +79,22 @@ describe('PermissionHandler', () => {
         input: { command: 'ls -la' },
       };
 
-      // Start permission request
       const responsePromise = handler.requestPermission(request);
-
-      // Wait a tick for the request to be sent
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // Get the WebSocket instance
-      mockWs = (handler as any).ws;
+      const mockWs = mockInstances[0];
+      const sentMessage = JSON.parse(mockWs.sendMock.mock.calls[0][0]);
 
-      // Simulate response from server
       const response: PermissionResponse = {
         type: 'permission_response',
         sessionId: 'session-123',
-        requestId: expect.any(String),
+        requestId: sentMessage.requestId,
         response: { behavior: 'allow', updatedInput: { command: 'ls -la' } },
       };
-
-      // Find the requestId from the sent message
-      const sentMessage = JSON.parse(mockWs.sendMock.mock.calls[0][0]);
-      response.requestId = sentMessage.requestId;
 
       mockWs.emit('message', JSON.stringify(response));
 
       const result = await responsePromise;
-
       expect(result).toEqual({ behavior: 'allow', updatedInput: { command: 'ls -la' } });
     });
 
@@ -110,10 +109,9 @@ describe('PermissionHandler', () => {
       };
 
       const responsePromise = handler.requestPermission(request);
-
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockWs = (handler as any).ws;
+      const mockWs = mockInstances[0];
       const sentMessage = JSON.parse(mockWs.sendMock.mock.calls[0][0]);
 
       mockWs.emit('message', JSON.stringify({
@@ -124,7 +122,6 @@ describe('PermissionHandler', () => {
       }));
 
       const result = await responsePromise;
-
       expect(result).toEqual({ behavior: 'deny', message: 'Access denied to system files' });
     });
 
@@ -139,6 +136,36 @@ describe('PermissionHandler', () => {
       };
 
       await expect(handler.requestPermission(request)).rejects.toThrow('Permission request timed out');
+    });
+
+    it('should reject if not connected', async () => {
+      handler = new PermissionHandler('ws://localhost:3001/ws');
+
+      const request: PermissionRequest = {
+        sessionId: 'session-123',
+        toolName: 'Bash',
+        input: { command: 'ls' },
+      };
+
+      await expect(handler.requestPermission(request)).rejects.toThrow('Not connected to server');
+    });
+  });
+
+  describe('disconnect', () => {
+    it('should reject pending requests on disconnect', async () => {
+      handler = new PermissionHandler('ws://localhost:3001/ws');
+      await handler.connect();
+
+      const request: PermissionRequest = {
+        sessionId: 'session-123',
+        toolName: 'Bash',
+        input: { command: 'ls' },
+      };
+
+      const responsePromise = handler.requestPermission(request);
+      await handler.disconnect();
+
+      await expect(responsePromise).rejects.toThrow('Connection closed');
     });
   });
 });

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "bridge": {
+      "command": "node",
+      "args": ["packages/mcp-server/dist/index.js"],
+      "env": {
+        "BRIDGE_WS_URL": "ws://localhost:3001/ws"
+      }
+    }
+  }
+}
