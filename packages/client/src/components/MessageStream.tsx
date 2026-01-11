@@ -15,7 +15,7 @@ export function MessageStream({ messages }: MessageStreamProps) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
-        メッセージはまだありません
+        No messages yet
       </div>
     );
   }

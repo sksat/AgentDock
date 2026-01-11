@@ -60,10 +60,10 @@ export function Sidebar({
     <aside className="w-64 h-full flex flex-col bg-bg-secondary border-r border-border">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-medium text-text-secondary">セッション</h2>
+        <h2 className="text-sm font-medium text-text-secondary">Sessions</h2>
         <button
           onClick={onCreateSession}
-          aria-label="新規セッション"
+          aria-label="New Session"
           className={clsx(
             'w-8 h-8 flex items-center justify-center rounded-lg',
             'text-text-secondary hover:text-text-primary',
@@ -92,7 +92,7 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto p-2">
         {sessions.length === 0 ? (
           <div className="flex items-center justify-center h-full text-text-secondary text-sm">
-            セッションがありません
+            No sessions
           </div>
         ) : (
           <div className="space-y-1">
@@ -208,7 +208,7 @@ function SessionItem({
             e.stopPropagation();
             onDelete();
           }}
-          aria-label={`${session.name}を削除`}
+          aria-label={`Delete ${session.name}`}
           className={clsx(
             'w-6 h-6 flex items-center justify-center rounded',
             'text-text-secondary hover:text-accent-danger',

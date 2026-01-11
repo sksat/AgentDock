@@ -116,7 +116,7 @@ function App() {
               }`}
             />
             <span className="text-sm text-text-secondary">
-              {isConnected ? '接続中' : '切断'}
+              {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
         </header>

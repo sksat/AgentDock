@@ -6,17 +6,17 @@ describe('InputArea', () => {
   it('should render textarea and send button', () => {
     render(<InputArea onSend={() => {}} />);
 
-    expect(screen.getByPlaceholderText(/メッセージを入力/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /送信/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Type a message/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Send/ })).toBeInTheDocument();
   });
 
   it('should call onSend when button is clicked', () => {
     const onSend = vi.fn();
     render(<InputArea onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/メッセージを入力/);
+    const textarea = screen.getByPlaceholderText(/Type a message/);
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
-    fireEvent.click(screen.getByRole('button', { name: /送信/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Send/ }));
 
     expect(onSend).toHaveBeenCalledWith('Hello Claude');
   });
@@ -24,9 +24,9 @@ describe('InputArea', () => {
   it('should clear input after sending', () => {
     render(<InputArea onSend={() => {}} />);
 
-    const textarea = screen.getByPlaceholderText(/メッセージを入力/) as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
-    fireEvent.click(screen.getByRole('button', { name: /送信/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Send/ }));
 
     expect(textarea.value).toBe('');
   });
@@ -35,7 +35,7 @@ describe('InputArea', () => {
     const onSend = vi.fn();
     render(<InputArea onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/メッセージを入力/);
+    const textarea = screen.getByPlaceholderText(/Type a message/);
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
@@ -46,7 +46,7 @@ describe('InputArea', () => {
     const onSend = vi.fn();
     render(<InputArea onSend={onSend} />);
 
-    const textarea = screen.getByPlaceholderText(/メッセージを入力/);
+    const textarea = screen.getByPlaceholderText(/Type a message/);
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
 
@@ -57,7 +57,7 @@ describe('InputArea', () => {
     const onSend = vi.fn();
     render(<InputArea onSend={onSend} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /送信/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Send/ }));
 
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -65,8 +65,8 @@ describe('InputArea', () => {
   it('should disable input when disabled prop is true', () => {
     render(<InputArea onSend={() => {}} disabled />);
 
-    const textarea = screen.getByPlaceholderText(/メッセージを入力/);
-    const button = screen.getByRole('button', { name: /送信/ });
+    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const button = screen.getByRole('button', { name: /Send/ });
 
     expect(textarea).toBeDisabled();
     expect(button).toBeDisabled();

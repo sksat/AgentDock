@@ -6,7 +6,7 @@ describe('MessageStream', () => {
   it('should render empty state when no messages', () => {
     render(<MessageStream messages={[]} />);
 
-    expect(screen.getByText(/メッセージはまだありません/)).toBeInTheDocument();
+    expect(screen.getByText(/No messages yet/)).toBeInTheDocument();
   });
 
   it('should render user message', () => {

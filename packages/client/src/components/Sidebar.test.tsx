@@ -84,7 +84,7 @@ describe('Sidebar', () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText('新規セッション'));
+    fireEvent.click(screen.getByLabelText('New Session'));
 
     expect(onCreateSession).toHaveBeenCalled();
   });
@@ -128,7 +128,7 @@ describe('Sidebar', () => {
     );
 
     // Session 3 should have a delete button (not active, idle status)
-    const deleteButton = screen.getByLabelText('Session 3を削除');
+    const deleteButton = screen.getByLabelText('Delete Session 3');
     expect(deleteButton).toBeInTheDocument();
 
     fireEvent.click(deleteButton);
@@ -147,7 +147,7 @@ describe('Sidebar', () => {
       />
     );
 
-    expect(screen.getByText('セッションがありません')).toBeInTheDocument();
+    expect(screen.getByText('No sessions')).toBeInTheDocument();
   });
 
   it('allows renaming session on double click', () => {
