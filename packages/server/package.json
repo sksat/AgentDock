@@ -1,0 +1,28 @@
+{
+  "name": "@claude-bridge/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@claude-bridge/shared": "workspace:*",
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.11.3",
+    "ws": "^8.18.3",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.9.3",
+    "tsx": "^4.0.0",
+    "vitest": "^3.0.0"
+  }
+}

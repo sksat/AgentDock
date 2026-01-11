@@ -1,0 +1,115 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SessionManager } from '../session-manager.js';
+import type { SessionInfo } from '@claude-bridge/shared';
+
+describe('SessionManager', () => {
+  let sessionManager: SessionManager;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+  });
+
+  describe('createSession', () => {
+    it('should create a new session with default name', () => {
+      const session = sessionManager.createSession();
+
+      expect(session.id).toBeDefined();
+      expect(session.name).toMatch(/^Session \d+$/);
+      expect(session.status).toBe('idle');
+      expect(session.createdAt).toBeDefined();
+    });
+
+    it('should create a session with custom name', () => {
+      const session = sessionManager.createSession({ name: 'My Session' });
+
+      expect(session.name).toBe('My Session');
+    });
+
+    it('should create a session with custom working directory', () => {
+      const session = sessionManager.createSession({ workingDir: '/tmp/test' });
+
+      expect(session.workingDir).toBe('/tmp/test');
+    });
+
+    it('should use current directory as default working directory', () => {
+      const session = sessionManager.createSession();
+
+      expect(session.workingDir).toBe(process.cwd());
+    });
+  });
+
+  describe('getSession', () => {
+    it('should return session by id', () => {
+      const created = sessionManager.createSession({ name: 'Test' });
+      const retrieved = sessionManager.getSession(created.id);
+
+      expect(retrieved).toEqual(created);
+    });
+
+    it('should return undefined for non-existent session', () => {
+      const session = sessionManager.getSession('non-existent');
+
+      expect(session).toBeUndefined();
+    });
+  });
+
+  describe('listSessions', () => {
+    it('should return empty array when no sessions', () => {
+      const sessions = sessionManager.listSessions();
+
+      expect(sessions).toEqual([]);
+    });
+
+    it('should return all sessions', () => {
+      sessionManager.createSession({ name: 'Session 1' });
+      sessionManager.createSession({ name: 'Session 2' });
+
+      const sessions = sessionManager.listSessions();
+
+      expect(sessions).toHaveLength(2);
+      expect(sessions.map(s => s.name)).toContain('Session 1');
+      expect(sessions.map(s => s.name)).toContain('Session 2');
+    });
+  });
+
+  describe('deleteSession', () => {
+    it('should delete existing session', () => {
+      const session = sessionManager.createSession();
+      const deleted = sessionManager.deleteSession(session.id);
+
+      expect(deleted).toBe(true);
+      expect(sessionManager.getSession(session.id)).toBeUndefined();
+    });
+
+    it('should return false for non-existent session', () => {
+      const deleted = sessionManager.deleteSession('non-existent');
+
+      expect(deleted).toBe(false);
+    });
+  });
+
+  describe('renameSession', () => {
+    it('should rename existing session', () => {
+      const session = sessionManager.createSession({ name: 'Old Name' });
+      const renamed = sessionManager.renameSession(session.id, 'New Name');
+
+      expect(renamed).toBe(true);
+      expect(sessionManager.getSession(session.id)?.name).toBe('New Name');
+    });
+
+    it('should return false for non-existent session', () => {
+      const renamed = sessionManager.renameSession('non-existent', 'New Name');
+
+      expect(renamed).toBe(false);
+    });
+  });
+
+  describe('updateSessionStatus', () => {
+    it('should update session status', () => {
+      const session = sessionManager.createSession();
+      sessionManager.updateSessionStatus(session.id, 'running');
+
+      expect(sessionManager.getSession(session.id)?.status).toBe('running');
+    });
+  });
+});
