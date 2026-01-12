@@ -8,15 +8,17 @@ import type {
   DailyUsage,
   UsageTotals,
 } from '@agent-dock/shared';
-import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent } from '../components/MessageStream';
+import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
 export interface PendingPermission {
+  sessionId: string;
   requestId: string;
   toolName: string;
   input: unknown;
 }
 
 export interface PendingQuestion {
+  sessionId: string;
   requestId: string;
   questions: QuestionItem[];
 }
@@ -104,6 +106,12 @@ type SessionUsageInfo = Map<string, UsageInfo>;
 // Store model usage per session
 type SessionModelUsage = Map<string, ModelUsage[]>;
 
+// Store pending permissions per session
+type SessionPendingPermission = Map<string, PendingPermission>;
+
+// Store pending questions per session
+type SessionPendingQuestion = Map<string, PendingQuestion>;
+
 export function useSession(): UseSessionReturn {
   const sendRef = useRef<((message: ClientMessage) => void) | null>(null);
 
@@ -129,9 +137,11 @@ export function useSession(): UseSessionReturn {
   // Model usage stored per session
   const [sessionModelUsage, setSessionModelUsage] = useState<SessionModelUsage>(new Map());
 
+  // Pending permissions and questions stored per session
+  const [sessionPendingPermission, setSessionPendingPermission] = useState<SessionPendingPermission>(new Map());
+  const [sessionPendingQuestion, setSessionPendingQuestion] = useState<SessionPendingQuestion>(new Map());
+
   // Active session state
-  const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
-  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingReason, setLoadingReason] = useState<'compact' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +179,8 @@ export function useSession(): UseSessionReturn {
   const messages = activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : [];
   const usageInfo = activeSessionId ? (sessionUsageInfo.get(activeSessionId) ?? null) : null;
   const modelUsage = activeSessionId ? (sessionModelUsage.get(activeSessionId) ?? null) : null;
+  const pendingPermission = activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null;
+  const pendingQuestion = activeSessionId ? (sessionPendingQuestion.get(activeSessionId) ?? null) : null;
 
   // Helper to update messages for a specific session
   const updateSessionMessages = useCallback(
@@ -202,8 +214,7 @@ export function useSession(): UseSessionReturn {
       if (sessionExists) {
         setActiveSessionId(sessionId);
         setError(null);
-        setPendingPermission(null);
-        setPendingQuestion(null);
+        // Note: pendingPermission and pendingQuestion are per-session, no need to clear
         // Request session history if not already loaded
         if (!sessionMessages.has(sessionId)) {
           send({ type: 'attach_session', sessionId });
@@ -343,30 +354,66 @@ export function useSession(): UseSessionReturn {
     ) => {
       if (!activeSessionId) return;
 
+      // Get the stored sessionId from the pending permission
+      const pending = sessionPendingPermission.get(activeSessionId);
+      const sessionId = pending?.sessionId ?? activeSessionId;
+
       send({
         type: 'permission_response',
-        sessionId: activeSessionId,
+        sessionId,
         requestId,
         response,
       });
-      setPendingPermission(null);
+      // Clear from Map
+      setSessionPendingPermission((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(activeSessionId);
+        return newMap;
+      });
     },
-    [activeSessionId, send]
+    [activeSessionId, sessionPendingPermission, send]
   );
 
   const respondToQuestion = useCallback(
     (requestId: string, answers: Record<string, string>) => {
       if (!activeSessionId) return;
 
+      // Get the stored sessionId from the pending question
+      const pending = sessionPendingQuestion.get(activeSessionId);
+      const sessionId = pending?.sessionId ?? activeSessionId;
+
+      // Add question response message to stream
+      if (pending) {
+        const questionContent: QuestionMessageContent = {
+          answers: pending.questions.map((q) => ({
+            question: q.question,
+            answer: answers[q.header] ?? '',
+          })),
+        };
+        updateSessionMessages(sessionId, (prev) => [
+          ...prev,
+          {
+            type: 'question',
+            content: questionContent,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
+
       send({
         type: 'question_response',
-        sessionId: activeSessionId,
+        sessionId,
         requestId,
         answers,
       });
-      setPendingQuestion(null);
+      // Clear from Map
+      setSessionPendingQuestion((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(activeSessionId);
+        return newMap;
+      });
     },
-    [activeSessionId, send]
+    [activeSessionId, sessionPendingQuestion, send, updateSessionMessages]
   );
 
   const interrupt = useCallback(() => {
@@ -378,8 +425,17 @@ export function useSession(): UseSessionReturn {
     });
     setIsLoading(false);
     setLoadingReason(null);
-    setPendingPermission(null);
-    setPendingQuestion(null);
+    // Clear pending items for this session
+    setSessionPendingPermission((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(activeSessionId);
+      return newMap;
+    });
+    setSessionPendingQuestion((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(activeSessionId);
+      return newMap;
+    });
   }, [activeSessionId, send]);
 
   const setPermissionMode = useCallback((mode: PermissionMode) => {
@@ -718,20 +774,34 @@ export function useSession(): UseSessionReturn {
           setLoadingReason(null);
           break;
 
-        case 'permission_request':
-          setPendingPermission({
-            requestId: message.requestId,
-            toolName: message.toolName,
-            input: message.input,
+        case 'permission_request': {
+          const sessionId = message.sessionId;
+          setSessionPendingPermission((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(sessionId, {
+              sessionId,
+              requestId: message.requestId,
+              toolName: message.toolName,
+              input: message.input,
+            });
+            return newMap;
           });
           break;
+        }
 
-        case 'ask_user_question':
-          setPendingQuestion({
-            requestId: message.requestId,
-            questions: message.questions,
+        case 'ask_user_question': {
+          const sessionId = message.sessionId;
+          setSessionPendingQuestion((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(sessionId, {
+              sessionId,
+              requestId: message.requestId,
+              questions: message.questions,
+            });
+            return newMap;
           });
           break;
+        }
 
         case 'system_info':
           setSystemInfo({

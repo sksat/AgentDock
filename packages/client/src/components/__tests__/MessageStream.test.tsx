@@ -383,3 +383,96 @@ describe('Auto-scroll behavior', () => {
     expect(scrollToSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('QuestionMessage robustness', () => {
+  it('should render question message with valid content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: {
+          answers: [
+            { question: 'Which option?', answer: 'Option A' },
+            { question: 'Are you sure?', answer: 'Yes' },
+          ],
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+    expect(screen.getByText(/Which option\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Option A/)).toBeInTheDocument();
+  });
+
+  it('should not crash with null content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: null as any, // Invalid: null content
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    // Should not throw
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+
+    // Should render fallback
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+    expect(screen.getByText(/User answered questions/)).toBeInTheDocument();
+  });
+
+  it('should not crash with undefined content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: undefined as any, // Invalid: undefined content
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+  });
+
+  it('should not crash with empty object content (missing answers)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: {} as any, // Invalid: no answers property
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+    expect(screen.getByText(/User answered questions/)).toBeInTheDocument();
+  });
+
+  it('should not crash when answers is not an array', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: { answers: 'not an array' } as any, // Invalid: answers is string
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+  });
+
+  it('should not crash when content has wrong structure from legacy data', () => {
+    // This simulates old database data that might have different structure
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'question',
+        content: { text: 'old format', requestId: 'req-1' } as any, // Legacy format
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
+  });
+});

@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system';
+  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system' | 'question';
   content: unknown;
   timestamp: string;
 }
@@ -42,6 +42,15 @@ export interface ImageAttachment {
 export interface UserMessageContent {
   text: string;
   images?: ImageAttachment[];
+}
+
+export interface QuestionAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface QuestionMessageContent {
+  answers: QuestionAnswer[];
 }
 
 export interface MessageStreamProps {
@@ -137,6 +146,8 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
       return <ToolResultMessage content={message.content as ToolResultContent} />;
     case 'system':
       return <SystemMessage content={message.content as SystemMessageContent} />;
+    case 'question':
+      return <QuestionMessage content={message.content as QuestionMessageContent} />;
     default:
       return null;
   }
@@ -436,6 +447,42 @@ function SystemMessage({ content }: { content: SystemMessageContent }) {
             {lines.slice(1).join('\n')}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function QuestionMessage({ content }: { content: QuestionMessageContent }) {
+  // Guard against invalid content
+  if (!content || !Array.isArray(content.answers)) {
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-success mt-1.5"></span>
+          <div className="text-sm">
+            <span className="text-text-primary font-medium">AskUserQuestion</span>
+            <span className="text-text-secondary ml-2">User answered questions.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Format answers as: "question"="answer"
+  const answersText = content.answers
+    .map((a) => `"${a.question}"="${a.answer}"`)
+    .join(', ');
+
+  return (
+    <div data-testid="message-item" className="flex justify-start">
+      <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
+        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-success mt-1.5"></span>
+        <div className="text-sm">
+          <span className="text-text-primary font-medium">AskUserQuestion</span>
+          <span className="text-text-secondary ml-2">
+            User has answered your questions: {answersText}. You can now continue with the user&apos;s answers in mind.
+          </span>
+        </div>
       </div>
     </div>
   );
