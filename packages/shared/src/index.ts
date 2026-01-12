@@ -311,6 +311,8 @@ export interface GlobalUsageMessage {
   type: 'global_usage';
   today: DailyUsage | null;
   totals: UsageTotals;
+  /** Daily usage history (sorted by date ascending) */
+  daily: DailyUsage[];
 }
 
 export interface DailyUsage {

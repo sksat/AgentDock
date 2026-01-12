@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast } from './components';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage } from './components';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -115,19 +115,12 @@ function App() {
     setSend(send);
   }, [send, setSend]);
 
-  // Request session list on connect, then create one if none exists
+  // Request session list on connect
   useEffect(() => {
     if (isConnected) {
       listSessions();
     }
   }, [isConnected, listSessions]);
-
-  // Auto-select first session if sessions exist (but don't auto-create)
-  useEffect(() => {
-    if (isConnected && sessionsLoaded && activeSessionId === null && sessions.length > 0) {
-      selectSession(sessions[0].id);
-    }
-  }, [isConnected, sessionsLoaded, sessions, activeSessionId, selectSession]);
 
   // Show toast when error occurs
   useEffect(() => {
@@ -184,148 +177,161 @@ function App() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="px-4 py-3 bg-bg-secondary border-b border-border flex items-center justify-between">
-          <h1 className="text-lg font-semibold">
-            {session?.name ?? 'AgentDock'}
-          </h1>
-          <div className="flex items-center gap-4">
-            {/* Session usage */}
-            {usageInfo && (
-              <div className="flex items-center gap-3 text-xs text-text-secondary">
-                {/* Total cost */}
-                <span className="font-medium text-accent-primary" title="Session total cost">
-                  {formatCost(calculateCost(
-                    systemInfo?.model,
-                    usageInfo.inputTokens,
-                    usageInfo.outputTokens,
-                    usageInfo.cacheReadInputTokens,
-                    usageInfo.cacheCreationInputTokens
-                  ))}
-                </span>
-                {/* Model breakdown */}
-                {modelUsage && modelUsage.length > 0 && (
-                  <span className="text-text-secondary" title="Cost by model">
-                    ({modelUsage.map((m, i) => (
-                      <span key={m.modelName}>
-                        {i > 0 && ' / '}
-                        {shortModelName(m.modelName)}: {formatCost(calculateCost(
-                          m.modelName,
-                          m.inputTokens,
-                          m.outputTokens,
-                          m.cacheReadTokens,
-                          m.cacheCreationTokens
-                        ))}
+        {activeSessionId === null ? (
+          /* Welcome page when no session is selected */
+          <WelcomePage
+            sessions={sessions}
+            globalUsage={globalUsage}
+            isConnected={isConnected}
+            onSendMessage={sendMessage}
+            onSelectSession={selectSession}
+          />
+        ) : (
+          <>
+            {/* Header */}
+            <header className="px-4 py-3 bg-bg-secondary border-b border-border flex items-center justify-between">
+              <h1 className="text-lg font-semibold">
+                {session?.name ?? 'AgentDock'}
+              </h1>
+              <div className="flex items-center gap-4">
+                {/* Session usage */}
+                {usageInfo && (
+                  <div className="flex items-center gap-3 text-xs text-text-secondary">
+                    {/* Total cost */}
+                    <span className="font-medium text-accent-primary" title="Session total cost">
+                      {formatCost(calculateCost(
+                        systemInfo?.model,
+                        usageInfo.inputTokens,
+                        usageInfo.outputTokens,
+                        usageInfo.cacheReadInputTokens,
+                        usageInfo.cacheCreationInputTokens
+                      ))}
+                    </span>
+                    {/* Model breakdown */}
+                    {modelUsage && modelUsage.length > 0 && (
+                      <span className="text-text-secondary" title="Cost by model">
+                        ({modelUsage.map((m, i) => (
+                          <span key={m.modelName}>
+                            {i > 0 && ' / '}
+                            {shortModelName(m.modelName)}: {formatCost(calculateCost(
+                              m.modelName,
+                              m.inputTokens,
+                              m.outputTokens,
+                              m.cacheReadTokens,
+                              m.cacheCreationTokens
+                            ))}
+                          </span>
+                        ))})
                       </span>
-                    ))})
-                  </span>
+                    )}
+                    <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
+                    <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
+                  </div>
                 )}
-                <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
-                <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
+                {/* Connection status */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isConnected ? 'bg-accent-success' : 'bg-accent-danger'
+                    }`}
+                  />
+                  <span className="text-sm text-text-secondary">
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+              </div>
+            </header>
+
+            {/* Error banner */}
+            {error && (
+              <div className="px-4 py-2 bg-accent-danger/10 border-b border-accent-danger text-accent-danger">
+                {error}
               </div>
             )}
-            {/* Connection status */}
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-accent-success' : 'bg-accent-danger'
-                }`}
-              />
-              <span className="text-sm text-text-secondary">
-                {isConnected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-          </div>
-        </header>
 
-        {/* Error banner */}
-        {error && (
-          <div className="px-4 py-2 bg-accent-danger/10 border-b border-accent-danger text-accent-danger">
-            {error}
-          </div>
+            {/* Main content */}
+            <main className="flex-1 flex flex-col overflow-hidden">
+              {/* Messages */}
+              <MessageStream messages={messages} />
+
+              {/* Pending permission request */}
+              {pendingPermission && (
+                <div className="p-4 border-t border-border">
+                  <PermissionRequest
+                    requestId={pendingPermission.requestId}
+                    toolName={pendingPermission.toolName}
+                    input={pendingPermission.input}
+                    onAllow={handleAllow}
+                    onDeny={handleDeny}
+                  />
+                </div>
+              )}
+
+              {/* Pending question */}
+              {pendingQuestion && (
+                <div className="p-4 border-t border-border">
+                  <AskUserQuestion
+                    requestId={pendingQuestion.requestId}
+                    questions={pendingQuestion.questions}
+                    onSubmit={respondToQuestion}
+                  />
+                </div>
+              )}
+
+              {/* Loading indicator with vibing message */}
+              {isLoading && !pendingPermission && !pendingQuestion && (
+                <LoadingIndicator
+                  message={loadingReason === 'compact' ? 'Compacting...' : undefined}
+                />
+              )}
+
+              {/* Input area with status bar */}
+              <InputArea
+                onSend={sendMessage}
+                onInterrupt={interrupt}
+                disabled={!isConnected}
+                isLoading={isLoading}
+                permissionMode={systemInfo?.permissionMode ?? 'ask'}
+                onPermissionModeChange={setPermissionMode}
+                model={systemInfo?.model}
+                onModelChange={setModel}
+                sessionId={session?.claudeSessionId}
+                tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={handleToggleThinking}
+                onNewSession={() => setIsNewSessionModalOpen(true)}
+                onClearMessages={clearMessages}
+                onCompact={compactSession}
+                onShowContext={() => {
+                  const usage = usageInfo;
+                  if (usage) {
+                    showToast('Context Usage', `Input: ${usage.inputTokens.toLocaleString()} tokens\nOutput: ${usage.outputTokens.toLocaleString()} tokens\nTotal: ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens`, 'info');
+                  } else {
+                    showToast('Context Usage', 'No usage data available', 'warning');
+                  }
+                }}
+                onShowCost={() => {
+                  const usage = usageInfo;
+                  if (usage) {
+                    // Rough cost estimate (prices may vary)
+                    const inputCost = (usage.inputTokens / 1000000) * 15; // $15/M for Opus input
+                    const outputCost = (usage.outputTokens / 1000000) * 75; // $75/M for Opus output
+                    showToast('Session Cost (estimated)', `Input: $${inputCost.toFixed(4)}\nOutput: $${outputCost.toFixed(4)}\nTotal: $${(inputCost + outputCost).toFixed(4)}`, 'info');
+                  } else {
+                    showToast('Session Cost', 'No usage data available', 'warning');
+                  }
+                }}
+                onShowConfig={() => {
+                  // TODO: Open settings dialog
+                  showToast('Configuration', 'Settings dialog not implemented yet.', 'warning');
+                }}
+                onShowHelp={() => {
+                  showToast('Available Commands', '/new - Create new session\n/clear - Clear messages\n/compact - Compact history\n/model - Switch model\n/context - Show context usage\n/cost - Show cost\n/permission - Change permission mode\n/config - Configuration\n/help - Show this help', 'info');
+                }}
+              />
+            </main>
+          </>
         )}
-
-        {/* Main content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Messages */}
-          <MessageStream messages={messages} />
-
-          {/* Pending permission request */}
-          {pendingPermission && (
-            <div className="p-4 border-t border-border">
-              <PermissionRequest
-                requestId={pendingPermission.requestId}
-                toolName={pendingPermission.toolName}
-                input={pendingPermission.input}
-                onAllow={handleAllow}
-                onDeny={handleDeny}
-              />
-            </div>
-          )}
-
-          {/* Pending question */}
-          {pendingQuestion && (
-            <div className="p-4 border-t border-border">
-              <AskUserQuestion
-                requestId={pendingQuestion.requestId}
-                questions={pendingQuestion.questions}
-                onSubmit={respondToQuestion}
-              />
-            </div>
-          )}
-
-          {/* Loading indicator with vibing message */}
-          {isLoading && !pendingPermission && !pendingQuestion && (
-            <LoadingIndicator
-              message={loadingReason === 'compact' ? 'Compacting...' : undefined}
-            />
-          )}
-
-          {/* Input area with status bar */}
-          <InputArea
-            onSend={sendMessage}
-            onInterrupt={interrupt}
-            disabled={!isConnected}
-            isLoading={isLoading}
-            permissionMode={systemInfo?.permissionMode ?? 'ask'}
-            onPermissionModeChange={setPermissionMode}
-            model={systemInfo?.model}
-            onModelChange={setModel}
-            sessionId={session?.claudeSessionId}
-            tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
-            thinkingEnabled={thinkingEnabled}
-            onToggleThinking={handleToggleThinking}
-            onNewSession={() => setIsNewSessionModalOpen(true)}
-            onClearMessages={clearMessages}
-            onCompact={compactSession}
-            onShowContext={() => {
-              const usage = usageInfo;
-              if (usage) {
-                showToast('Context Usage', `Input: ${usage.inputTokens.toLocaleString()} tokens\nOutput: ${usage.outputTokens.toLocaleString()} tokens\nTotal: ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens`, 'info');
-              } else {
-                showToast('Context Usage', 'No usage data available', 'warning');
-              }
-            }}
-            onShowCost={() => {
-              const usage = usageInfo;
-              if (usage) {
-                // Rough cost estimate (prices may vary)
-                const inputCost = (usage.inputTokens / 1000000) * 15; // $15/M for Opus input
-                const outputCost = (usage.outputTokens / 1000000) * 75; // $75/M for Opus output
-                showToast('Session Cost (estimated)', `Input: $${inputCost.toFixed(4)}\nOutput: $${outputCost.toFixed(4)}\nTotal: $${(inputCost + outputCost).toFixed(4)}`, 'info');
-              } else {
-                showToast('Session Cost', 'No usage data available', 'warning');
-              }
-            }}
-            onShowConfig={() => {
-              // TODO: Open settings dialog
-              showToast('Configuration', 'Settings dialog not implemented yet.', 'warning');
-            }}
-            onShowHelp={() => {
-              showToast('Available Commands', '/new - Create new session\n/clear - Clear messages\n/compact - Compact history\n/model - Switch model\n/context - Show context usage\n/cost - Show cost\n/permission - Change permission mode\n/config - Configuration\n/help - Show this help', 'info');
-            }}
-          />
-        </main>
       </div>
 
       {/* Toast notification */}

@@ -40,6 +40,8 @@ export interface UsageInfo {
 export interface GlobalUsage {
   today: DailyUsage | null;
   totals: UsageTotals;
+  /** Daily usage history (sorted by date ascending) */
+  daily: DailyUsage[];
 }
 
 export interface ModelUsage {
@@ -77,7 +79,7 @@ export interface UseSessionReturn {
   renameSession: (sessionId: string, name: string) => void;
 
   // Message handling
-  sendMessage: (content: string, images?: ImageAttachment[]) => void;
+  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string) => void;
   clearMessages: () => void;
   addSystemMessage: (content: SystemMessageContent) => void;
   compactSession: () => void;
@@ -256,14 +258,14 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string, images?: ImageAttachment[]) => {
+    (content: string, images?: ImageAttachment[], workingDir?: string) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
         setPendingMessage(content);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
-        send({ type: 'create_session', name: sessionName });
+        send({ type: 'create_session', name: sessionName, workingDir });
         return;
       }
 
@@ -833,6 +835,7 @@ export function useSession(): UseSessionReturn {
           setGlobalUsage({
             today: message.today,
             totals: message.totals,
+            daily: message.daily,
           });
           break;
 

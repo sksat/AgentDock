@@ -5,6 +5,8 @@ import type { DailyUsage, UsageTotals } from '@agent-dock/shared';
 export interface UsageData {
   today: DailyUsage | null;
   totals: UsageTotals;
+  /** Daily usage history (sorted by date ascending) */
+  daily: DailyUsage[];
 }
 
 interface CcusageOutput {
@@ -123,9 +125,13 @@ export class UsageMonitor extends EventEmitter {
       // Find today's usage
       const todayUsage = data.daily.find((d) => d.date === today) ?? null;
 
+      // Sort daily data by date ascending
+      const sortedDaily = [...data.daily].sort((a, b) => a.date.localeCompare(b.date));
+
       const usageData: UsageData = {
         today: todayUsage,
         totals: data.totals,
+        daily: sortedDaily,
       };
 
       this.lastUsage = usageData;

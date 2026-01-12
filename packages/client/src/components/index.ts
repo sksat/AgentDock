@@ -9,3 +9,6 @@ export { PermissionRequest, type PermissionRequestProps } from './PermissionRequ
 export { Sidebar, type SidebarSession, type SidebarProps } from './Sidebar';
 export { SlashCommandSuggestions, getFilteredCommands, SLASH_COMMANDS, type SlashCommand, type SlashCommandCategory, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';
 export { Toast, type ToastProps } from './Toast';
+export { UsageChart, type UsageChartProps } from './UsageChart';
+export { UsageDisplay, type GlobalUsageData, type UsageDisplayProps } from './UsageDisplay';
+export { WelcomePage, type WelcomePageProps } from './WelcomePage';
