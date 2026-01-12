@@ -139,6 +139,12 @@ export interface SessionAttachedMessage {
   type: 'session_attached';
   sessionId: string;
   history: MessageItem[];
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+  };
 }
 
 export interface SessionListMessage {

@@ -68,6 +68,8 @@ export class SessionManager {
     insertMessage: Database.Statement;
     getMessages: Database.Statement;
     countSessions: Database.Statement;
+    addUsage: Database.Statement;
+    getUsage: Database.Statement;
   };
 
   constructor(options: SessionManagerOptions = {}) {
@@ -95,6 +97,18 @@ export class SessionManager {
       `),
       getMessages: this.db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC'),
       countSessions: this.db.prepare('SELECT COUNT(*) as count FROM sessions'),
+      addUsage: this.db.prepare(`
+        UPDATE sessions SET
+          input_tokens = COALESCE(input_tokens, 0) + ?,
+          output_tokens = COALESCE(output_tokens, 0) + ?,
+          cache_creation_tokens = COALESCE(cache_creation_tokens, 0) + ?,
+          cache_read_tokens = COALESCE(cache_read_tokens, 0) + ?
+        WHERE id = ?
+      `),
+      getUsage: this.db.prepare(`
+        SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+        FROM sessions WHERE id = ?
+      `),
     };
 
     // Restore session counter from existing sessions
@@ -200,6 +214,41 @@ export class SessionManager {
   setModel(id: string, model: string): boolean {
     const result = this.stmts.updateModel.run(model, id);
     return result.changes > 0;
+  }
+
+  /**
+   * Add usage to session (accumulates with existing usage)
+   */
+  addUsage(id: string, usage: SessionUsage): boolean {
+    const result = this.stmts.addUsage.run(
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.cacheCreationTokens,
+      usage.cacheReadTokens,
+      id
+    );
+    return result.changes > 0;
+  }
+
+  /**
+   * Get accumulated usage for a session
+   */
+  getUsage(id: string): SessionUsage | null {
+    const row = this.stmts.getUsage.get(id) as {
+      input_tokens: number | null;
+      output_tokens: number | null;
+      cache_creation_tokens: number | null;
+      cache_read_tokens: number | null;
+    } | undefined;
+
+    if (!row) return null;
+
+    return {
+      inputTokens: row.input_tokens ?? 0,
+      outputTokens: row.output_tokens ?? 0,
+      cacheCreationTokens: row.cache_creation_tokens ?? 0,
+      cacheReadTokens: row.cache_read_tokens ?? 0,
+    };
   }
 
   /**

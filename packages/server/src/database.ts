@@ -53,7 +53,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
 }
 
 function migrateToV1(db: Database.Database): void {
-  // Sessions table
+  // Sessions table (includes usage columns from v2 for new databases)
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -63,7 +63,11 @@ function migrateToV1(db: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'idle',
       claude_session_id TEXT,
       permission_mode TEXT,
-      model TEXT
+      model TEXT,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cache_creation_tokens INTEGER DEFAULT 0,
+      cache_read_tokens INTEGER DEFAULT 0
     )
   `);
 
@@ -87,13 +91,23 @@ function migrateToV1(db: Database.Database): void {
 }
 
 function migrateToV2(db: Database.Database): void {
-  // Add usage columns to sessions table
-  db.exec(`
-    ALTER TABLE sessions ADD COLUMN input_tokens INTEGER DEFAULT 0;
-    ALTER TABLE sessions ADD COLUMN output_tokens INTEGER DEFAULT 0;
-    ALTER TABLE sessions ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0;
-    ALTER TABLE sessions ADD COLUMN cache_read_tokens INTEGER DEFAULT 0;
-  `);
+  // Add usage columns to sessions table if they don't exist
+  // Check if columns exist first
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('input_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN input_tokens INTEGER DEFAULT 0');
+  }
+  if (!columns.has('output_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN output_tokens INTEGER DEFAULT 0');
+  }
+  if (!columns.has('cache_creation_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0');
+  }
+  if (!columns.has('cache_read_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN cache_read_tokens INTEGER DEFAULT 0');
+  }
 }
 
 export type { Database };

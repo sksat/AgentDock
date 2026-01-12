@@ -366,6 +366,14 @@ export function createServer(options: ServerOptions): BridgeServer {
           cacheCreationInputTokens?: number;
           cacheReadInputTokens?: number;
         };
+        // Save usage to DB
+        sessionManager.addUsage(sessionId, {
+          inputTokens: usageData.inputTokens,
+          outputTokens: usageData.outputTokens,
+          cacheCreationTokens: usageData.cacheCreationInputTokens ?? 0,
+          cacheReadTokens: usageData.cacheReadInputTokens ?? 0,
+        });
+        // Send to client
         sendToSession(sessionId, {
           type: 'usage_info',
           sessionId,
@@ -441,10 +449,12 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'attach_session': {
         const session = sessionManager.getSession(message.sessionId);
         if (session) {
+          const usage = sessionManager.getUsage(message.sessionId);
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
             history: sessionManager.getHistory(message.sessionId),
+            usage: usage ?? undefined,
           };
         } else {
           response = {

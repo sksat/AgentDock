@@ -365,6 +365,19 @@ export function useSession(): UseSessionReturn {
             newMap.set(message.sessionId, history);
             return newMap;
           });
+          // Restore usage from DB if available
+          if (message.usage) {
+            setSessionUsageInfo((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(message.sessionId, {
+                inputTokens: message.usage!.inputTokens,
+                outputTokens: message.usage!.outputTokens,
+                cacheCreationInputTokens: message.usage!.cacheCreationTokens,
+                cacheReadInputTokens: message.usage!.cacheReadTokens,
+              });
+              return newMap;
+            });
+          }
           break;
         }
 
