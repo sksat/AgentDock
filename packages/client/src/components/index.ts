@@ -8,3 +8,4 @@ export { PermissionModeSelector, type PermissionModeSelectorProps } from './Perm
 export { PermissionRequest, type PermissionRequestProps } from './PermissionRequest';
 export { Sidebar, type SidebarSession, type SidebarProps } from './Sidebar';
 export { SlashCommandSuggestions, getFilteredCommands, SLASH_COMMANDS, type SlashCommand, type SlashCommandCategory, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';
+export { Toast, type ToastProps } from './Toast';

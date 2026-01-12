@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar } from './components';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast } from './components';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -92,6 +92,11 @@ function App() {
 
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' } | null>(null);
+
+  const showToast = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    setToast({ title, message, type });
+  }, []);
 
   const { isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
@@ -283,14 +288,14 @@ function App() {
             onClearMessages={clearMessages}
             onCompact={() => {
               // TODO: Implement server-side conversation compaction
-              console.log('Compact not implemented yet');
+              showToast('Compact', 'Not implemented yet. This will summarize conversation to save context.', 'warning');
             }}
             onShowContext={() => {
               const usage = usageInfo;
               if (usage) {
-                alert(`Context Usage:\nInput: ${usage.inputTokens.toLocaleString()} tokens\nOutput: ${usage.outputTokens.toLocaleString()} tokens\nTotal: ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens`);
+                showToast('Context Usage', `Input: ${usage.inputTokens.toLocaleString()} tokens\nOutput: ${usage.outputTokens.toLocaleString()} tokens\nTotal: ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens`, 'info');
               } else {
-                alert('No usage data available');
+                showToast('Context Usage', 'No usage data available', 'warning');
               }
             }}
             onShowCost={() => {
@@ -299,21 +304,31 @@ function App() {
                 // Rough cost estimate (prices may vary)
                 const inputCost = (usage.inputTokens / 1000000) * 15; // $15/M for Opus input
                 const outputCost = (usage.outputTokens / 1000000) * 75; // $75/M for Opus output
-                alert(`Session Cost (estimated):\nInput: $${inputCost.toFixed(4)}\nOutput: $${outputCost.toFixed(4)}\nTotal: $${(inputCost + outputCost).toFixed(4)}`);
+                showToast('Session Cost (estimated)', `Input: $${inputCost.toFixed(4)}\nOutput: $${outputCost.toFixed(4)}\nTotal: $${(inputCost + outputCost).toFixed(4)}`, 'info');
               } else {
-                alert('No usage data available');
+                showToast('Session Cost', 'No usage data available', 'warning');
               }
             }}
             onShowConfig={() => {
               // TODO: Open settings dialog
-              console.log('Config not implemented yet');
+              showToast('Configuration', 'Settings dialog not implemented yet.', 'warning');
             }}
             onShowHelp={() => {
-              alert('Available Commands:\n\n/new - Create new session\n/clear - Clear messages\n/compact - Compact history\n/model - Switch model\n/context - Show context usage\n/cost - Show cost\n/permission - Change permission mode\n/config - Configuration\n/help - Show this help');
+              showToast('Available Commands', '/new - Create new session\n/clear - Clear messages\n/compact - Compact history\n/model - Switch model\n/context - Show context usage\n/cost - Show cost\n/permission - Change permission mode\n/config - Configuration\n/help - Show this help', 'info');
             }}
           />
         </main>
       </div>
+
+      {/* Toast notification */}
+      <Toast
+        title={toast?.title ?? ''}
+        message={toast?.message ?? ''}
+        type={toast?.type ?? 'info'}
+        isOpen={toast !== null}
+        onClose={() => setToast(null)}
+        duration={6000}
+      />
     </div>
   );
 }
