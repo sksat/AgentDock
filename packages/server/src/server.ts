@@ -3,6 +3,14 @@ import { cors } from 'hono/cors';
 import { serve, type ServerType } from '@hono/node-server';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
+import { writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Get project root (../../.. from packages/server/src/)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(__dirname, '../../..');
+import { tmpdir } from 'node:os';
 import type { ClientMessage, ServerMessage } from '@claude-bridge/shared';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
@@ -19,6 +27,63 @@ export interface ServerOptions {
   sessionsBaseDir?: string;
   /** Database file path. Defaults to './data.db' */
   dbPath?: string;
+  /** MCP server command (e.g., 'npx') */
+  mcpServerCommand?: string;
+  /** MCP server arguments (e.g., ['tsx', 'packages/mcp-server/src/index.ts']) */
+  mcpServerArgs?: string[];
+  /** MCP server working directory (for relative paths in args) */
+  mcpServerCwd?: string;
+}
+
+/**
+ * Generate a temporary MCP config file for a session
+ */
+function generateMcpConfig(
+  sessionId: string,
+  wsUrl: string,
+  mcpServerCommand: string,
+  mcpServerArgs: string[],
+  mcpServerCwd?: string
+): string {
+  const configDir = join(tmpdir(), 'claude-bridge-mcp');
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+  }
+
+  const configPath = join(configDir, `mcp-config-${sessionId}.json`);
+  const serverConfig: Record<string, unknown> = {
+    command: mcpServerCommand,
+    args: mcpServerArgs,
+    env: {
+      BRIDGE_WS_URL: wsUrl,
+      SESSION_ID: sessionId,
+    },
+  };
+
+  // Add cwd if provided (needed when using relative paths)
+  if (mcpServerCwd) {
+    serverConfig.cwd = mcpServerCwd;
+  }
+
+  const config = {
+    mcpServers: {
+      bridge: serverConfig,
+    },
+  };
+
+  const configJson = JSON.stringify(config, null, 2);
+  writeFileSync(configPath, configJson);
+  return configPath;
+}
+
+/**
+ * Clean up temporary MCP config file
+ */
+function cleanupMcpConfig(sessionId: string): void {
+  const configPath = join(tmpdir(), 'claude-bridge-mcp', `mcp-config-${sessionId}.json`);
+  if (existsSync(configPath)) {
+    rmSync(configPath);
+  }
 }
 
 export interface BridgeServer {
@@ -29,7 +94,20 @@ export interface BridgeServer {
 }
 
 export function createServer(options: ServerOptions): BridgeServer {
-  const { port, host = '0.0.0.0', useMock = false, mockScenarios = [], sessionsBaseDir, dbPath } = options;
+  const {
+    port,
+    host = '0.0.0.0',
+    useMock = false,
+    mockScenarios = [],
+    sessionsBaseDir,
+    dbPath,
+    mcpServerCommand = 'node',
+    mcpServerArgs = [join(PROJECT_ROOT, 'packages/mcp-server/dist/index.js')],
+    mcpServerCwd,  // Optional, not needed if using absolute path
+  } = options;
+
+  // WebSocket URL for MCP server to connect back to
+  const wsUrl = `ws://localhost:${port}/ws`;
 
   const app = new Hono();
   const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
@@ -260,6 +338,26 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
         break;
       }
+
+      case 'permission_request': {
+        // Permission request from mock runner - forward to client
+        const permData = eventData as {
+          requestId: string;
+          toolName: string;
+          input: unknown;
+        };
+        // Update session status
+        sessionManager.updateSessionStatus(sessionId, 'waiting_permission');
+        // Forward to client
+        sendToSession(sessionId, {
+          type: 'permission_request',
+          sessionId,
+          requestId: permData.requestId,
+          toolName: permData.toolName,
+          input: permData.input,
+        });
+        break;
+      }
     }
   }
 
@@ -431,12 +529,34 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Update session status
         sessionManager.updateSessionStatus(message.sessionId, 'running');
 
-        // Start Claude CLI
+        // Start Claude CLI with MCP permission handling
         try {
+          // Generate MCP config for this session (unless using mock)
+          let mcpConfigPath: string | undefined;
+          let permissionToolName: string | undefined;
+          if (!useMock) {
+            mcpConfigPath = generateMcpConfig(
+              message.sessionId,
+              wsUrl,
+              mcpServerCommand,
+              mcpServerArgs,
+              mcpServerCwd
+            );
+            permissionToolName = 'mcp__bridge__permission_prompt';
+          }
+
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
-            onEvent: handleRunnerEvent,
+            mcpConfigPath,
+            permissionToolName,
+            onEvent: (sessionId, eventType, data) => {
+              handleRunnerEvent(sessionId, eventType, data);
+              // Clean up MCP config on exit
+              if (eventType === 'exit' && mcpConfigPath) {
+                cleanupMcpConfig(sessionId);
+              }
+            },
           });
           // Don't send response here - events will be sent via handleRunnerEvent
           return;
@@ -473,6 +593,16 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'permission_response': {
+        // First check if this is for a mock runner
+        const runner = runnerManager.getRunner(message.sessionId);
+        if (runner && 'respondToPermission' in runner) {
+          // Mock runner - respond directly
+          const mockRunner = runner as import('./mock-claude-runner.js').MockClaudeRunner;
+          mockRunner.respondToPermission(message.requestId, message.response);
+          sessionManager.updateSessionStatus(message.sessionId, 'running');
+          return;
+        }
+
         // Forward permission response to waiting MCP server
         const mcpWs = pendingPermissionRequests.get(message.requestId);
         if (mcpWs && mcpWs.readyState === WebSocket.OPEN) {
@@ -483,6 +613,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             response: message.response,
           }));
           pendingPermissionRequests.delete(message.requestId);
+          sessionManager.updateSessionStatus(message.sessionId, 'running');
           // No response needed back to client
           return;
         } else {

@@ -468,4 +468,92 @@ describe('Predefined scenarios', () => {
       );
     });
   });
+
+  it('should have permission scenario with new permission_request step', async () => {
+    const runner = MockClaudeRunner.withPermissionScenario();
+    const permissionRequestHandler = vi.fn();
+    const toolUseHandler = vi.fn();
+    const toolResultHandler = vi.fn();
+    const textHandler = vi.fn();
+
+    runner.on('permission_request', permissionRequestHandler);
+    runner.on('tool_use', toolUseHandler);
+    runner.on('tool_result', toolResultHandler);
+    runner.on('text', textHandler);
+
+    runner.start('write file');
+
+    // Wait for permission request
+    await vi.waitFor(() => {
+      expect(permissionRequestHandler).toHaveBeenCalled();
+    });
+
+    expect(permissionRequestHandler).toHaveBeenCalledWith({
+      requestId: expect.any(String),
+      toolName: 'Write',
+      input: expect.objectContaining({
+        file_path: '/tmp/test.txt',
+      }),
+    });
+
+    // Should also emit tool_use before permission_request
+    expect(toolUseHandler).toHaveBeenCalledWith({
+      id: expect.any(String),
+      name: 'Write',
+      input: expect.objectContaining({
+        file_path: '/tmp/test.txt',
+      }),
+    });
+
+    // Get the request ID and respond with allow
+    const requestId = permissionRequestHandler.mock.calls[0][0].requestId;
+    runner.respondToPermission(requestId, { behavior: 'allow' });
+
+    // Wait for tool result
+    await vi.waitFor(() => {
+      expect(toolResultHandler).toHaveBeenCalled();
+    });
+
+    expect(toolResultHandler).toHaveBeenCalledWith({
+      toolUseId: expect.any(String),
+      content: 'File written successfully',
+      isError: false,
+    });
+
+    // Wait for completion text
+    await vi.waitFor(() => {
+      expect(textHandler).toHaveBeenCalledWith({ text: 'I have written the file.' });
+    });
+  });
+
+  it('should handle permission denial', async () => {
+    const runner = MockClaudeRunner.withPermissionScenario();
+    const permissionRequestHandler = vi.fn();
+    const toolResultHandler = vi.fn();
+
+    runner.on('permission_request', permissionRequestHandler);
+    runner.on('tool_result', toolResultHandler);
+
+    runner.start('write file');
+
+    // Wait for permission request
+    await vi.waitFor(() => {
+      expect(permissionRequestHandler).toHaveBeenCalled();
+    });
+
+    // Get the request ID and respond with deny
+    const requestId = permissionRequestHandler.mock.calls[0][0].requestId;
+    runner.respondToPermission(requestId, { behavior: 'deny', message: 'User denied permission' });
+
+    // Wait for tool result (should be error)
+    await vi.waitFor(() => {
+      expect(toolResultHandler).toHaveBeenCalled();
+    });
+
+    expect(toolResultHandler).toHaveBeenCalledWith({
+      toolUseId: expect.any(String),
+      content: 'User denied permission',
+      isError: true,
+    });
+  });
 });

@@ -51,6 +51,19 @@ export interface WaitForInputStep {
   delay?: number;
 }
 
+export interface PermissionRequestStep {
+  type: 'permission_request';
+  /** Tool name requesting permission */
+  toolName: string;
+  /** Tool input */
+  input: unknown;
+  /** Tool result if allowed (optional, defaults to success message) */
+  resultOnAllow?: string;
+  /** Tool result if denied (optional, defaults to error message) */
+  resultOnDeny?: string;
+  delay?: number;
+}
+
 export interface UsageStep {
   type: 'usage';
   inputTokens: number;
@@ -68,7 +81,8 @@ export type ScenarioStep =
   | ResultStep
   | SystemStep
   | WaitForInputStep
-  | UsageStep;
+  | UsageStep
+  | PermissionRequestStep;
 
 export interface Scenario {
   name: string;
@@ -90,6 +104,12 @@ const DEFAULT_SCENARIO: Scenario = {
   ],
 };
 
+export interface PermissionResult {
+  behavior: 'allow' | 'deny';
+  updatedInput?: unknown;
+  message?: string;
+}
+
 export class MockClaudeRunner extends EventEmitter {
   private scenarios: Scenario[] = [];
   private currentScenario: Scenario = DEFAULT_SCENARIO;
@@ -101,6 +121,8 @@ export class MockClaudeRunner extends EventEmitter {
   private lastInput: string = '';
   private executionPromise: Promise<void> | null = null;
   private inputResolver: ((value: string) => void) | null = null;
+  private permissionResolver: ((result: PermissionResult) => void) | null = null;
+  private pendingPermissionRequestId: string | null = null;
 
   constructor() {
     super();
@@ -245,6 +267,45 @@ export class MockClaudeRunner extends EventEmitter {
           cacheReadInputTokens: step.cacheReadInputTokens,
         });
         break;
+
+      case 'permission_request': {
+        const requestId = nanoid();
+        this.pendingPermissionRequestId = requestId;
+
+        // Emit tool_use first (like real Claude does)
+        const toolUseId = nanoid();
+        this.emit('tool_use', {
+          id: toolUseId,
+          name: step.toolName,
+          input: step.input,
+        });
+
+        // Emit permission_request event
+        this.emit('permission_request', {
+          requestId,
+          toolName: step.toolName,
+          input: step.input,
+        });
+
+        // Wait for permission response
+        const result = await this.waitForPermission();
+
+        // Emit tool_result based on permission decision
+        if (result.behavior === 'allow') {
+          this.emit('tool_result', {
+            toolUseId,
+            content: step.resultOnAllow ?? `${step.toolName} executed successfully`,
+            isError: false,
+          });
+        } else {
+          this.emit('tool_result', {
+            toolUseId,
+            content: result.message ?? step.resultOnDeny ?? `Permission denied for ${step.toolName}`,
+            isError: true,
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -256,6 +317,32 @@ export class MockClaudeRunner extends EventEmitter {
         resolve(input);
       };
     });
+  }
+
+  private async waitForPermission(): Promise<PermissionResult> {
+    return new Promise<PermissionResult>((resolve) => {
+      this.permissionResolver = (result: PermissionResult) => {
+        this.pendingPermissionRequestId = null;
+        resolve(result);
+      };
+    });
+  }
+
+  /**
+   * Respond to a pending permission request
+   */
+  respondToPermission(requestId: string, result: PermissionResult): void {
+    if (this.pendingPermissionRequestId === requestId && this.permissionResolver) {
+      this.permissionResolver(result);
+      this.permissionResolver = null;
+    }
+  }
+
+  /**
+   * Get the current pending permission request ID (for testing)
+   */
+  getPendingPermissionRequestId(): string | null {
+    return this.pendingPermissionRequestId;
   }
 
   private interpolate(text: string): string {
@@ -377,27 +464,51 @@ export class MockClaudeRunner extends EventEmitter {
           subtype: 'init',
           model: 'claude-sonnet-4-20250514',
           tools: ['Read', 'Write', 'Edit', 'Bash'],
+          permissionMode: 'default',
         },
-        { type: 'thinking', thinking: 'I need to edit the file...' },
+        { type: 'thinking', thinking: 'I need to write a file...' },
         {
-          type: 'tool_use',
-          id: 'edit-1',
-          name: 'Edit',
+          type: 'permission_request',
+          toolName: 'Write',
           input: {
-            file_path: '/src/app.ts',
-            old_string: 'const foo = 1;',
-            new_string: 'const foo = 2;',
+            file_path: '/tmp/test.txt',
+            content: 'Hello, World!\n',
           },
+          resultOnAllow: 'File written successfully',
+          resultOnDeny: 'Permission denied: cannot write file',
         },
-        { type: 'wait_for_input' }, // Wait for permission
+        { type: 'text', text: 'I have written the file.' },
+        { type: 'result', result: 'File write completed' },
+      ],
+    });
+    return runner;
+  }
+
+  static withWritePermissionScenario(): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.addScenario({
+      name: 'write-permission',
+      promptPattern: /write|create.*file/i,
+      steps: [
         {
-          type: 'tool_result',
-          toolUseId: 'edit-1',
-          content: 'File edited successfully',
-          isError: false,
+          type: 'system',
+          subtype: 'init',
+          model: 'claude-sonnet-4-20250514',
+          tools: ['Read', 'Write', 'Edit', 'Bash'],
+          permissionMode: 'default',
         },
-        { type: 'text', text: 'I have made the edit.' },
-        { type: 'result', result: 'Edit completed' },
+        {
+          type: 'permission_request',
+          toolName: 'Write',
+          input: {
+            file_path: '/home/user/test.txt',
+            content: 'Test content\n',
+          },
+          resultOnAllow: 'File created successfully at: /home/user/test.txt',
+          resultOnDeny: 'Permission denied by user',
+        },
+        { type: 'text', text: 'Done.' },
+        { type: 'result', result: 'Task completed' },
       ],
     });
     return runner;

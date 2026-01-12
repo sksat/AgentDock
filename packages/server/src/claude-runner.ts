@@ -34,6 +34,8 @@ export interface ClaudeRunnerEvents {
   usage: (data: UsageData) => void;
   error: (data: { type: 'stderr' | 'process' | 'parse'; message: string; error?: Error }) => void;
   exit: (data: { code: number | null; signal: string | null }) => void;
+  /** Permission request for mock runner */
+  permission_request: (data: { requestId: string; toolName: string; input: unknown }) => void;
 }
 
 export class ClaudeRunner extends EventEmitter {

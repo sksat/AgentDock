@@ -129,6 +129,7 @@ export class RunnerManager {
       'usage',
       'error',
       'exit',
+      'permission_request',
     ];
 
     for (const eventType of events) {
