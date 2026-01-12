@@ -281,6 +281,36 @@ function App() {
             onToggleThinking={handleToggleThinking}
             onNewSession={() => setIsNewSessionModalOpen(true)}
             onClearMessages={clearMessages}
+            onCompact={() => {
+              // TODO: Implement server-side conversation compaction
+              console.log('Compact not implemented yet');
+            }}
+            onShowContext={() => {
+              const usage = usageInfo;
+              if (usage) {
+                alert(`Context Usage:\nInput: ${usage.inputTokens.toLocaleString()} tokens\nOutput: ${usage.outputTokens.toLocaleString()} tokens\nTotal: ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens`);
+              } else {
+                alert('No usage data available');
+              }
+            }}
+            onShowCost={() => {
+              const usage = usageInfo;
+              if (usage) {
+                // Rough cost estimate (prices may vary)
+                const inputCost = (usage.inputTokens / 1000000) * 15; // $15/M for Opus input
+                const outputCost = (usage.outputTokens / 1000000) * 75; // $75/M for Opus output
+                alert(`Session Cost (estimated):\nInput: $${inputCost.toFixed(4)}\nOutput: $${outputCost.toFixed(4)}\nTotal: $${(inputCost + outputCost).toFixed(4)}`);
+              } else {
+                alert('No usage data available');
+              }
+            }}
+            onShowConfig={() => {
+              // TODO: Open settings dialog
+              console.log('Config not implemented yet');
+            }}
+            onShowHelp={() => {
+              alert('Available Commands:\n\n/new - Create new session\n/clear - Clear messages\n/compact - Compact history\n/model - Switch model\n/context - Show context usage\n/cost - Show cost\n/permission - Change permission mode\n/config - Configuration\n/help - Show this help');
+            }}
           />
         </main>
       </div>

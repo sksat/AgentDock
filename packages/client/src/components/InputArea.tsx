@@ -29,6 +29,11 @@ export interface InputAreaProps {
   // Slash command callbacks
   onNewSession?: () => void;
   onClearMessages?: () => void;
+  onCompact?: () => void;
+  onShowContext?: () => void;
+  onShowCost?: () => void;
+  onShowConfig?: () => void;
+  onShowHelp?: () => void;
 }
 
 export function InputArea({
@@ -47,6 +52,11 @@ export function InputArea({
   onToggleThinking,
   onNewSession,
   onClearMessages,
+  onCompact,
+  onShowContext,
+  onShowCost,
+  onShowConfig,
+  onShowHelp,
 }: InputAreaProps) {
   const [value, setValue] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -102,8 +112,23 @@ export function InputArea({
       case 'clear':
         onClearMessages?.();
         break;
+      case 'compact':
+        onCompact?.();
+        break;
+      case 'context':
+        onShowContext?.();
+        break;
+      case 'cost':
+        onShowCost?.();
+        break;
+      case 'config':
+        onShowConfig?.();
+        break;
+      case 'help':
+        onShowHelp?.();
+        break;
     }
-  }, [onNewSession, onClearMessages]);
+  }, [onNewSession, onClearMessages, onCompact, onShowContext, onShowCost, onShowConfig, onShowHelp]);
 
   // Handle input change - detect slash commands
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {

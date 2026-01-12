@@ -7,4 +7,4 @@ export { NewSessionModal, type NewSessionModalProps } from './NewSessionModal';
 export { PermissionModeSelector, type PermissionModeSelectorProps } from './PermissionModeSelector';
 export { PermissionRequest, type PermissionRequestProps } from './PermissionRequest';
 export { Sidebar, type SidebarSession, type SidebarProps } from './Sidebar';
-export { SlashCommandSuggestions, type SlashCommand, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';
+export { SlashCommandSuggestions, getFilteredCommands, SLASH_COMMANDS, type SlashCommand, type SlashCommandCategory, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';
