@@ -807,6 +807,13 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Store WebSocket for this session
         sessionWebSockets.set(message.sessionId, ws);
 
+        // Add compact command to history as a user message
+        sessionManager.addToHistory(message.sessionId, {
+          type: 'user',
+          content: '/compact',
+          timestamp: new Date().toISOString(),
+        });
+
         // Update session status
         sessionManager.updateSessionStatus(message.sessionId, 'running');
 

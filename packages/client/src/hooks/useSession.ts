@@ -317,12 +317,21 @@ export function useSession(): UseSessionReturn {
 
   const compactSession = useCallback(() => {
     if (!activeSessionId) return;
+    // Add /compact command to local messages
+    updateSessionMessages(activeSessionId, (prev) => [
+      ...prev,
+      {
+        type: 'user',
+        content: '/compact',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
     setIsLoading(true);
     send({
       type: 'compact_session',
       sessionId: activeSessionId,
     });
-  }, [activeSessionId, send]);
+  }, [activeSessionId, send, updateSessionMessages]);
 
   const respondToPermission = useCallback(
     (
