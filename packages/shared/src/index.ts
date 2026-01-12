@@ -115,6 +115,7 @@ export type ServerMessage =
   | ThinkingOutputMessage
   | ToolUseMessage
   | ToolResultMessage
+  | ToolOutputMessage
   | ResultMessage
   // System info
   | SystemInfoMessage
@@ -174,6 +175,13 @@ export interface ToolResultMessage {
   toolUseId: string;
   content: string;
   isError?: boolean;
+}
+
+export interface ToolOutputMessage {
+  type: 'tool_output';
+  sessionId: string;
+  toolUseId: string;
+  output: string;
 }
 
 export interface ResultMessage {
@@ -242,7 +250,7 @@ export interface MessageItem {
   timestamp: string;
 }
 
-export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'permission' | 'question';
+export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'tool_output' | 'bash_tool' | 'mcp_tool' | 'permission' | 'question';
 
 export interface QuestionItem {
   question: string;

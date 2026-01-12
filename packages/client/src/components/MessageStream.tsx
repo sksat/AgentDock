@@ -2,9 +2,27 @@ import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result';
+  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool';
   content: unknown;
   timestamp: string;
+}
+
+export interface BashToolContent {
+  toolUseId: string;
+  command: string;
+  description?: string;
+  output: string;
+  isComplete: boolean;
+  isError?: boolean;
+}
+
+export interface McpToolContent {
+  toolUseId: string;
+  toolName: string;
+  input: unknown;
+  output: string;
+  isComplete: boolean;
+  isError?: boolean;
 }
 
 export interface MessageStreamProps {
@@ -50,6 +68,10 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
       return <AssistantMessage content={message.content as string} />;
     case 'thinking':
       return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
+    case 'bash_tool':
+      return <BashToolMessage content={message.content as BashToolContent} />;
+    case 'mcp_tool':
+      return <McpToolMessage content={message.content as McpToolContent} />;
     case 'tool_use':
       return <ToolUseMessage content={message.content as ToolUseContent} />;
     case 'tool_result':
@@ -107,6 +129,109 @@ function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps
             {content}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function BashToolMessage({ content }: { content: BashToolContent }) {
+  return (
+    <div data-testid="message-item" className="flex justify-start">
+      <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
+        {/* Header: Green dot + Bash label + description */}
+        <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+          <span className={clsx(
+            'w-2 h-2 rounded-full',
+            content.isComplete
+              ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
+              : 'bg-accent-warning animate-pulse'
+          )}></span>
+          <span className="font-mono text-sm font-medium">Bash</span>
+          {content.description && (
+            <span className="text-sm text-text-secondary ml-2">
+              {content.description}
+            </span>
+          )}
+        </div>
+
+        {/* IN Section: Command */}
+        <div className="border-b border-border">
+          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
+            IN
+          </div>
+          <pre className="px-4 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto">
+            {content.command}
+          </pre>
+        </div>
+
+        {/* OUT Section: Output */}
+        <div>
+          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+            OUT
+            {!content.isComplete && (
+              <span className="text-accent-warning">...</span>
+            )}
+          </div>
+          <pre
+            className={clsx(
+              'px-4 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+              content.isError
+                ? 'bg-accent-danger/10 text-accent-danger'
+                : 'bg-bg-secondary text-text-secondary'
+            )}
+          >
+            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function McpToolMessage({ content }: { content: McpToolContent }) {
+  return (
+    <div data-testid="message-item" className="flex justify-start">
+      <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
+        {/* Header: Green dot + MCP tool name */}
+        <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+          <span className={clsx(
+            'w-2 h-2 rounded-full',
+            content.isComplete
+              ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
+              : 'bg-accent-warning animate-pulse'
+          )}></span>
+          <span className="font-mono text-sm font-medium">{content.toolName}</span>
+        </div>
+
+        {/* IN Section: Input */}
+        <div className="border-b border-border">
+          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
+            IN
+          </div>
+          <pre className="px-4 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto whitespace-pre-wrap">
+            {JSON.stringify(content.input, null, 2)}
+          </pre>
+        </div>
+
+        {/* OUT Section: Output */}
+        <div>
+          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+            OUT
+            {!content.isComplete && (
+              <span className="text-accent-warning">...</span>
+            )}
+          </div>
+          <pre
+            className={clsx(
+              'px-4 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+              content.isError
+                ? 'bg-accent-danger/10 text-accent-danger'
+                : 'bg-bg-secondary text-text-secondary'
+            )}
+          >
+            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+          </pre>
+        </div>
       </div>
     </div>
   );

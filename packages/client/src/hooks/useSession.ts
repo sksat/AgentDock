@@ -6,7 +6,7 @@ import type {
   QuestionItem,
   PermissionMode,
 } from '@claude-bridge/shared';
-import type { MessageStreamItem } from '../components/MessageStream';
+import type { MessageStreamItem, BashToolContent, McpToolContent } from '../components/MessageStream';
 
 export interface PendingPermission {
   requestId: string;
@@ -427,35 +427,155 @@ export function useSession(): UseSessionReturn {
 
         case 'tool_use': {
           const sessionId = message.sessionId;
-          updateSessionMessages(sessionId, (prev) => [
-            ...prev,
-            {
-              type: 'tool_use',
-              content: {
-                toolName: message.toolName,
-                toolUseId: message.toolUseId,
-                input: message.input,
+          const { toolName, toolUseId, input } = message;
+
+          if (toolName === 'Bash') {
+            // Create combined Bash tool message
+            const bashInput = input as { command: string; description?: string };
+            updateSessionMessages(sessionId, (prev) => [
+              ...prev,
+              {
+                type: 'bash_tool',
+                content: {
+                  toolUseId,
+                  command: bashInput.command,
+                  description: bashInput.description,
+                  output: '',
+                  isComplete: false,
+                } as BashToolContent,
+                timestamp: new Date().toISOString(),
               },
-              timestamp: new Date().toISOString(),
-            },
-          ]);
+            ]);
+          } else if (toolName.startsWith('mcp__')) {
+            // Create combined MCP tool message
+            updateSessionMessages(sessionId, (prev) => [
+              ...prev,
+              {
+                type: 'mcp_tool',
+                content: {
+                  toolUseId,
+                  toolName,
+                  input,
+                  output: '',
+                  isComplete: false,
+                } as McpToolContent,
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          } else {
+            // Other tools use existing display
+            updateSessionMessages(sessionId, (prev) => [
+              ...prev,
+              {
+                type: 'tool_use',
+                content: {
+                  toolName,
+                  toolUseId,
+                  input,
+                },
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          }
+          break;
+        }
+
+        case 'tool_output': {
+          const sessionId = message.sessionId;
+          const { toolUseId, output } = message;
+          updateSessionMessages(sessionId, (prev) =>
+            prev.map((m) => {
+              if (m.type === 'bash_tool' &&
+                  (m.content as BashToolContent).toolUseId === toolUseId) {
+                const content = m.content as BashToolContent;
+                return {
+                  ...m,
+                  content: { ...content, output: content.output + output },
+                };
+              }
+              if (m.type === 'mcp_tool' &&
+                  (m.content as McpToolContent).toolUseId === toolUseId) {
+                const content = m.content as McpToolContent;
+                return {
+                  ...m,
+                  content: { ...content, output: content.output + output },
+                };
+              }
+              return m;
+            })
+          );
           break;
         }
 
         case 'tool_result': {
           const sessionId = message.sessionId;
-          updateSessionMessages(sessionId, (prev) => [
-            ...prev,
-            {
-              type: 'tool_result',
-              content: {
-                toolUseId: message.toolUseId,
-                content: message.content,
-                isError: message.isError ?? false,
+          const { toolUseId, content, isError } = message;
+
+          updateSessionMessages(sessionId, (prev) => {
+            // Check if this is for a Bash tool
+            const bashIndex = prev.findIndex(
+              (m) => m.type === 'bash_tool' &&
+                     (m.content as BashToolContent).toolUseId === toolUseId
+            );
+
+            if (bashIndex !== -1) {
+              // Update existing Bash tool message to complete state
+              return prev.map((m, i) => {
+                if (i === bashIndex) {
+                  const bashContent = m.content as BashToolContent;
+                  return {
+                    ...m,
+                    content: {
+                      ...bashContent,
+                      output: bashContent.output || content, // Use content if no streaming output
+                      isComplete: true,
+                      isError: isError ?? false,
+                    },
+                  };
+                }
+                return m;
+              });
+            }
+
+            // Check if this is for an MCP tool
+            const mcpIndex = prev.findIndex(
+              (m) => m.type === 'mcp_tool' &&
+                     (m.content as McpToolContent).toolUseId === toolUseId
+            );
+
+            if (mcpIndex !== -1) {
+              // Update existing MCP tool message to complete state
+              return prev.map((m, i) => {
+                if (i === mcpIndex) {
+                  const mcpContent = m.content as McpToolContent;
+                  return {
+                    ...m,
+                    content: {
+                      ...mcpContent,
+                      output: mcpContent.output || content, // Use content if no streaming output
+                      isComplete: true,
+                      isError: isError ?? false,
+                    },
+                  };
+                }
+                return m;
+              });
+            }
+
+            // Not a Bash or MCP tool, add as separate tool_result message
+            return [
+              ...prev,
+              {
+                type: 'tool_result',
+                content: {
+                  toolUseId,
+                  content,
+                  isError: isError ?? false,
+                },
+                timestamp: new Date().toISOString(),
               },
-              timestamp: new Date().toISOString(),
-            },
-          ]);
+            ];
+          });
           break;
         }
 
