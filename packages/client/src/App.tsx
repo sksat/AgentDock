@@ -186,7 +186,7 @@ function App() {
         {/* Header */}
         <header className="px-4 py-3 bg-bg-secondary border-b border-border flex items-center justify-between">
           <h1 className="text-lg font-semibold">
-            {session?.name ?? 'Claude Bridge'}
+            {session?.name ?? 'AgentDock'}
           </h1>
           <div className="flex items-center gap-4">
             {/* Session usage */}

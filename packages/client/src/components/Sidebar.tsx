@@ -91,7 +91,7 @@ export function Sidebar({
         'flex items-center border-b border-border',
         isCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-4 py-3'
       )}>
-        {!isCollapsed && <h2 className="text-sm font-medium text-text-secondary">Sessions</h2>}
+        {!isCollapsed && <h2 className="text-sm font-medium text-text-primary">AgentDock</h2>}
         <div className="flex items-center gap-1">
           {!isCollapsed && (
             <button
