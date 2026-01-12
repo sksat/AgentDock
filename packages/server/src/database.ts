@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -37,6 +37,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     1: () => migrateToV1(db),
     2: () => migrateToV2(db),
     3: () => migrateToV3(db),
+    4: () => migrateToV4(db),
   };
 
   db.transaction(() => {
@@ -152,6 +153,33 @@ function migrateToV3(db: Database.Database): void {
       CREATE INDEX idx_session_model_usage_session_id ON session_model_usage(session_id);
     `);
   }
+}
+
+function migrateToV4(db: Database.Database): void {
+  // Add ccusage_cache table for caching ccusage command outputs
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ccusage_cache (
+      cache_type TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  // Add ccusage_session_usage table for per-session usage data
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ccusage_session_usage (
+      ccusage_session_id TEXT PRIMARY KEY,
+      total_cost REAL NOT NULL,
+      total_tokens INTEGER NOT NULL,
+      input_tokens INTEGER NOT NULL,
+      output_tokens INTEGER NOT NULL,
+      cache_creation_tokens INTEGER NOT NULL,
+      cache_read_tokens INTEGER NOT NULL,
+      last_activity TEXT NOT NULL,
+      models_used TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
 }
 
 export type { Database };

@@ -190,6 +190,11 @@ export class SessionManager {
     return row ? this.rowToSessionInfo(row) : undefined;
   }
 
+  /** Get the underlying database instance */
+  getDb(): Database.Database {
+    return this.db;
+  }
+
   listSessions(): SessionInfo[] {
     const rows = this.stmts.listSessions.all() as SessionRow[];
     return rows.map((row) => this.rowToSessionInfo(row));

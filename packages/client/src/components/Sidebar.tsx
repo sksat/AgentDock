@@ -1,7 +1,7 @@
 import { useState, useCallback, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 import { UsageDisplay, type GlobalUsageData } from './UsageDisplay';
-import type { SessionStatus } from '@agent-dock/shared';
+import type { SessionStatus, SessionUsageInfo } from '@agent-dock/shared';
 
 export type { GlobalUsageData };
 
@@ -12,6 +12,7 @@ export interface SidebarSession {
   name: string;
   status: SessionStatus;
   createdAt: string;
+  usage?: SessionUsageInfo;
 }
 
 export interface SidebarProps {
@@ -258,9 +259,9 @@ function SessionItem({
         className={clsx('w-2 h-2 rounded-full flex-shrink-0', statusColor)}
       />
 
-      {/* Session name (hidden when collapsed) */}
+      {/* Session name and cost (hidden when collapsed) */}
       {!isCollapsed && (
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
           {isRenaming ? (
             <input
               type="text"
@@ -278,7 +279,14 @@ function SessionItem({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className="block truncate text-sm">{session.name}</span>
+            <>
+              <span className="block truncate text-sm flex-1">{session.name}</span>
+              {session.usage && (
+                <span className="text-xs text-text-secondary flex-shrink-0">
+                  ${session.usage.totalCost.toFixed(2)}
+                </span>
+              )}
+            </>
           )}
         </div>
       )}

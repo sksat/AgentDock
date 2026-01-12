@@ -120,7 +120,12 @@ export function createServer(options: ServerOptions): BridgeServer {
   const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
 
   // Create usage monitor (if not disabled)
-  const usageMonitor = disableUsageMonitor ? null : new UsageMonitor({ interval: usageMonitorInterval });
+  const usageMonitor = disableUsageMonitor
+    ? null
+    : new UsageMonitor({
+        interval: usageMonitorInterval,
+        db: sessionManager.getDb(),
+      });
 
   // Create runner factory based on mock mode
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
@@ -185,6 +190,23 @@ export function createServer(options: ServerOptions): BridgeServer {
   function updateAndBroadcastStatus(sessionId: string, status: SessionStatus): void {
     sessionManager.updateSessionStatus(sessionId, status);
     broadcastStatusChange(sessionId, status);
+  }
+
+  // Get sessions with usage data (uses UsageMonitor's cache)
+  function getSessionsWithUsage() {
+    const sessions = sessionManager.listSessions();
+    if (!usageMonitor) return sessions;
+
+    return sessions.map((session) => {
+      const usage = usageMonitor.getSessionUsageFromCache(session.workingDir);
+      return usage ? { ...session, usage } : session;
+    });
+  }
+
+  // Trigger background refresh of session usage
+  async function refreshSessionUsageInBackground(): Promise<void> {
+    if (!usageMonitor) return;
+    await usageMonitor.fetchSessionUsage();
   }
 
   // Set up usage monitor events
@@ -469,15 +491,19 @@ export function createServer(options: ServerOptions): BridgeServer {
   });
 
   // Handle WebSocket messages
-  function handleMessage(ws: WebSocket, message: ClientMessage): void {
+  async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<void> {
     let response: ServerMessage;
 
     switch (message.type) {
       case 'list_sessions': {
+        // Return cached data immediately for fast response
+        const sessionsWithUsage = getSessionsWithUsage();
         response = {
           type: 'session_list',
-          sessions: sessionManager.listSessions(),
+          sessions: sessionsWithUsage,
         };
+        // Trigger background refresh of session usage
+        refreshSessionUsageInBackground();
         break;
       }
 
@@ -928,7 +954,13 @@ Keep it concise but comprehensive.`;
           ws.on('message', (data) => {
             try {
               const message = JSON.parse(data.toString()) as ClientMessage;
-              handleMessage(ws, message);
+              handleMessage(ws, message).catch((error) => {
+                console.error('[Server] Error handling message:', error);
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: 'Error processing message',
+                }));
+              });
             } catch (error) {
               ws.send(JSON.stringify({
                 type: 'error',

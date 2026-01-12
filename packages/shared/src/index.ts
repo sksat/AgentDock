@@ -276,6 +276,8 @@ export interface SessionInfo {
   claudeSessionId?: string; // Claude CLI's session ID for --resume
   permissionMode?: PermissionMode;
   model?: string;
+  /** Usage data from ccusage (optional, may not be available) */
+  usage?: SessionUsageInfo;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';
@@ -365,5 +367,19 @@ export interface BlockUsage {
   cacheReadTokens: number;
   totalTokens: number;
   totalCost: number;
+  modelsUsed: string[];
+}
+
+/** Usage data for a session (from ccusage session) */
+export interface SessionUsageInfo {
+  /** ccusage session ID (derived from working directory path) */
+  ccusageSessionId: string;
+  totalCost: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  lastActivity: string;
   modelsUsed: string[];
 }

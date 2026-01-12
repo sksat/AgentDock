@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Sidebar, type SidebarSession } from './Sidebar';
+import type { SessionUsageInfo } from '@agent-dock/shared';
 
 describe('Sidebar', () => {
   const mockSessions: SidebarSession[] = [
@@ -278,5 +279,112 @@ describe('Sidebar collapse', () => {
     expect(sidebar).not.toHaveAttribute('data-collapsed', 'true');
     expect(screen.getByText('Session 1')).toBeInTheDocument();
     expect(localStorage.getItem(STORAGE_KEY)).toBe('false');
+  });
+});
+
+describe('Session cost display', () => {
+  const mockUsage: SessionUsageInfo = {
+    ccusageSessionId: '-home-user-project',
+    totalCost: 12.34,
+    totalTokens: 1000000,
+    inputTokens: 500000,
+    outputTokens: 100000,
+    cacheCreationTokens: 200000,
+    cacheReadTokens: 200000,
+    lastActivity: '2026-01-13',
+    modelsUsed: ['claude-opus-4-5-20251101'],
+  };
+
+  const sessionsWithUsage: SidebarSession[] = [
+    {
+      id: 'session-1',
+      name: 'Session 1',
+      status: 'idle',
+      createdAt: '2024-01-01T00:00:00Z',
+      usage: mockUsage,
+    },
+    {
+      id: 'session-2',
+      name: 'Session 2',
+      status: 'running',
+      createdAt: '2024-01-02T00:00:00Z',
+      // No usage data
+    },
+  ];
+
+  const defaultProps = {
+    sessions: sessionsWithUsage,
+    activeSessionId: 'session-1',
+    globalUsage: null,
+    onSelectSession: vi.fn(),
+    onCreateSession: vi.fn(),
+    onDeleteSession: vi.fn(),
+    onRenameSession: vi.fn(),
+  };
+
+  it('should display session cost when usage data is available', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    // Should show $12.34 formatted cost
+    expect(screen.getByText('$12.34')).toBeInTheDocument();
+  });
+
+  it('should not display cost for sessions without usage data', () => {
+    render(<Sidebar {...defaultProps} />);
+
+    // Session 2 should not have a cost display
+    const session2Item = screen.getByTestId('session-item-session-2');
+    expect(session2Item).not.toHaveTextContent('$');
+  });
+
+  it('should format cost appropriately for small amounts', () => {
+    const smallUsage: SessionUsageInfo = {
+      ...mockUsage,
+      totalCost: 0.05,
+    };
+    const sessionsWithSmallCost: SidebarSession[] = [
+      {
+        id: 'session-1',
+        name: 'Session 1',
+        status: 'idle',
+        createdAt: '2024-01-01T00:00:00Z',
+        usage: smallUsage,
+      },
+    ];
+
+    render(<Sidebar {...defaultProps} sessions={sessionsWithSmallCost} />);
+
+    expect(screen.getByText('$0.05')).toBeInTheDocument();
+  });
+
+  it('should format cost appropriately for large amounts', () => {
+    const largeUsage: SessionUsageInfo = {
+      ...mockUsage,
+      totalCost: 1234.56,
+    };
+    const sessionsWithLargeCost: SidebarSession[] = [
+      {
+        id: 'session-1',
+        name: 'Session 1',
+        status: 'idle',
+        createdAt: '2024-01-01T00:00:00Z',
+        usage: largeUsage,
+      },
+    ];
+
+    render(<Sidebar {...defaultProps} sessions={sessionsWithLargeCost} />);
+
+    expect(screen.getByText('$1234.56')).toBeInTheDocument();
+  });
+
+  it('should not show cost when sidebar is collapsed', () => {
+    localStorage.setItem('agent-dock:sidebar-collapsed', 'true');
+
+    render(<Sidebar {...defaultProps} />);
+
+    // Cost should not be visible when collapsed
+    expect(screen.queryByText('$12.34')).not.toBeInTheDocument();
+
+    localStorage.clear();
   });
 });

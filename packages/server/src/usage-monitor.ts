@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'events';
-import type { DailyUsage, UsageTotals, BlockUsage } from '@agent-dock/shared';
+import type Database from 'better-sqlite3';
+import type { DailyUsage, UsageTotals, BlockUsage, SessionUsageInfo } from '@agent-dock/shared';
 
 export interface UsageData {
   today: DailyUsage | null;
@@ -56,6 +57,29 @@ interface CcusageOutput {
   }>;
 }
 
+interface CcusageSessionOutput {
+  sessions: Array<{
+    sessionId: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    totalTokens: number;
+    totalCost: number;
+    lastActivity: string;
+    modelsUsed: string[];
+    modelBreakdowns: Array<{
+      modelName: string;
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationTokens: number;
+      cacheReadTokens: number;
+      cost: number;
+    }>;
+    projectPath: string;
+  }>;
+}
+
 export interface UsageMonitorEvents {
   usage: (data: UsageData) => void;
   error: (error: Error) => void;
@@ -70,13 +94,40 @@ export interface UsageMonitorOptions {
   dailyArgs?: string[];
   /** Arguments for ccusage blocks (default: ['ccusage', 'blocks', '--json', '--recent']) */
   blocksArgs?: string[];
+  /** Arguments for ccusage session (default: ['ccusage', 'session', '--json']) */
+  sessionArgs?: string[];
+  /** Database instance for caching (optional) */
+  db?: Database.Database;
+  /** Cache TTL in milliseconds (default: 30000 = 30 seconds) */
+  cacheTtl?: number;
+}
+
+interface CacheRow {
+  cache_type: string;
+  data: string;
+  updated_at: string;
+}
+
+interface SessionUsageCacheRow {
+  ccusage_session_id: string;
+  total_cost: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  last_activity: string;
+  models_used: string;
+  updated_at: string;
 }
 
 export class UsageMonitor extends EventEmitter {
   private intervalId: NodeJS.Timeout | null = null;
-  private options: Required<UsageMonitorOptions>;
+  private options: Omit<Required<UsageMonitorOptions>, 'db'> & { db: Database.Database | null };
   private lastUsage: UsageData | null = null;
   private isRunning: boolean = false;
+  private sessionUsageCache: SessionUsageInfo[] = [];
+  private sessionUsageCacheTime: number = 0;
 
   constructor(options: UsageMonitorOptions = {}) {
     super();
@@ -85,6 +136,9 @@ export class UsageMonitor extends EventEmitter {
       command: options.command ?? 'npx',
       dailyArgs: options.dailyArgs ?? ['ccusage', 'daily', '--json', '--breakdown'],
       blocksArgs: options.blocksArgs ?? ['ccusage', 'blocks', '--json', '--recent'],
+      sessionArgs: options.sessionArgs ?? ['ccusage', 'session', '--json'],
+      db: options.db ?? null,
+      cacheTtl: options.cacheTtl ?? 30000,
     };
   }
 
@@ -96,13 +150,121 @@ export class UsageMonitor extends EventEmitter {
       return; // Already running
     }
 
-    // Fetch immediately on start
+    // Load cached data from DB immediately (fast)
+    this.loadCachedUsage();
+    this.loadCachedSessionUsage();
+
+    // Fetch fresh data in background
     this.fetchUsage();
 
     // Then periodically
     this.intervalId = setInterval(() => {
       this.fetchUsage();
     }, this.options.interval);
+  }
+
+  /**
+   * Load cached usage data from database
+   */
+  private loadCachedUsage(): void {
+    if (!this.options.db) return;
+
+    try {
+      const row = this.options.db
+        .prepare('SELECT data, updated_at FROM ccusage_cache WHERE cache_type = ?')
+        .get('usage') as CacheRow | undefined;
+
+      if (row) {
+        const cached = JSON.parse(row.data) as UsageData;
+        this.lastUsage = cached;
+        this.emit('usage', cached);
+      }
+    } catch (error) {
+      console.error('[UsageMonitor] Failed to load cached usage:', error);
+    }
+  }
+
+  /**
+   * Save usage data to database cache
+   */
+  private saveCachedUsage(data: UsageData): void {
+    if (!this.options.db) return;
+
+    try {
+      this.options.db
+        .prepare(
+          'INSERT OR REPLACE INTO ccusage_cache (cache_type, data, updated_at) VALUES (?, ?, ?)'
+        )
+        .run('usage', JSON.stringify(data), new Date().toISOString());
+    } catch (error) {
+      console.error('[UsageMonitor] Failed to save cached usage:', error);
+    }
+  }
+
+  /**
+   * Load cached session usage from database
+   */
+  private loadCachedSessionUsage(): void {
+    if (!this.options.db) return;
+
+    try {
+      const rows = this.options.db
+        .prepare('SELECT * FROM ccusage_session_usage')
+        .all() as SessionUsageCacheRow[];
+
+      this.sessionUsageCache = rows.map((row) => ({
+        ccusageSessionId: row.ccusage_session_id,
+        totalCost: row.total_cost,
+        totalTokens: row.total_tokens,
+        inputTokens: row.input_tokens,
+        outputTokens: row.output_tokens,
+        cacheCreationTokens: row.cache_creation_tokens,
+        cacheReadTokens: row.cache_read_tokens,
+        lastActivity: row.last_activity,
+        modelsUsed: JSON.parse(row.models_used),
+      }));
+      this.sessionUsageCacheTime = Date.now();
+    } catch (error) {
+      console.error('[UsageMonitor] Failed to load cached session usage:', error);
+    }
+  }
+
+  /**
+   * Save session usage to database cache
+   */
+  private saveCachedSessionUsage(sessions: SessionUsageInfo[]): void {
+    if (!this.options.db) return;
+
+    try {
+      const now = new Date().toISOString();
+      const stmt = this.options.db.prepare(`
+        INSERT OR REPLACE INTO ccusage_session_usage
+        (ccusage_session_id, total_cost, total_tokens, input_tokens, output_tokens,
+         cache_creation_tokens, cache_read_tokens, last_activity, models_used, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const insertMany = this.options.db.transaction((items: SessionUsageInfo[]) => {
+        for (const s of items) {
+          stmt.run(
+            s.ccusageSessionId,
+            s.totalCost,
+            s.totalTokens,
+            s.inputTokens,
+            s.outputTokens,
+            s.cacheCreationTokens,
+            s.cacheReadTokens,
+            s.lastActivity,
+            JSON.stringify(s.modelsUsed),
+            now
+          );
+        }
+      });
+
+      insertMany(sessions);
+    } catch (error) {
+      console.error('[UsageMonitor] Failed to save cached session usage:', error);
+    }
   }
 
   /**
@@ -182,6 +344,7 @@ export class UsageMonitor extends EventEmitter {
       };
 
       this.lastUsage = usageData;
+      this.saveCachedUsage(usageData);
       this.emit('usage', usageData);
 
       return usageData;
@@ -229,6 +392,79 @@ export class UsageMonitor extends EventEmitter {
         reject(new Error('ccusage timeout'));
       }, 30000);
     });
+  }
+
+  /**
+   * Convert a working directory path to ccusage session ID format.
+   * Example: '/home/user/project' -> '-home-user-project'
+   */
+  workingDirToCcusageSessionId(workingDir: string): string {
+    // Remove trailing slash if present
+    const normalized = workingDir.endsWith('/') ? workingDir.slice(0, -1) : workingDir;
+    // Replace all forward slashes with dashes
+    return normalized.replace(/\//g, '-');
+  }
+
+  /**
+   * Fetch session usage data from ccusage (with caching)
+   */
+  async fetchSessionUsage(): Promise<SessionUsageInfo[]> {
+    // Return in-memory cache if fresh
+    const now = Date.now();
+    if (this.sessionUsageCache.length > 0 && now - this.sessionUsageCacheTime < this.options.cacheTtl) {
+      return this.sessionUsageCache;
+    }
+
+    try {
+      const output = await this.runCcusage(this.options.sessionArgs);
+      const data = JSON.parse(output) as CcusageSessionOutput;
+
+      const sessions = data.sessions.map((s) => ({
+        ccusageSessionId: s.sessionId,
+        totalCost: s.totalCost,
+        totalTokens: s.totalTokens,
+        inputTokens: s.inputTokens,
+        outputTokens: s.outputTokens,
+        cacheCreationTokens: s.cacheCreationTokens,
+        cacheReadTokens: s.cacheReadTokens,
+        lastActivity: s.lastActivity,
+        modelsUsed: s.modelsUsed,
+      }));
+
+      // Update caches
+      this.sessionUsageCache = sessions;
+      this.sessionUsageCacheTime = now;
+      this.saveCachedSessionUsage(sessions);
+
+      return sessions;
+    } catch {
+      // Return stale cache on error
+      return this.sessionUsageCache;
+    }
+  }
+
+  /**
+   * Get cached session usage (synchronous, for fast access)
+   */
+  getCachedSessionUsage(): SessionUsageInfo[] {
+    return this.sessionUsageCache;
+  }
+
+  /**
+   * Get session usage for a specific working directory
+   */
+  async getSessionUsage(workingDir: string): Promise<SessionUsageInfo | null> {
+    const ccusageSessionId = this.workingDirToCcusageSessionId(workingDir);
+    const sessions = await this.fetchSessionUsage();
+    return sessions.find((s) => s.ccusageSessionId === ccusageSessionId) ?? null;
+  }
+
+  /**
+   * Get session usage from cache (synchronous)
+   */
+  getSessionUsageFromCache(workingDir: string): SessionUsageInfo | null {
+    const ccusageSessionId = this.workingDirToCcusageSessionId(workingDir);
+    return this.sessionUsageCache.find((s) => s.ccusageSessionId === ccusageSessionId) ?? null;
   }
 
   // Type-safe event emitter methods

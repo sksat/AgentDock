@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { UsageMonitor } from '../usage-monitor';
-import type { BlockUsage } from '@agent-dock/shared';
+import type { BlockUsage, SessionUsageInfo } from '@agent-dock/shared';
 import { spawn } from 'node:child_process';
 
 // Mock child_process
@@ -296,6 +296,100 @@ describe('UsageMonitor', () => {
       const usage = (await usagePromise) as { blocks: BlockUsage[] };
 
       expect(usage.blocks).toEqual([]);
+    });
+  });
+
+  describe('session usage', () => {
+    // Mock session data output
+    const mockSessionOutput = JSON.stringify({
+      sessions: [
+        {
+          sessionId: '-home-user-project-foo',
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheCreationTokens: 100,
+          cacheReadTokens: 200,
+          totalTokens: 1800,
+          totalCost: 0.05,
+          lastActivity: '2026-01-13',
+          modelsUsed: ['claude-sonnet-4-5-20250929'],
+          modelBreakdowns: [],
+          projectPath: 'Unknown Project',
+        },
+        {
+          sessionId: '-home-user-project-bar',
+          inputTokens: 2000,
+          outputTokens: 1000,
+          cacheCreationTokens: 200,
+          cacheReadTokens: 400,
+          totalTokens: 3600,
+          totalCost: 0.10,
+          lastActivity: '2026-01-12',
+          modelsUsed: ['claude-opus-4-5-20251101'],
+          modelBreakdowns: [],
+          projectPath: 'Unknown Project',
+        },
+      ],
+    });
+
+    it('should fetch and parse session usage data', async () => {
+      mockSpawn.mockReturnValueOnce(createMockProcess(mockSessionOutput));
+
+      monitor = new UsageMonitor();
+      const sessions = await monitor.fetchSessionUsage();
+
+      expect(sessions).toHaveLength(2);
+
+      // First session
+      expect(sessions[0].ccusageSessionId).toBe('-home-user-project-foo');
+      expect(sessions[0].totalCost).toBe(0.05);
+      expect(sessions[0].totalTokens).toBe(1800);
+      expect(sessions[0].modelsUsed).toEqual(['claude-sonnet-4-5-20250929']);
+
+      // Second session
+      expect(sessions[1].ccusageSessionId).toBe('-home-user-project-bar');
+      expect(sessions[1].totalCost).toBe(0.10);
+    });
+
+    it('should return empty array when session command fails', async () => {
+      mockSpawn.mockReturnValueOnce(createMockProcess('', 1)); // Exit code 1 = failure
+
+      monitor = new UsageMonitor();
+      const sessions = await monitor.fetchSessionUsage();
+
+      expect(sessions).toEqual([]);
+    });
+
+    it('should convert working directory to ccusage session ID', () => {
+      monitor = new UsageMonitor();
+
+      expect(monitor.workingDirToCcusageSessionId('/home/user/project'))
+        .toBe('-home-user-project');
+      expect(monitor.workingDirToCcusageSessionId('/home/sksat/prog/claude-bridge'))
+        .toBe('-home-sksat-prog-claude-bridge');
+      // Trailing slash should be handled
+      expect(monitor.workingDirToCcusageSessionId('/home/user/project/'))
+        .toBe('-home-user-project');
+    });
+
+    it('should get session usage by working directory', async () => {
+      mockSpawn.mockReturnValueOnce(createMockProcess(mockSessionOutput));
+
+      monitor = new UsageMonitor();
+      const usage = await monitor.getSessionUsage('/home/user/project/foo');
+
+      expect(usage).not.toBeNull();
+      expect(usage!.ccusageSessionId).toBe('-home-user-project-foo');
+      expect(usage!.totalCost).toBe(0.05);
+    });
+
+    it('should return null for unknown working directory', async () => {
+      mockSpawn.mockReturnValueOnce(createMockProcess(mockSessionOutput));
+
+      monitor = new UsageMonitor();
+      const usage = await monitor.getSessionUsage('/unknown/path');
+
+      expect(usage).toBeNull();
     });
   });
 });
