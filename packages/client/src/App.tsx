@@ -7,6 +7,50 @@ import './App.css';
 
 const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
 
+// Format large numbers with K/M suffixes
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}K`;
+  }
+  return tokens.toString();
+}
+
+// Pricing per million tokens (USD)
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  'claude-opus-4-5-20251101': { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 },
+  'claude-sonnet-4-5-20250929': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  'claude-haiku-4-5-20251001': { input: 0.8, output: 4, cacheRead: 0.08, cacheWrite: 1 },
+  // Defaults for unknown models
+  default: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+};
+
+// Calculate estimated cost from usage
+function calculateCost(
+  model: string | undefined,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number = 0,
+  cacheWriteTokens: number = 0
+): number {
+  const pricing = MODEL_PRICING[model ?? ''] ?? MODEL_PRICING.default;
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.cacheRead;
+  const cacheWriteCost = (cacheWriteTokens / 1_000_000) * pricing.cacheWrite;
+  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+}
+
+// Format cost
+function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+
 function App() {
   const {
     sessions,
@@ -20,6 +64,7 @@ function App() {
     error,
     systemInfo,
     usageInfo,
+    globalUsage,
     listSessions,
     createSession,
     selectSession,
@@ -106,6 +151,7 @@ function App() {
       <Sidebar
         sessions={sidebarSessions}
         activeSessionId={activeSessionId}
+        globalUsage={globalUsage}
         onSelectSession={selectSession}
         onCreateSession={() => setIsNewSessionModalOpen(true)}
         onDeleteSession={deleteSession}
@@ -119,15 +165,34 @@ function App() {
           <h1 className="text-lg font-semibold">
             {session?.name ?? 'Claude Bridge'}
           </h1>
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-accent-success' : 'bg-accent-danger'
-              }`}
-            />
-            <span className="text-sm text-text-secondary">
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
+          <div className="flex items-center gap-4">
+            {/* Session usage */}
+            {usageInfo && (
+              <div className="flex items-center gap-3 text-xs text-text-secondary">
+                <span className="font-medium text-accent-primary" title="Estimated cost">
+                  {formatCost(calculateCost(
+                    systemInfo?.model,
+                    usageInfo.inputTokens,
+                    usageInfo.outputTokens,
+                    usageInfo.cacheReadInputTokens,
+                    usageInfo.cacheCreationInputTokens
+                  ))}
+                </span>
+                <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
+                <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
+              </div>
+            )}
+            {/* Connection status */}
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? 'bg-accent-success' : 'bg-accent-danger'
+                }`}
+              />
+              <span className="text-sm text-text-secondary">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
           </div>
         </header>
 

@@ -23,6 +23,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -39,6 +40,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -59,6 +61,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={onSelectSession}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -77,6 +80,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={onCreateSession}
         onDeleteSession={() => {}}
@@ -94,6 +98,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -120,6 +125,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={sessionsWithIdle}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={onDeleteSession}
@@ -140,6 +146,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={[]}
         activeSessionId={null}
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -156,6 +163,7 @@ describe('Sidebar', () => {
       <Sidebar
         sessions={mockSessions}
         activeSessionId="session-1"
+        globalUsage={null}
         onSelectSession={() => {}}
         onCreateSession={() => {}}
         onDeleteSession={() => {}}
@@ -194,6 +202,7 @@ describe('Sidebar collapse', () => {
   const defaultProps = {
     sessions: mockSessions,
     activeSessionId: 'session-1',
+    globalUsage: null,
     onSelectSession: vi.fn(),
     onCreateSession: vi.fn(),
     onDeleteSession: vi.fn(),

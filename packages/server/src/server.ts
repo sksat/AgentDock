@@ -11,10 +11,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage } from '@claude-bridge/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@claude-bridge/shared';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
+import { UsageMonitor, UsageData } from './usage-monitor.js';
 
 export interface ServerOptions {
   port: number;
@@ -33,6 +34,10 @@ export interface ServerOptions {
   mcpServerArgs?: string[];
   /** MCP server working directory (for relative paths in args) */
   mcpServerCwd?: string;
+  /** Usage monitor interval in milliseconds (default: 30000 = 30 seconds) */
+  usageMonitorInterval?: number;
+  /** Disable usage monitoring (default: false) */
+  disableUsageMonitor?: boolean;
 }
 
 /**
@@ -104,6 +109,8 @@ export function createServer(options: ServerOptions): BridgeServer {
     mcpServerCommand = 'node',
     mcpServerArgs = [join(PROJECT_ROOT, 'packages/mcp-server/dist/index.js')],
     mcpServerCwd,  // Optional, not needed if using absolute path
+    usageMonitorInterval = 30000,
+    disableUsageMonitor = false,
   } = options;
 
   // WebSocket URL for MCP server to connect back to
@@ -111,6 +118,9 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   const app = new Hono();
   const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
+
+  // Create usage monitor (if not disabled)
+  const usageMonitor = disableUsageMonitor ? null : new UsageMonitor({ interval: usageMonitorInterval });
 
   // Create runner factory based on mock mode
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
@@ -133,8 +143,36 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to WebSocket for sending events
   const sessionWebSockets = new Map<string, WebSocket>();
 
+  // All connected WebSocket clients (for broadcasting usage)
+  const allClients = new Set<WebSocket>();
+
   // Map request ID to WebSocket for permission responses (from MCP server)
   const pendingPermissionRequests = new Map<string, WebSocket>();
+
+  // Broadcast global usage to all clients
+  function broadcastUsage(data: UsageData): void {
+    const message: GlobalUsageMessage = {
+      type: 'global_usage',
+      today: data.today,
+      totals: data.totals,
+    };
+    const messageStr = JSON.stringify(message);
+    for (const ws of allClients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Set up usage monitor events
+  if (usageMonitor) {
+    usageMonitor.on('usage', (data) => {
+      broadcastUsage(data);
+    });
+    usageMonitor.on('error', (error) => {
+      console.error('[UsageMonitor] Error:', error.message);
+    });
+  }
 
   // Accumulator for current turn's text (to save as single history entry)
   const turnAccumulator = new Map<string, { text: string; thinking: string }>();
@@ -705,6 +743,21 @@ export function createServer(options: ServerOptions): BridgeServer {
         wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
         wss.on('connection', (ws) => {
+          // Track client
+          allClients.add(ws);
+
+          // Send current usage data to new client
+          if (usageMonitor) {
+            const lastUsage = usageMonitor.getLastUsage();
+            if (lastUsage) {
+              ws.send(JSON.stringify({
+                type: 'global_usage',
+                today: lastUsage.today,
+                totals: lastUsage.totals,
+              }));
+            }
+          }
+
           ws.on('message', (data) => {
             try {
               const message = JSON.parse(data.toString()) as ClientMessage;
@@ -715,6 +768,10 @@ export function createServer(options: ServerOptions): BridgeServer {
                 message: 'Invalid message format',
               }));
             }
+          });
+
+          ws.on('close', () => {
+            allClients.delete(ws);
           });
         });
 
@@ -750,6 +807,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
 
         httpServer.listen(port, host, () => {
+          // Start usage monitor
+          usageMonitor?.start();
           resolve();
         });
       });
@@ -757,6 +816,8 @@ export function createServer(options: ServerOptions): BridgeServer {
 
     async stop() {
       return new Promise((resolve) => {
+        // Stop usage monitor
+        usageMonitor?.stop();
         // Stop all running Claude processes
         runnerManager.stopAll();
         wss?.close();

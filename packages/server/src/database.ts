@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -35,6 +35,7 @@ export function initDatabase(dbPath: string): Database.Database {
 function runMigrations(db: Database.Database, from: number, to: number): void {
   const migrations: Record<number, () => void> = {
     1: () => migrateToV1(db),
+    2: () => migrateToV2(db),
   };
 
   db.transaction(() => {
@@ -82,6 +83,16 @@ function migrateToV1(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(session_id, timestamp);
+  `);
+}
+
+function migrateToV2(db: Database.Database): void {
+  // Add usage columns to sessions table
+  db.exec(`
+    ALTER TABLE sessions ADD COLUMN input_tokens INTEGER DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN output_tokens INTEGER DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN cache_read_tokens INTEGER DEFAULT 0;
   `);
 }
 

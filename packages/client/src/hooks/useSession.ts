@@ -5,6 +5,8 @@ import type {
   ClientMessage,
   QuestionItem,
   PermissionMode,
+  DailyUsage,
+  UsageTotals,
 } from '@claude-bridge/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent } from '../components/MessageStream';
 
@@ -33,6 +35,11 @@ export interface UsageInfo {
   cacheReadInputTokens?: number;
 }
 
+export interface GlobalUsage {
+  today: DailyUsage | null;
+  totals: UsageTotals;
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -48,6 +55,7 @@ export interface UseSessionReturn {
   error: string | null;
   systemInfo: SystemInfo | null;
   usageInfo: UsageInfo | null;
+  globalUsage: GlobalUsage | null;
 
   // Session management
   listSessions: () => void;
@@ -77,6 +85,9 @@ export interface UseSessionReturn {
 // Store messages per session
 type SessionMessages = Map<string, MessageStreamItem[]>;
 
+// Store usage info per session
+type SessionUsageInfo = Map<string, UsageInfo>;
+
 export function useSession(): UseSessionReturn {
   const sendRef = useRef<((message: ClientMessage) => void) | null>(null);
 
@@ -96,13 +107,16 @@ export function useSession(): UseSessionReturn {
   // Messages stored per session
   const [sessionMessages, setSessionMessages] = useState<SessionMessages>(new Map());
 
+  // Usage info stored per session
+  const [sessionUsageInfo, setSessionUsageInfo] = useState<SessionUsageInfo>(new Map());
+
   // Active session state
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
+  const [globalUsage, setGlobalUsage] = useState<GlobalUsage | null>(null);
 
   // Pending message to send after session creation
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -133,6 +147,7 @@ export function useSession(): UseSessionReturn {
   // Computed values
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
   const messages = activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : [];
+  const usageInfo = activeSessionId ? (sessionUsageInfo.get(activeSessionId) ?? null) : null;
 
   // Helper to update messages for a specific session
   const updateSessionMessages = useCallback(
@@ -607,12 +622,27 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
-        case 'usage_info':
-          setUsageInfo({
-            inputTokens: message.inputTokens,
-            outputTokens: message.outputTokens,
-            cacheCreationInputTokens: message.cacheCreationInputTokens,
-            cacheReadInputTokens: message.cacheReadInputTokens,
+        case 'usage_info': {
+          const sessionId = message.sessionId;
+          setSessionUsageInfo((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? { inputTokens: 0, outputTokens: 0 };
+            // Accumulate usage
+            newMap.set(sessionId, {
+              inputTokens: current.inputTokens + message.inputTokens,
+              outputTokens: current.outputTokens + message.outputTokens,
+              cacheCreationInputTokens: (current.cacheCreationInputTokens ?? 0) + (message.cacheCreationInputTokens ?? 0),
+              cacheReadInputTokens: (current.cacheReadInputTokens ?? 0) + (message.cacheReadInputTokens ?? 0),
+            });
+            return newMap;
+          });
+          break;
+        }
+
+        case 'global_usage':
+          setGlobalUsage({
+            today: message.today,
+            totals: message.totals,
           });
           break;
 
@@ -637,6 +667,7 @@ export function useSession(): UseSessionReturn {
     error,
     systemInfo,
     usageInfo,
+    globalUsage,
     listSessions,
     createSession,
     selectSession,

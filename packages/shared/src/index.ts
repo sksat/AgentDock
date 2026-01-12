@@ -121,6 +121,8 @@ export type ServerMessage =
   | SystemInfoMessage
   // Usage info
   | UsageInfoMessage
+  // Global usage (from ccusage)
+  | GlobalUsageMessage
   // Permission request
   | PermissionRequestMessage
   // AskUserQuestion
@@ -268,3 +270,41 @@ export interface QuestionOption {
 export type PermissionResult =
   | { behavior: 'allow'; updatedInput: unknown }
   | { behavior: 'deny'; message: string };
+
+// ==================== Global Usage (from ccusage) ====================
+
+export interface GlobalUsageMessage {
+  type: 'global_usage';
+  today: DailyUsage | null;
+  totals: UsageTotals;
+}
+
+export interface DailyUsage {
+  date: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  totalCost: number;
+  modelsUsed: string[];
+  modelBreakdowns: ModelBreakdown[];
+}
+
+export interface ModelBreakdown {
+  modelName: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  cost: number;
+}
+
+export interface UsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalCost: number;
+  totalTokens: number;
+}

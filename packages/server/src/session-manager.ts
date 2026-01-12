@@ -28,6 +28,17 @@ interface SessionRow {
   claude_session_id: string | null;
   permission_mode: string | null;
   model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_creation_tokens: number | null;
+  cache_read_tokens: number | null;
+}
+
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
 }
 
 interface MessageRow {

@@ -2,7 +2,12 @@ import { useState, useCallback, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 
 const STORAGE_KEY = 'claude-bridge:sidebar-collapsed';
-import type { SessionStatus } from '@claude-bridge/shared';
+import type { SessionStatus, DailyUsage, UsageTotals } from '@claude-bridge/shared';
+
+export interface GlobalUsageData {
+  today: DailyUsage | null;
+  totals: UsageTotals;
+}
 
 export interface SidebarSession {
   id: string;
@@ -14,6 +19,7 @@ export interface SidebarSession {
 export interface SidebarProps {
   sessions: SidebarSession[];
   activeSessionId: string | null;
+  globalUsage: GlobalUsageData | null;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onDeleteSession: (sessionId: string) => void;
@@ -23,6 +29,7 @@ export interface SidebarProps {
 export function Sidebar({
   sessions,
   activeSessionId,
+  globalUsage,
   onSelectSession,
   onCreateSession,
   onDeleteSession,
@@ -170,6 +177,21 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Usage display */}
+      {globalUsage && !isCollapsed && (
+        <UsageDisplay usage={globalUsage} />
+      )}
+      {globalUsage && isCollapsed && (
+        <div
+          className="p-2 border-t border-border"
+          title={`Today: $${globalUsage.today?.totalCost.toFixed(2) ?? '0.00'}`}
+        >
+          <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-bg-tertiary">
+            <span className="text-xs text-text-secondary">$</span>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
@@ -295,6 +317,66 @@ function SessionItem({
           </svg>
         </button>
       )}
+    </div>
+  );
+}
+
+// Format cost to display nicely
+function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+
+// Shorten model name for display
+function shortModelName(modelName: string): string {
+  if (modelName.includes('opus')) return 'opus';
+  if (modelName.includes('sonnet')) return 'sonnet';
+  if (modelName.includes('haiku')) return 'haiku';
+  return modelName.split('-')[0];
+}
+
+interface UsageDisplayProps {
+  usage: GlobalUsageData;
+}
+
+function UsageDisplay({ usage }: UsageDisplayProps) {
+  const today = usage.today;
+  const totals = usage.totals;
+
+  return (
+    <div className="border-t border-border p-3 space-y-3">
+      {/* Today's usage */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-text-secondary">Today</span>
+          <span className="font-medium text-text-primary">
+            {today ? formatCost(today.totalCost) : '$0.00'}
+          </span>
+        </div>
+        {/* Model breakdown */}
+        {today?.modelBreakdowns && today.modelBreakdowns.length > 0 && (
+          <div className="text-xs text-text-secondary space-y-0.5 pl-2">
+            {today.modelBreakdowns.map((model) => (
+              <div key={model.modelName} className="flex items-center justify-between">
+                <span>{shortModelName(model.modelName)}</span>
+                <span>{formatCost(model.cost)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Total usage */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-text-secondary">Total</span>
+          <span className="font-medium text-accent-primary">
+            {formatCost(totals.totalCost)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
