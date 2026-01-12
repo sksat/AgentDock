@@ -35,3 +35,4 @@ coverage/
 *.temp
 .playwright-mcp/
 .npmrc
+*.db
