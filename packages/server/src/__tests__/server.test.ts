@@ -88,4 +88,89 @@ describe('BridgeServer', () => {
       expect(response.session.id).toBeDefined();
     });
   });
+
+  describe('Session status broadcast', () => {
+    it('should broadcast session_status_changed to all clients when status changes', async () => {
+      // Create two WebSocket clients
+      const ws1 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+      const ws2 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+      // Wait for both to connect
+      await Promise.all([
+        new Promise<void>((resolve, reject) => {
+          ws1.onopen = () => resolve();
+          ws1.onerror = reject;
+        }),
+        new Promise<void>((resolve, reject) => {
+          ws2.onopen = () => resolve();
+          ws2.onerror = reject;
+        }),
+      ]);
+
+      // Create a session via ws1
+      const createResponse = await new Promise<any>((resolve) => {
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_created') {
+            ws1.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws1.addEventListener('message', handler);
+        ws1.send(JSON.stringify({ type: 'create_session', name: 'Status Test' }));
+      });
+
+      const sessionId = createResponse.session.id;
+
+      // Set up listeners on both clients to receive status change
+      const statusPromise1 = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for status on ws1')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_status_changed' && data.sessionId === sessionId) {
+            clearTimeout(timeout);
+            ws1.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws1.addEventListener('message', handler);
+      });
+
+      const statusPromise2 = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for status on ws2')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_status_changed' && data.sessionId === sessionId) {
+            clearTimeout(timeout);
+            ws2.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws2.addEventListener('message', handler);
+      });
+
+      // Send a user_message to trigger status change to 'running'
+      // Note: This will fail to actually run (no claude CLI), but the status should change
+      ws1.send(JSON.stringify({
+        type: 'user_message',
+        sessionId,
+        content: 'test message',
+      }));
+
+      // Both clients should receive the status change
+      const [status1, status2] = await Promise.all([statusPromise1, statusPromise2]);
+
+      expect(status1.type).toBe('session_status_changed');
+      expect(status1.sessionId).toBe(sessionId);
+      expect(status1.status).toBe('running');
+
+      expect(status2.type).toBe('session_status_changed');
+      expect(status2.sessionId).toBe(sessionId);
+      expect(status2.status).toBe('running');
+
+      // Clean up
+      ws1.close();
+      ws2.close();
+    });
+  });
 });

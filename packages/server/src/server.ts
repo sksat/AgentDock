@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus } from '@agent-dock/shared';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
@@ -164,6 +164,27 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
+  // Broadcast session status change to all clients
+  function broadcastStatusChange(sessionId: string, status: SessionStatus): void {
+    const message: ServerMessage = {
+      type: 'session_status_changed',
+      sessionId,
+      status,
+    };
+    const messageStr = JSON.stringify(message);
+    for (const ws of allClients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Update session status and broadcast to all clients
+  function updateAndBroadcastStatus(sessionId: string, status: SessionStatus): void {
+    sessionManager.updateSessionStatus(sessionId, status);
+    broadcastStatusChange(sessionId, status);
+  }
+
   // Set up usage monitor events
   if (usageMonitor) {
     usageMonitor.on('usage', (data) => {
@@ -259,7 +280,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             questions: askInput.questions,
           });
           // Update session status
-          sessionManager.updateSessionStatus(sessionId, 'waiting_input');
+          updateAndBroadcastStatus(sessionId, 'waiting_input');
           // Store in history as question
           sessionManager.addToHistory(sessionId, {
             type: 'question',
@@ -317,7 +338,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionId,
           result: resultData.result,
         });
-        sessionManager.updateSessionStatus(sessionId, 'idle');
+        updateAndBroadcastStatus(sessionId, 'idle');
         break;
       }
 
@@ -333,7 +354,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         const exitData = eventData as { code: number | null; signal: string | null };
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
-        sessionManager.updateSessionStatus(sessionId, 'idle');
+        updateAndBroadcastStatus(sessionId, 'idle');
 
         // If process exited with error and no result was sent, notify client
         const acc = turnAccumulator.get(sessionId);
@@ -417,7 +438,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           input: unknown;
         };
         // Update session status
-        sessionManager.updateSessionStatus(sessionId, 'waiting_permission');
+        updateAndBroadcastStatus(sessionId, 'waiting_permission');
         // Forward to client
         sendToSession(sessionId, {
           type: 'permission_request',
@@ -601,7 +622,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
 
         // Update session status
-        sessionManager.updateSessionStatus(message.sessionId, 'running');
+        updateAndBroadcastStatus(message.sessionId, 'running');
 
         // Convert ImageAttachment to ImageContent for the runner
         const images = message.images?.map((img) => ({
@@ -649,7 +670,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Don't send response here - events will be sent via handleRunnerEvent
           return;
         } catch (error) {
-          sessionManager.updateSessionStatus(message.sessionId, 'idle');
+          updateAndBroadcastStatus(message.sessionId, 'idle');
           response = {
             type: 'error',
             sessionId: message.sessionId,
@@ -671,7 +692,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         }
 
         runnerManager.stopSession(message.sessionId);
-        sessionManager.updateSessionStatus(message.sessionId, 'idle');
+        updateAndBroadcastStatus(message.sessionId, 'idle');
         response = {
           type: 'result',
           sessionId: message.sessionId,
@@ -687,7 +708,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Mock runner - respond directly
           const mockRunner = runner as import('./mock-claude-runner.js').MockClaudeRunner;
           mockRunner.respondToPermission(message.requestId, message.response);
-          sessionManager.updateSessionStatus(message.sessionId, 'running');
+          updateAndBroadcastStatus(message.sessionId, 'running');
           return;
         }
 
@@ -701,7 +722,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             response: message.response,
           }));
           pendingPermissionRequests.delete(message.requestId);
-          sessionManager.updateSessionStatus(message.sessionId, 'running');
+          updateAndBroadcastStatus(message.sessionId, 'running');
           // No response needed back to client
           return;
         } else {
@@ -730,7 +751,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         pendingPermissionRequests.set(message.requestId, ws);
 
         // Update session status
-        sessionManager.updateSessionStatus(message.sessionId, 'waiting_permission');
+        updateAndBroadcastStatus(message.sessionId, 'waiting_permission');
 
         // Forward to client
         sendToSession(message.sessionId, {
@@ -766,7 +787,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         }
 
         // Update session status back to running
-        sessionManager.updateSessionStatus(message.sessionId, 'running');
+        updateAndBroadcastStatus(message.sessionId, 'running');
 
         // No response needed
         return;
@@ -815,7 +836,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
 
         // Update session status
-        sessionManager.updateSessionStatus(message.sessionId, 'running');
+        updateAndBroadcastStatus(message.sessionId, 'running');
 
         // Create a summary prompt based on conversation history
         const summaryPrompt = `Please provide a brief summary of our conversation so far. Focus on:
@@ -854,7 +875,7 @@ Keep it concise but comprehensive.`;
           });
           return;
         } catch (error) {
-          sessionManager.updateSessionStatus(message.sessionId, 'idle');
+          updateAndBroadcastStatus(message.sessionId, 'idle');
           response = {
             type: 'error',
             sessionId: message.sessionId,

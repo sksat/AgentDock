@@ -124,6 +124,7 @@ export type ServerMessage =
   | SessionAttachedMessage
   | SessionListMessage
   | SessionDeletedMessage
+  | SessionStatusChangedMessage
   // Agent output
   | TextOutputMessage
   | ThinkingOutputMessage
@@ -176,6 +177,12 @@ export interface SessionListMessage {
 export interface SessionDeletedMessage {
   type: 'session_deleted';
   sessionId: string;
+}
+
+export interface SessionStatusChangedMessage {
+  type: 'session_status_changed';
+  sessionId: string;
+  status: SessionStatus;
 }
 
 export interface TextOutputMessage {

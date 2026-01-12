@@ -496,6 +496,15 @@ export function useSession(): UseSessionReturn {
           break;
         }
 
+        case 'session_status_changed': {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === message.sessionId ? { ...s, status: message.status } : s
+            )
+          );
+          break;
+        }
+
         case 'text_output': {
           const sessionId = message.sessionId;
           updateSessionMessages(sessionId, (prev) => {
