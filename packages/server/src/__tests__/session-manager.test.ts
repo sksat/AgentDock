@@ -1,12 +1,25 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SessionManager } from '../session-manager.js';
 import type { SessionInfo } from '@claude-bridge/shared';
 
 describe('SessionManager', () => {
   let sessionManager: SessionManager;
+  let tempBaseDir: string;
 
   beforeEach(() => {
-    sessionManager = new SessionManager();
+    // Create a temp directory for session tests
+    tempBaseDir = mkdtempSync(join(tmpdir(), 'claude-bridge-test-'));
+    sessionManager = new SessionManager({ sessionsBaseDir: tempBaseDir });
+  });
+
+  afterEach(() => {
+    // Clean up temp directory
+    if (tempBaseDir && existsSync(tempBaseDir)) {
+      rmSync(tempBaseDir, { recursive: true });
+    }
   });
 
   describe('createSession', () => {
@@ -31,10 +44,13 @@ describe('SessionManager', () => {
       expect(session.workingDir).toBe('/tmp/test');
     });
 
-    it('should use current directory as default working directory', () => {
+    it('should auto-create session directory when workingDir not specified', () => {
       const session = sessionManager.createSession();
 
-      expect(session.workingDir).toBe(process.cwd());
+      // Should be a subdirectory of the base directory with the session ID
+      expect(session.workingDir).toBe(join(tempBaseDir, session.id));
+      // Directory should actually exist
+      expect(existsSync(session.workingDir)).toBe(true);
     });
   });
 

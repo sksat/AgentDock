@@ -191,6 +191,22 @@ export function useSession(): UseSessionReturn {
     [send]
   );
 
+  // Generate session name from first message content
+  const generateSessionName = (content: string, maxLength = 40): string => {
+    // Remove newlines and extra whitespace
+    const cleaned = content.replace(/\s+/g, ' ').trim();
+    if (cleaned.length <= maxLength) {
+      return cleaned;
+    }
+    // Try to cut at a word boundary
+    const truncated = cleaned.slice(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > maxLength * 0.6) {
+      return truncated.slice(0, lastSpace) + '...';
+    }
+    return truncated + '...';
+  };
+
   // Message sending
   const sendMessage = useCallback(
     (content: string) => {
@@ -198,7 +214,8 @@ export function useSession(): UseSessionReturn {
         // No session yet - create one and store the message to send after creation
         setPendingMessage(content);
         setIsLoading(true);
-        send({ type: 'create_session', name: 'New Session' });
+        const sessionName = generateSessionName(content);
+        send({ type: 'create_session', name: sessionName });
         return;
       }
 

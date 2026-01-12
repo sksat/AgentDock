@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, PermissionRequest, Sidebar } from './components';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar } from './components';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -36,6 +36,7 @@ function App() {
   } = useSession();
 
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
 
   const { isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
@@ -94,12 +95,19 @@ function App() {
 
   return (
     <div className="h-screen flex">
+      {/* New Session Modal */}
+      <NewSessionModal
+        isOpen={isNewSessionModalOpen}
+        onClose={() => setIsNewSessionModalOpen(false)}
+        onCreateSession={createSession}
+      />
+
       {/* Sidebar */}
       <Sidebar
         sessions={sidebarSessions}
         activeSessionId={activeSessionId}
         onSelectSession={selectSession}
-        onCreateSession={() => createSession()}
+        onCreateSession={() => setIsNewSessionModalOpen(true)}
         onDeleteSession={deleteSession}
         onRenameSession={renameSession}
       />

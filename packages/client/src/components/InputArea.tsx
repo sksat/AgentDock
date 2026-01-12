@@ -132,6 +132,61 @@ export function InputArea({
     }
   };
 
+  // Get icon for permission mode
+  const getModeIcon = (mode: string) => {
+    switch (mode) {
+      case 'ask':
+      case 'default':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        );
+      case 'auto-edit':
+        return <span className="text-sm font-bold">▶▶</span>;
+      case 'plan':
+        return <span className="text-sm font-bold">⏸</span>;
+      case 'full-auto':
+        return <span className="text-sm font-bold">⚡</span>;
+      default:
+        return <span className="text-sm">▶</span>;
+    }
+  };
+
+  // Get border color class for permission mode
+  const getModeBorderColor = (mode: string) => {
+    switch (mode) {
+      case 'ask':
+      case 'default':
+        return 'border-orange-400/70';
+      case 'auto-edit':
+        return 'border-yellow-500/70';
+      case 'plan':
+        return 'border-accent-primary/70';
+      case 'full-auto':
+        return 'border-accent-success/70';
+      default:
+        return 'border-border';
+    }
+  };
+
+  // Get icon color class for permission mode
+  const getModeIconColor = (mode: string) => {
+    switch (mode) {
+      case 'ask':
+      case 'default':
+        return 'text-orange-400';
+      case 'auto-edit':
+        return 'text-yellow-500';
+      case 'plan':
+        return 'text-accent-primary';
+      case 'full-auto':
+        return 'text-accent-success';
+      default:
+        return 'text-text-secondary';
+    }
+  };
+
   // Format model name for display
   const formatModel = (modelName?: string) => {
     if (!modelName) return null;
@@ -149,9 +204,12 @@ export function InputArea({
   };
 
   return (
-    <div className="border-t border-border bg-bg-secondary">
+    <div className="border-t border-border bg-bg-secondary px-8">
       {/* Input container with rounded border */}
-      <div className="m-3 rounded-lg border border-border bg-bg-tertiary overflow-hidden">
+      <div className={clsx(
+        'my-3 rounded-lg border bg-bg-tertiary overflow-hidden transition-colors',
+        getModeBorderColor(permissionMode)
+      )}>
         {/* Text input area */}
         <textarea
           ref={textareaRef}
@@ -181,12 +239,12 @@ export function InputArea({
                 className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
                 aria-label={formatPermissionMode(permissionMode)}
               >
-                <span className="text-accent-primary">▶▶</span>
+                <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
                 <span>{formatPermissionMode(permissionMode)}</span>
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
-                <span className="text-accent-primary">▶▶</span>
+                <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
                 <span>{formatPermissionMode(permissionMode)}</span>
               </div>
             )}
