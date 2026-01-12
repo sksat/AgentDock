@@ -1,5 +1,5 @@
 {
-  "name": "@claude-bridge/shared",
+  "name": "@agent-dock/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",

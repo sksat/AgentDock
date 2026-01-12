@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ClientMessage, ServerMessage } from '@claude-bridge/shared';
+import type { ClientMessage, ServerMessage } from '@agent-dock/shared';
 
 export interface UseWebSocketOptions {
   onMessage?: (message: ServerMessage) => void;

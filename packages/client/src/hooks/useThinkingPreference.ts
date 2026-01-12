@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const STORAGE_KEY = 'claude-bridge:thinking-expanded';
+const STORAGE_KEY = 'agent-dock:thinking-expanded';
 
 function getStoredValue(): boolean {
   try {

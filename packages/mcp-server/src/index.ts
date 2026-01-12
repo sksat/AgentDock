@@ -9,7 +9,7 @@ const SESSION_ID = process.env.SESSION_ID || 'default';
 
 // Create MCP server
 const server = new McpServer({
-  name: 'claude-bridge',
+  name: 'agent-dock',
   version: '0.1.0',
 });
 

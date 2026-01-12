@@ -7,7 +7,7 @@ import type {
   PermissionMode,
   DailyUsage,
   UsageTotals,
-} from '@claude-bridge/shared';
+} from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent } from '../components/MessageStream';
 
 export interface PendingPermission {

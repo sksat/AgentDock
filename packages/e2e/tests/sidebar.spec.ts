@@ -31,7 +31,7 @@ test.describe('Sidebar', () => {
 
     // Check localStorage
     const collapsedState = await page.evaluate(() =>
-      localStorage.getItem('claude-bridge:sidebar-collapsed')
+      localStorage.getItem('agent-dock:sidebar-collapsed')
     );
     expect(collapsedState).toBe('true');
 
@@ -40,7 +40,7 @@ test.describe('Sidebar', () => {
 
     // Check localStorage updated
     const expandedState = await page.evaluate(() =>
-      localStorage.getItem('claude-bridge:sidebar-collapsed')
+      localStorage.getItem('agent-dock:sidebar-collapsed')
     );
     expect(expandedState).toBe('false');
   });

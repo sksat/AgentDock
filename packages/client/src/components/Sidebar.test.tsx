@@ -188,7 +188,7 @@ describe('Sidebar', () => {
 });
 
 describe('Sidebar collapse', () => {
-  const STORAGE_KEY = 'claude-bridge:sidebar-collapsed';
+  const STORAGE_KEY = 'agent-dock:sidebar-collapsed';
 
   const mockSessions: SidebarSession[] = [
     {

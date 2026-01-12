@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AskUserQuestion, type AskUserQuestionProps } from './AskUserQuestion';
-import type { QuestionItem } from '@claude-bridge/shared';
+import type { QuestionItem } from '@agent-dock/shared';
 
 const singleQuestion: QuestionItem[] = [
   {

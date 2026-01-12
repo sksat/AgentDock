@@ -3,13 +3,13 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type Database from 'better-sqlite3';
-import type { SessionInfo, SessionStatus, MessageItem, PermissionMode } from '@claude-bridge/shared';
+import type { SessionInfo, SessionStatus, MessageItem, PermissionMode } from '@agent-dock/shared';
 import { initDatabase } from './database.js';
 
 export interface SessionManagerOptions {
   /** Database file path. Defaults to './data.db' */
   dbPath?: string;
-  /** Base directory for auto-created session directories. Defaults to ~/.claude-bridge/sessions */
+  /** Base directory for auto-created session directories. Defaults to ~/.agent-dock/sessions */
   sessionsBaseDir?: string;
 }
 
@@ -84,7 +84,7 @@ export class SessionManager {
 
   constructor(options: SessionManagerOptions = {}) {
     const dbPath = options.dbPath ?? './data.db';
-    this.sessionsBaseDir = options.sessionsBaseDir ?? join(homedir(), '.claude-bridge', 'sessions');
+    this.sessionsBaseDir = options.sessionsBaseDir ?? join(homedir(), '.agent-dock', 'sessions');
     this.db = initDatabase(dbPath);
 
     // Prepare statements

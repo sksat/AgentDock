@@ -10,7 +10,7 @@ importers:
 
   packages/client:
     dependencies:
-      '@claude-bridge/shared':
+      '@agent-dock/shared':
         specifier: workspace:*
         version: link:../shared
       '@tailwindcss/vite':
@@ -120,7 +120,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@claude-bridge/shared':
+      '@agent-dock/shared':
         specifier: workspace:*
         version: link:../shared
       '@hono/node-server':

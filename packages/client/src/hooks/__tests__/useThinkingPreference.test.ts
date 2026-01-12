@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useThinkingPreference } from '../useThinkingPreference';
 
 describe('useThinkingPreference', () => {
-  const STORAGE_KEY = 'claude-bridge:thinking-expanded';
+  const STORAGE_KEY = 'agent-dock:thinking-expanded';
 
   beforeEach(() => {
     // Clear localStorage before each test

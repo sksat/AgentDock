@@ -1,8 +1,8 @@
 import { useState, useCallback, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 
-const STORAGE_KEY = 'claude-bridge:sidebar-collapsed';
-import type { SessionStatus, DailyUsage, UsageTotals } from '@claude-bridge/shared';
+const STORAGE_KEY = 'agent-dock:sidebar-collapsed';
+import type { SessionStatus, DailyUsage, UsageTotals } from '@agent-dock/shared';
 
 export interface GlobalUsageData {
   today: DailyUsage | null;

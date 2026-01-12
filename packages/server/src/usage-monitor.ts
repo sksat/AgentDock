@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'events';
-import type { DailyUsage, UsageTotals } from '@claude-bridge/shared';
+import type { DailyUsage, UsageTotals } from '@agent-dock/shared';
 
 export interface UsageData {
   today: DailyUsage | null;

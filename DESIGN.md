@@ -1,8 +1,8 @@
-# Claude Bridge - 設計ドキュメント
+# AgentDock - 設計ドキュメント
 
 ## 概要
 
-Claude Bridge は、Claude Code CLI をサーバーサイドで実行し、フロントエンドのリッチ UI から操作できるようにするプロジェクトです。単なるターミナルエミュレーションではなく、**plan モード、パーミッションリクエスト、選択肢、差分提案などを専用 UI で表示**します。
+AgentDock は、Claude Code CLI をサーバーサイドで実行し、フロントエンドのリッチ UI から操作できるようにするプロジェクトです。単なるターミナルエミュレーションではなく、**plan モード、パーミッションリクエスト、選択肢、差分提案などを専用 UI で表示**します。
 
 ## 要件
 
@@ -133,7 +133,7 @@ claude -p "prompt" --permission-prompt-tool mcp__bridge__permission_prompt
 ## プロジェクト構成
 
 ```
-claude-bridge/
+agent-dock/
 ├── package.json              # Monorepo root
 ├── pnpm-workspace.yaml       # pnpm workspaces 設定
 ├── mcp-config.json           # MCP サーバー設定

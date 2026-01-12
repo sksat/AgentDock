@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ModelSelector, type ModelSelectorProps } from '../ModelSelector';
+import { ModelSelector, type ModelSelectorProps, MODEL_OPTIONS } from '../ModelSelector';
 
 describe('ModelSelector', () => {
   const defaultProps: ModelSelectorProps = {
-    currentModel: 'claude-sonnet-4-20250514',
+    currentModel: 'claude-sonnet-4-5-20250929',
     onSelectModel: vi.fn(),
     isOpen: false,
     onClose: vi.fn(),
@@ -21,7 +21,7 @@ describe('ModelSelector', () => {
 
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.getByText('Sonnet')).toBeInTheDocument();
-    expect(screen.getByText('Opus')).toBeInTheDocument();
+    expect(screen.getByText('Default (recommended)')).toBeInTheDocument();
     expect(screen.getByText('Haiku')).toBeInTheDocument();
   });
 
@@ -42,9 +42,9 @@ describe('ModelSelector', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('option', { name: /Opus/i }));
+    fireEvent.click(screen.getByRole('option', { name: /Default \(recommended\)/i }));
 
-    expect(onSelectModel).toHaveBeenCalledWith('claude-opus-4-20250514');
+    expect(onSelectModel).toHaveBeenCalledWith(MODEL_OPTIONS[0].id);
   });
 
   it('should call onClose after selecting a model', () => {
@@ -53,7 +53,7 @@ describe('ModelSelector', () => {
       <ModelSelector {...defaultProps} isOpen={true} onClose={onClose} />
     );
 
-    fireEvent.click(screen.getByRole('option', { name: /Opus/i }));
+    fireEvent.click(screen.getByRole('option', { name: /Default \(recommended\)/i }));
 
     expect(onClose).toHaveBeenCalled();
   });
@@ -85,8 +85,8 @@ describe('ModelSelector', () => {
     render(<ModelSelector {...defaultProps} isOpen={true} />);
 
     // Check for model descriptions
-    expect(screen.getByText(/claude-sonnet-4/)).toBeInTheDocument();
-    expect(screen.getByText(/claude-opus-4/)).toBeInTheDocument();
-    expect(screen.getByText(/claude-haiku-3/)).toBeInTheDocument();
+    expect(screen.getByText(/Opus 4\.5/)).toBeInTheDocument();
+    expect(screen.getByText(/Sonnet 4\.5/)).toBeInTheDocument();
+    expect(screen.getByText(/Haiku 4\.5/)).toBeInTheDocument();
   });
 });

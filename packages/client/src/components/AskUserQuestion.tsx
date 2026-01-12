@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { QuestionItem } from '@claude-bridge/shared';
+import type { QuestionItem } from '@agent-dock/shared';
 
 export interface AskUserQuestionProps {
   requestId: string;

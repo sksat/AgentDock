@@ -102,7 +102,7 @@ export function NewSessionModal({
             )}
           />
           <p className="mt-1 text-xs text-text-secondary">
-            If not specified, a new directory will be created in ~/.claude-bridge/sessions/
+            If not specified, a new directory will be created in ~/.agent-dock/sessions/
           </p>
         </div>
 

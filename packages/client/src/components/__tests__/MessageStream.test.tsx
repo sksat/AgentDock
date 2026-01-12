@@ -86,7 +86,7 @@ describe('MessageStream', () => {
 });
 
 describe('ThinkingMessage persistence', () => {
-  const STORAGE_KEY = 'claude-bridge:thinking-expanded';
+  const STORAGE_KEY = 'agent-dock:thinking-expanded';
 
   beforeEach(() => {
     localStorage.clear();

@@ -10,7 +10,7 @@ describe('SessionManager', () => {
 
   beforeEach(() => {
     // Create a temp directory for session tests
-    tempBaseDir = mkdtempSync(join(tmpdir(), 'claude-bridge-test-'));
+    tempBaseDir = mkdtempSync(join(tmpdir(), 'agent-dock-test-'));
     // Use in-memory SQLite for tests
     sessionManager = new SessionManager({
       sessionsBaseDir: tempBaseDir,

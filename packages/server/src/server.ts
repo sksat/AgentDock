@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@claude-bridge/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@agent-dock/shared';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
@@ -24,7 +24,7 @@ export interface ServerOptions {
   useMock?: boolean;
   /** Custom scenarios for mock runner */
   mockScenarios?: Scenario[];
-  /** Base directory for auto-created session directories. Defaults to ~/.claude-bridge/sessions */
+  /** Base directory for auto-created session directories. Defaults to ~/.agent-dock/sessions */
   sessionsBaseDir?: string;
   /** Database file path. Defaults to './data.db' */
   dbPath?: string;
@@ -50,7 +50,7 @@ function generateMcpConfig(
   mcpServerArgs: string[],
   mcpServerCwd?: string
 ): string {
-  const configDir = join(tmpdir(), 'claude-bridge-mcp');
+  const configDir = join(tmpdir(), 'agent-dock-mcp');
   if (!existsSync(configDir)) {
     mkdirSync(configDir, { recursive: true });
   }
@@ -85,7 +85,7 @@ function generateMcpConfig(
  * Clean up temporary MCP config file
  */
 function cleanupMcpConfig(sessionId: string): void {
-  const configPath = join(tmpdir(), 'claude-bridge-mcp', `mcp-config-${sessionId}.json`);
+  const configPath = join(tmpdir(), 'agent-dock-mcp', `mcp-config-${sessionId}.json`);
   if (existsSync(configPath)) {
     rmSync(configPath);
   }

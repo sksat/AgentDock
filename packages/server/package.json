@@ -1,5 +1,5 @@
 {
-  "name": "@claude-bridge/server",
+  "name": "@agent-dock/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@claude-bridge/shared": "workspace:*",
+    "@agent-dock/shared": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "better-sqlite3": "^12.6.0",
     "hono": "^4.11.3",

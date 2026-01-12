@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useWebSocket } from '../useWebSocket';
-import type { ServerMessage } from '@claude-bridge/shared';
+import type { ServerMessage } from '@agent-dock/shared';
 
 // Mock WebSocket
 let mockInstances: MockWebSocket[] = [];

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { InputArea } from '../InputArea';
+import { MODEL_OPTIONS } from '../ModelSelector';
 
 describe('InputArea', () => {
   it('should render textarea and send button', () => {
@@ -18,7 +19,7 @@ describe('InputArea', () => {
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
     fireEvent.click(screen.getByRole('button', { name: /Send/ }));
 
-    expect(onSend).toHaveBeenCalledWith('Hello Claude');
+    expect(onSend).toHaveBeenCalledWith('Hello Claude', undefined);
   });
 
   it('should clear input after sending', () => {
@@ -39,7 +40,7 @@ describe('InputArea', () => {
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
-    expect(onSend).toHaveBeenCalledWith('Hello Claude');
+    expect(onSend).toHaveBeenCalledWith('Hello Claude', undefined);
   });
 
   it('should not call onSend when Shift+Enter is pressed', () => {
@@ -166,13 +167,13 @@ describe('Permission mode toggle', () => {
 
 describe('Model selector', () => {
   it('should display current model name (shortened)', () => {
-    render(<InputArea onSend={() => {}} model="claude-sonnet-4-20250514" />);
+    render(<InputArea onSend={() => {}} model="claude-sonnet-4-5-20250929" />);
 
     expect(screen.getByText('sonnet')).toBeInTheDocument();
   });
 
   it('should display opus for opus model', () => {
-    render(<InputArea onSend={() => {}} model="claude-opus-4-20250514" />);
+    render(<InputArea onSend={() => {}} model="claude-opus-4-5-20250514" />);
 
     expect(screen.getByText('opus')).toBeInTheDocument();
   });
@@ -182,7 +183,7 @@ describe('Model selector', () => {
     render(
       <InputArea
         onSend={() => {}}
-        model="claude-sonnet-4-20250514"
+        model="claude-sonnet-4-5-20250929"
         onModelChange={onModelChange}
       />
     );
@@ -192,7 +193,7 @@ describe('Model selector', () => {
 
     // Popover should open with model options
     expect(screen.getByRole('listbox')).toBeInTheDocument();
-    expect(screen.getByText('Opus')).toBeInTheDocument();
+    expect(screen.getByText('Default (recommended)')).toBeInTheDocument();
     expect(screen.getByText('Haiku')).toBeInTheDocument();
   });
 
@@ -201,7 +202,7 @@ describe('Model selector', () => {
     render(
       <InputArea
         onSend={() => {}}
-        model="claude-sonnet-4-20250514"
+        model="claude-sonnet-4-5-20250929"
         onModelChange={onModelChange}
       />
     );
@@ -209,14 +210,14 @@ describe('Model selector', () => {
     // Open popover
     fireEvent.click(screen.getByRole('button', { name: /sonnet/i }));
 
-    // Select Opus
-    fireEvent.click(screen.getByRole('option', { name: /Opus/i }));
+    // Select Default (opus)
+    fireEvent.click(screen.getByRole('option', { name: /Default \(recommended\)/i }));
 
-    expect(onModelChange).toHaveBeenCalledWith('claude-opus-4-20250514');
+    expect(onModelChange).toHaveBeenCalledWith(MODEL_OPTIONS[0].id);
   });
 
   it('should not render model button when onModelChange is not provided', () => {
-    render(<InputArea onSend={() => {}} model="claude-sonnet-4-20250514" />);
+    render(<InputArea onSend={() => {}} model="claude-sonnet-4-5-20250929" />);
 
     // Model text should be visible but not as a button
     expect(screen.getByText('sonnet')).toBeInTheDocument();
@@ -225,12 +226,12 @@ describe('Model selector', () => {
 });
 
 describe('/model command', () => {
-  it('should show model selector when /model is typed', () => {
+  it('should show slash command suggestions when /model is typed', () => {
     const onModelChange = vi.fn();
     render(
       <InputArea
         onSend={() => {}}
-        model="claude-sonnet-4-20250514"
+        model="claude-sonnet-4-5-20250929"
         onModelChange={onModelChange}
       />
     );
@@ -238,26 +239,32 @@ describe('/model command', () => {
     const textarea = screen.getByPlaceholderText(/Type a message/);
     fireEvent.change(textarea, { target: { value: '/model' } });
 
-    // Model selector popover should appear
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    // Slash command suggestions should appear with "Switch model" text
+    expect(screen.getByText(/Switch model/)).toBeInTheDocument();
   });
 
-  it('should clear /model input when model is selected', () => {
+  it('should show model selector after executing /model command', async () => {
     const onModelChange = vi.fn();
     render(
       <InputArea
         onSend={() => {}}
-        model="claude-sonnet-4-20250514"
+        model="claude-sonnet-4-5-20250929"
         onModelChange={onModelChange}
       />
     );
 
     const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '/model' } });
+    // Press Enter to select the slash command (inserts /model)
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    // Press Enter again to execute the command
+    fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    // Select a model
-    fireEvent.click(screen.getByRole('option', { name: /Opus/i }));
+    // Wait for setTimeout to complete
+    await new Promise(resolve => setTimeout(resolve, 10));
 
+    // Model selector should appear
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
     // Input should be cleared
     expect(textarea.value).toBe('');
   });
