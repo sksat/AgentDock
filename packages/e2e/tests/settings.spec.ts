@@ -54,25 +54,46 @@ test.describe('Model selector', () => {
   test('should detect /model command and open selector', async ({ page }) => {
     const input = page.getByRole('textbox', { name: 'Type a message...' });
 
+    // Send a message to initialize the session and get model info
+    await input.fill('echo test');
+    await input.press('Enter');
+
+    // Wait for response to complete (which means system_info was received)
+    await expect(page.getByText('Echo: echo test')).toBeVisible({ timeout: 10000 });
+
+    // Wait for model info to appear in status bar (lowercase)
+    await expect(page.getByText(/sonnet|opus|haiku/i)).toBeVisible({ timeout: 5000 });
+
     // Type /model command
     await input.fill('/model');
 
-    // Should open model selector popover
-    await expect(page.getByText('Opus')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Haiku')).toBeVisible();
+    // Should open model selector popover with all options
+    await expect(page.getByRole('option', { name: /Opus/ })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('option', { name: /Haiku/ })).toBeVisible();
+    await expect(page.getByRole('option', { name: /Sonnet/ })).toBeVisible();
   });
 
   test('should select model from /model popover', async ({ page }) => {
     const input = page.getByRole('textbox', { name: 'Type a message...' });
 
+    // Send a message to initialize the session and get model info
+    await input.fill('echo test');
+    await input.press('Enter');
+
+    // Wait for response to complete
+    await expect(page.getByText('Echo: echo test')).toBeVisible({ timeout: 10000 });
+
+    // Wait for model info to appear
+    await expect(page.getByText(/sonnet|opus|haiku/i)).toBeVisible({ timeout: 5000 });
+
     // Type /model command
     await input.fill('/model');
 
     // Wait for popover
-    await expect(page.getByText('Opus')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('option', { name: /Opus/ })).toBeVisible({ timeout: 5000 });
 
     // Select Opus
-    await page.getByRole('button', { name: /Opus/ }).click();
+    await page.getByRole('option', { name: /Opus/ }).click();
 
     // Input should be cleared after selection
     await expect(input).toHaveValue('');

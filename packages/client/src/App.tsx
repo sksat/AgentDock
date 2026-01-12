@@ -59,12 +59,12 @@ function App() {
     }
   }, [isConnected, listSessions]);
 
-  // Create a session after getting the list if no sessions exist
+  // Auto-select first session if sessions exist (but don't auto-create)
   useEffect(() => {
-    if (isConnected && sessionsLoaded && sessions.length === 0 && activeSessionId === null) {
-      createSession('New Session');
+    if (isConnected && sessionsLoaded && activeSessionId === null && sessions.length > 0) {
+      selectSession(sessions[0].id);
     }
-  }, [isConnected, sessionsLoaded, sessions.length, activeSessionId, createSession]);
+  }, [isConnected, sessionsLoaded, sessions, activeSessionId, selectSession]);
 
   const handleAllow = useCallback(
     (requestId: string, updatedInput: unknown) => {
@@ -168,7 +168,7 @@ function App() {
           <InputArea
             onSend={sendMessage}
             onInterrupt={interrupt}
-            disabled={!isConnected || !session}
+            disabled={!isConnected}
             isLoading={isLoading}
             permissionMode={systemInfo?.permissionMode ?? 'ask'}
             onPermissionModeChange={setPermissionMode}

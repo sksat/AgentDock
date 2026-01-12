@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   ServerMessage,
   SessionInfo,
@@ -104,6 +104,32 @@ export function useSession(): UseSessionReturn {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
 
+  // Pending message to send after session creation
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+
+  // Send pending message when session is created
+  useEffect(() => {
+    if (activeSessionId && pendingMessage) {
+      // Add user message to the session
+      setSessionMessages((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(activeSessionId) ?? [];
+        newMap.set(activeSessionId, [
+          ...current,
+          {
+            type: 'user',
+            content: pendingMessage,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        return newMap;
+      });
+      // Send the message
+      sendRef.current?.({ type: 'user_message', sessionId: activeSessionId, content: pendingMessage });
+      setPendingMessage(null);
+    }
+  }, [activeSessionId, pendingMessage]);
+
   // Computed values
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
   const messages = activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : [];
@@ -168,7 +194,13 @@ export function useSession(): UseSessionReturn {
   // Message sending
   const sendMessage = useCallback(
     (content: string) => {
-      if (!activeSessionId) return;
+      if (!activeSessionId) {
+        // No session yet - create one and store the message to send after creation
+        setPendingMessage(content);
+        setIsLoading(true);
+        send({ type: 'create_session', name: 'New Session' });
+        return;
+      }
 
       updateSessionMessages(activeSessionId, (prev) => [
         ...prev,

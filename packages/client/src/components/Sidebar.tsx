@@ -220,6 +220,7 @@ function SessionItem({
           onSelect();
         }
       }}
+      data-testid={`session-item-${session.id}`}
       data-active={isActive || undefined}
       className={clsx(
         'w-full flex items-center rounded-lg text-left',

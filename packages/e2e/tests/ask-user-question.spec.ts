@@ -7,16 +7,18 @@ test.describe('AskUserQuestion tool call', () => {
     await page.getByRole('button', { name: 'New Session' }).click();
   });
 
-  test('should display AskUserQuestion tool call with question data', async ({ page }) => {
+  test('should display AskUserQuestion as question form', async ({ page }) => {
     // Send message that triggers ask question scenario
     await page.getByRole('textbox', { name: 'Type a message...' }).fill('help me implement this');
     await page.getByRole('textbox', { name: 'Type a message...' }).press('Enter');
 
-    // Should see the AskUserQuestion tool call
-    await expect(page.getByText('AskUserQuestion')).toBeVisible({ timeout: 10000 });
+    // Should see the question form (not tool_use display)
+    await expect(page.getByText(/Which framework would you like to use/)).toBeVisible({ timeout: 10000 });
 
-    // Should see the question text in the JSON
-    await expect(page.getByText(/Which framework would you like to use/)).toBeVisible();
+    // Should see the options as radio buttons
+    await expect(page.getByRole('radio', { name: /React/ })).toBeVisible();
+    await expect(page.getByRole('radio', { name: /Vue/ })).toBeVisible();
+    await expect(page.getByRole('radio', { name: /Svelte/ })).toBeVisible();
   });
 
   test('should show thinking before asking question', async ({ page }) => {

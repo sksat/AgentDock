@@ -46,18 +46,24 @@ test.describe('Sidebar', () => {
   });
 
   test('should hide session names when collapsed', async ({ page }) => {
+    const sidebar = page.locator('[data-testid="sidebar"]');
+    const sessionItems = sidebar.locator('[data-testid^="session-item-"]');
+
     // Create a session first
     await page.getByRole('button', { name: 'New Session' }).click();
 
-    // Session name should be visible
-    await expect(page.getByText(/Session/)).toBeVisible();
+    // Wait for session to appear
+    await expect(sessionItems.first()).toBeVisible({ timeout: 5000 });
+
+    // Session name text should be visible (the span with truncate class)
+    const sessionNameSpan = sessionItems.first().locator('span.truncate');
+    await expect(sessionNameSpan).toBeVisible();
 
     // Collapse sidebar
     await page.getByRole('button', { name: /Collapse sidebar/i }).click();
 
-    // Session name should not be visible (only status indicator)
-    const sessionName = page.locator('[data-testid="sidebar"] >> text=Session');
-    await expect(sessionName).not.toBeVisible();
+    // Session name text should not be visible when collapsed
+    await expect(sessionNameSpan).not.toBeVisible();
   });
 
   test('should rename session on double-click', async ({ page }) => {
