@@ -225,9 +225,9 @@ function SessionItem({
 }: SessionItemProps) {
   const statusColor = {
     idle: 'bg-text-secondary',
-    running: 'bg-accent-primary animate-pulse',
-    waiting_input: 'bg-accent-success',
-    waiting_permission: 'bg-yellow-500',
+    running: 'bg-accent-success animate-pulse',
+    waiting_input: 'bg-orange-500',
+    waiting_permission: 'bg-orange-500',
   }[session.status];
 
   return (

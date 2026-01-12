@@ -413,7 +413,7 @@ export function useSession(): UseSessionReturn {
             if (exists) {
               return prev.map((s) => (s.id === newSession.id ? newSession : s));
             }
-            return [...prev, newSession];
+            return [newSession, ...prev];
           });
           // Automatically select the new session
           setActiveSessionId(newSession.id);
