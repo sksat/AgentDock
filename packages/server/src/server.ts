@@ -56,6 +56,38 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map request ID to WebSocket for permission responses (from MCP server)
   const pendingPermissionRequests = new Map<string, WebSocket>();
 
+  // Accumulator for current turn's text (to save as single history entry)
+  const turnAccumulator = new Map<string, { text: string; thinking: string }>();
+
+  function getOrCreateAccumulator(sessionId: string) {
+    if (!turnAccumulator.has(sessionId)) {
+      turnAccumulator.set(sessionId, { text: '', thinking: '' });
+    }
+    return turnAccumulator.get(sessionId)!;
+  }
+
+  function flushAccumulator(sessionId: string) {
+    const acc = turnAccumulator.get(sessionId);
+    if (acc) {
+      const timestamp = new Date().toISOString();
+      if (acc.thinking) {
+        sessionManager.addToHistory(sessionId, {
+          type: 'thinking',
+          content: acc.thinking,
+          timestamp,
+        });
+      }
+      if (acc.text) {
+        sessionManager.addToHistory(sessionId, {
+          type: 'assistant',
+          content: acc.text,
+          timestamp,
+        });
+      }
+      turnAccumulator.delete(sessionId);
+    }
+  }
+
   // Send message to session's WebSocket
   function sendToSession(sessionId: string, message: ServerMessage): void {
     const ws = sessionWebSockets.get(sessionId);
@@ -67,23 +99,32 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Handle runner events and forward to WebSocket
   function handleRunnerEvent(sessionId: string, eventType: RunnerEventType, data: unknown): void {
     const eventData = data as Record<string, unknown>;
+    const timestamp = new Date().toISOString();
 
     switch (eventType) {
-      case 'text':
+      case 'text': {
+        const text = (eventData as { text: string }).text;
         sendToSession(sessionId, {
           type: 'text_output',
           sessionId,
-          text: (eventData as { text: string }).text,
+          text,
         });
+        // Accumulate text (will be saved to history on result/exit)
+        getOrCreateAccumulator(sessionId).text += text;
         break;
+      }
 
-      case 'thinking':
+      case 'thinking': {
+        const thinking = (eventData as { thinking: string }).thinking;
         sendToSession(sessionId, {
           type: 'thinking_output',
           sessionId,
-          thinking: (eventData as { thinking: string }).thinking,
+          thinking,
         });
+        // Accumulate thinking (will be saved to history on result/exit)
+        getOrCreateAccumulator(sessionId).thinking += thinking;
         break;
+      }
 
       case 'tool_use': {
         const toolName = (eventData as { name: string }).name;
@@ -101,6 +142,12 @@ export function createServer(options: ServerOptions): BridgeServer {
           });
           // Update session status
           sessionManager.updateSessionStatus(sessionId, 'waiting_input');
+          // Store in history as question
+          sessionManager.addToHistory(sessionId, {
+            type: 'question',
+            content: { requestId: toolUseId, questions: askInput.questions },
+            timestamp,
+          });
         } else {
           sendToSession(sessionId, {
             type: 'tool_use',
@@ -109,19 +156,35 @@ export function createServer(options: ServerOptions): BridgeServer {
             toolUseId,
             input,
           });
+          // Store in history
+          sessionManager.addToHistory(sessionId, {
+            type: 'tool_use',
+            content: { toolName, toolUseId, input },
+            timestamp,
+          });
         }
         break;
       }
 
-      case 'tool_result':
+      case 'tool_result': {
+        const toolUseId = (eventData as { toolUseId: string }).toolUseId;
+        const content = (eventData as { content: string }).content;
+        const isError = (eventData as { isError: boolean }).isError;
         sendToSession(sessionId, {
           type: 'tool_result',
           sessionId,
-          toolUseId: (eventData as { toolUseId: string }).toolUseId,
-          content: (eventData as { content: string }).content,
-          isError: (eventData as { isError: boolean }).isError,
+          toolUseId,
+          content,
+          isError,
+        });
+        // Store in history
+        sessionManager.addToHistory(sessionId, {
+          type: 'tool_result',
+          content: { toolUseId, content, isError },
+          timestamp,
         });
         break;
+      }
 
       case 'result': {
         const resultData = eventData as { result: string; sessionId: string };
@@ -129,6 +192,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (resultData.sessionId) {
           sessionManager.setClaudeSessionId(sessionId, resultData.sessionId);
         }
+        // Flush accumulated text/thinking to history
+        flushAccumulator(sessionId);
         sendToSession(sessionId, {
           type: 'result',
           sessionId,
@@ -147,6 +212,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         break;
 
       case 'exit':
+        // Flush any remaining accumulated content
+        flushAccumulator(sessionId);
         sessionManager.updateSessionStatus(sessionId, 'idle');
         break;
 

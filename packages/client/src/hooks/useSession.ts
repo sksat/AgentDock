@@ -279,29 +279,31 @@ export function useSession(): UseSessionReturn {
   }, [activeSessionId, send]);
 
   const setPermissionMode = useCallback((mode: PermissionMode) => {
-    if (!activeSessionId) return;
-
-    send({
-      type: 'set_permission_mode',
-      sessionId: activeSessionId,
-      mode,
-    });
-
     // Update local systemInfo immediately for responsive UI
     setSystemInfo((prev) => prev ? { ...prev, permissionMode: mode } : { permissionMode: mode });
+
+    // Send to server if session exists
+    if (activeSessionId) {
+      send({
+        type: 'set_permission_mode',
+        sessionId: activeSessionId,
+        mode,
+      });
+    }
   }, [activeSessionId, send]);
 
   const setModel = useCallback((model: string) => {
-    if (!activeSessionId) return;
-
-    send({
-      type: 'set_model',
-      sessionId: activeSessionId,
-      model,
-    });
-
     // Update local systemInfo immediately for responsive UI
     setSystemInfo((prev) => prev ? { ...prev, model } : { model });
+
+    // Send to server if session exists
+    if (activeSessionId) {
+      send({
+        type: 'set_model',
+        sessionId: activeSessionId,
+        model,
+      });
+    }
   }, [activeSessionId, send]);
 
   const handleServerMessage = useCallback(
