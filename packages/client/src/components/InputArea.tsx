@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
 import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
+import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -43,6 +44,8 @@ export function InputArea({
 }: InputAreaProps) {
   const [value, setValue] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showSlashCommands, setShowSlashCommands] = useState(false);
+  const [slashCommandIndex, setSlashCommandIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Permission mode cycling: ask -> auto-edit -> plan -> ask
@@ -61,25 +64,47 @@ export function InputArea({
     }
     setShowModelSelector(false);
     // Clear /model command if it was used
-    if (value.trim() === '/model') {
+    if (value.trim().startsWith('/')) {
       setValue('');
     }
   }, [onModelChange, value]);
 
-  // Handle input change - detect /model command
+  // Handle slash command selection
+  const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
+    setShowSlashCommands(false);
+    setValue(''); // Clear input
+    if (command.name === 'model') {
+      // Use setTimeout to ensure state updates don't conflict
+      setTimeout(() => setShowModelSelector(true), 0);
+    }
+  }, []);
+
+  // Handle input change - detect slash commands
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
 
-    // Detect /model command
-    if (newValue.trim() === '/model' && onModelChange) {
-      setShowModelSelector(true);
+    // Detect slash command at the start
+    if (newValue.startsWith('/') && !newValue.includes(' ')) {
+      const filteredCommands = getFilteredCommands(newValue);
+      if (filteredCommands.length > 0) {
+        setShowSlashCommands(true);
+        setSlashCommandIndex(0);
+      } else {
+        setShowSlashCommands(false);
+      }
+    } else {
+      setShowSlashCommands(false);
     }
-  }, [onModelChange]);
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
     if (trimmed && !disabled && !isLoading) {
+      // Don't send slash commands as messages
+      if (trimmed.startsWith('/')) {
+        return;
+      }
       onSend(trimmed);
       setValue('');
     }
@@ -87,6 +112,36 @@ export function InputArea({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Handle slash command navigation
+      if (showSlashCommands) {
+        const filteredCommands = getFilteredCommands(value);
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSlashCommandIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSlashCommandIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (filteredCommands[slashCommandIndex]) {
+            handleSlashCommandSelect({
+              ...filteredCommands[slashCommandIndex],
+              value: filteredCommands[slashCommandIndex].name === 'model' ? model : undefined,
+            });
+          }
+          return;
+        }
+        if (e.key === 'Escape' || e.key === 'Tab') {
+          e.preventDefault();
+          setShowSlashCommands(false);
+          return;
+        }
+      }
+
       // Enter to send, Shift+Enter for newline
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -98,12 +153,12 @@ export function InputArea({
         cyclePermissionMode();
       }
       // Tab (without Shift) to toggle thinking mode
-      if (e.key === 'Tab' && !e.shiftKey && onToggleThinking) {
+      if (e.key === 'Tab' && !e.shiftKey && onToggleThinking && !showSlashCommands) {
         e.preventDefault();
         onToggleThinking();
       }
     },
-    [handleSend, onToggleThinking, onPermissionModeChange, cyclePermissionMode]
+    [handleSend, onToggleThinking, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
   );
 
   // Auto-resize textarea
@@ -203,13 +258,33 @@ export function InputArea({
     return id.substring(0, 8);
   };
 
+  // Handle slash button click
+  const handleSlashButtonClick = useCallback(() => {
+    if (!value.startsWith('/')) {
+      setValue('/');
+      setShowSlashCommands(true);
+      setSlashCommandIndex(0);
+      textareaRef.current?.focus();
+    }
+  }, [value]);
+
   return (
     <div className="border-t border-border bg-bg-secondary px-8">
       {/* Input container with rounded border */}
       <div className={clsx(
-        'my-3 rounded-lg border bg-bg-tertiary overflow-hidden transition-colors',
+        'my-3 rounded-lg border bg-bg-tertiary transition-colors relative',
         getModeBorderColor(permissionMode)
       )}>
+        {/* Slash command suggestions */}
+        <SlashCommandSuggestions
+          query={value}
+          currentModel={model}
+          selectedIndex={slashCommandIndex}
+          onSelect={handleSlashCommandSelect}
+          onClose={() => setShowSlashCommands(false)}
+          isOpen={showSlashCommands}
+        />
+
         {/* Text input area */}
         <textarea
           ref={textareaRef}
@@ -250,9 +325,9 @@ export function InputArea({
             )}
 
             {/* Model info */}
-            {model && (
-              <div className="relative">
-                {onModelChange ? (
+            <div className="relative">
+              {model ? (
+                onModelChange ? (
                   <button
                     onClick={() => setShowModelSelector(!showModelSelector)}
                     className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
@@ -272,15 +347,26 @@ export function InputArea({
                       {sessionId && ` (${formatSessionId(sessionId)})`}
                     </span>
                   </div>
-                )}
+                )
+              ) : onModelChange ? (
+                <button
+                  onClick={() => setShowModelSelector(!showModelSelector)}
+                  className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                  aria-label="Select model"
+                >
+                  <span className="text-text-secondary">&lt;/&gt;</span>
+                  <span>Select model</span>
+                </button>
+              ) : null}
+              {onModelChange && (
                 <ModelSelector
-                  currentModel={model}
+                  currentModel={model ?? ''}
                   onSelectModel={handleModelSelect}
                   isOpen={showModelSelector}
                   onClose={() => setShowModelSelector(false)}
                 />
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Token usage */}
             {tokenUsage && (
@@ -320,11 +406,11 @@ export function InputArea({
               </svg>
             </button>
 
-            {/* Slash command button (placeholder) */}
+            {/* Slash command button */}
             <button
               className="p-1.5 rounded hover:bg-bg-secondary transition-colors text-lg font-light"
               title="Slash commands"
-              disabled
+              onClick={handleSlashButtonClick}
             >
               /
             </button>
@@ -343,10 +429,10 @@ export function InputArea({
             ) : (
               <button
                 onClick={handleSend}
-                disabled={disabled || !value.trim()}
+                disabled={disabled || !value.trim() || value.trim().startsWith('/')}
                 className={clsx(
                   'p-1.5 rounded transition-colors',
-                  value.trim() && !disabled
+                  value.trim() && !disabled && !value.trim().startsWith('/')
                     ? 'bg-accent-primary text-white hover:bg-accent-primary/90'
                     : 'bg-bg-secondary text-text-secondary'
                 )}

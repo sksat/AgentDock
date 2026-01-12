@@ -6,3 +6,4 @@ export { MessageStream, type MessageStreamItem, type MessageStreamProps } from '
 export { NewSessionModal, type NewSessionModalProps } from './NewSessionModal';
 export { PermissionRequest, type PermissionRequestProps } from './PermissionRequest';
 export { Sidebar, type SidebarSession, type SidebarProps } from './Sidebar';
+export { SlashCommandSuggestions, type SlashCommand, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';
