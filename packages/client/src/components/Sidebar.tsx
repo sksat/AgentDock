@@ -280,9 +280,9 @@ function SessionItem({
             />
           ) : (
             <>
-              <span className="block truncate text-sm flex-1">{session.name}</span>
+              <span className="block truncate text-sm">{session.name}</span>
               {session.usage && (
-                <span className="text-xs text-text-secondary flex-shrink-0">
+                <span className="text-xs text-text-secondary flex-shrink-0 ml-auto">
                   ${session.usage.totalCost.toFixed(2)}
                 </span>
               )}
