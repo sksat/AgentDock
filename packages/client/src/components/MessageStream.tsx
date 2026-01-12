@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 
@@ -50,6 +50,38 @@ export interface MessageStreamProps {
 
 export function MessageStream({ messages }: MessageStreamProps) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const prevMessagesLengthRef = useRef(messages.length);
+
+  // Scroll to bottom when messages change and autoScroll is enabled
+  useEffect(() => {
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [messages, autoScroll]);
+
+  // Reset autoScroll when user posts (detect new user message)
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.type === 'user') {
+        setAutoScroll(true);
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages]);
+
+  // Handle scroll events
+  const handleScroll = useCallback(() => {
+    if (!containerRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    // Consider "at bottom" if within 10px threshold
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+
+    setAutoScroll(isAtBottom);
+  }, []);
 
   if (messages.length === 0) {
     return (
@@ -60,7 +92,11 @@ export function MessageStream({ messages }: MessageStreamProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto p-4 space-y-4"
+    >
       {messages.map((message, index) => (
         <MessageItem
           key={index}

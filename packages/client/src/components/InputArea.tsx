@@ -97,11 +97,11 @@ export function InputArea({
     setShowPermissionModeSelector(false);
   }, [onPermissionModeChange]);
 
-  // Handle slash command selection - insert command into input
+  // Handle slash command selection - insert command into input with trailing space
   const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
     setShowSlashCommands(false);
-    // Insert the full command into input
-    const fullCommand = command.prefix ? `/${command.prefix}:${command.name}` : `/${command.name}`;
+    // Insert the full command into input with trailing space
+    const fullCommand = command.prefix ? `/${command.prefix}:${command.name} ` : `/${command.name} `;
     setValue(fullCommand);
     textareaRef.current?.focus();
   }, []);
@@ -284,9 +284,20 @@ export function InputArea({
           }
           return;
         }
-        if (e.key === 'Escape' || e.key === 'Tab') {
+        if (e.key === 'Escape') {
           e.preventDefault();
           setShowSlashCommands(false);
+          return;
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          // Tab also selects the current suggestion (like Enter)
+          if (filteredCommands[slashCommandIndex]) {
+            handleSlashCommandSelect({
+              ...filteredCommands[slashCommandIndex],
+              value: filteredCommands[slashCommandIndex].name === 'model' ? model : undefined,
+            });
+          }
           return;
         }
       }

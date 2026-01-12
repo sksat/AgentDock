@@ -90,14 +90,19 @@ const VIBING_WORDS = [
 
 export interface LoadingIndicatorProps {
   onInterrupt?: () => void;
+  /** Fixed message to display instead of random vibing messages */
+  message?: string;
 }
 
-export function LoadingIndicator({ onInterrupt }: LoadingIndicatorProps) {
+export function LoadingIndicator({ onInterrupt, message }: LoadingIndicatorProps) {
   const [messageIndex, setMessageIndex] = useState(() =>
     Math.floor(Math.random() * VIBING_WORDS.length)
   );
 
   useEffect(() => {
+    // Don't cycle messages if a fixed message is provided
+    if (message) return;
+
     const interval = setInterval(() => {
       setMessageIndex((prev) => {
         let next = Math.floor(Math.random() * VIBING_WORDS.length);
@@ -110,14 +115,16 @@ export function LoadingIndicator({ onInterrupt }: LoadingIndicatorProps) {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [message]);
+
+  const displayMessage = message ?? `${VIBING_WORDS[messageIndex]}...`;
 
   return (
     <div className="px-4 py-2 border-t border-border flex items-center justify-between">
       <div className="flex items-center gap-2 text-text-secondary">
         <span className="animate-pulse">●</span>
         <span className="transition-opacity duration-300">
-          {VIBING_WORDS[messageIndex]}...
+          {displayMessage}
         </span>
       </div>
       {onInterrupt && (

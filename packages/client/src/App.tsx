@@ -69,6 +69,7 @@ function App() {
     pendingPermission,
     pendingQuestion,
     isLoading,
+    loadingReason,
     error,
     systemInfo,
     usageInfo,
@@ -275,7 +276,9 @@ function App() {
 
           {/* Loading indicator with vibing message */}
           {isLoading && !pendingPermission && !pendingQuestion && (
-            <LoadingIndicator />
+            <LoadingIndicator
+              message={loadingReason === 'compact' ? 'Compacting...' : undefined}
+            />
           )}
 
           {/* Input area with status bar */}

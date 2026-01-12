@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 
@@ -167,5 +167,219 @@ describe('ThinkingMessage persistence', () => {
     // Both should now be collapsed
     expect(screen.queryByText('First thinking')).not.toBeInTheDocument();
     expect(screen.queryByText('Second thinking')).not.toBeInTheDocument();
+  });
+});
+
+describe('Auto-scroll behavior', () => {
+  // Helper to mock scroll properties on container
+  function mockScrollProperties(element: HTMLElement, props: {
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  }) {
+    Object.defineProperty(element, 'scrollTop', {
+      value: props.scrollTop,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(element, 'scrollHeight', {
+      value: props.scrollHeight,
+      configurable: true,
+    });
+    Object.defineProperty(element, 'clientHeight', {
+      value: props.clientHeight,
+      configurable: true,
+    });
+  }
+
+  it('should auto-scroll to bottom when messages are added', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container, rerender } = render(<MessageStream messages={messages} />);
+
+    const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+    const scrollToSpy = vi.fn();
+
+    // Mock scrollTop setter
+    let scrollTopValue = 0;
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      get: () => scrollTopValue,
+      set: (v) => { scrollTopValue = v; scrollToSpy(v); },
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 500,
+      configurable: true,
+    });
+
+    // Add new message
+    const newMessages = [
+      ...messages,
+      { type: 'assistant' as const, content: 'New message', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    rerender(<MessageStream messages={newMessages} />);
+
+    // Should scroll to bottom
+    expect(scrollToSpy).toHaveBeenCalledWith(500);
+  });
+
+  it('should disable auto-scroll when user scrolls up', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Message 1', timestamp: '2024-01-01T00:00:00Z' },
+      { type: 'assistant', content: 'Message 2', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    const { container, rerender } = render(<MessageStream messages={messages} />);
+
+    const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+    // Mock scroll properties: user is NOT at bottom (scrolled up)
+    mockScrollProperties(scrollContainer, {
+      scrollTop: 100,
+      scrollHeight: 500,
+      clientHeight: 300,
+    });
+
+    // Simulate user scroll event
+    fireEvent.scroll(scrollContainer);
+
+    // Now add a new message
+    let scrollTopValue = 100;
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      get: () => scrollTopValue,
+      set: (v) => { scrollTopValue = v; scrollToSpy(v); },
+      configurable: true,
+    });
+
+    const newMessages = [
+      ...messages,
+      { type: 'assistant' as const, content: 'New message', timestamp: '2024-01-01T00:00:02Z' },
+    ];
+    rerender(<MessageStream messages={newMessages} />);
+
+    // Should NOT auto-scroll because user scrolled up
+    expect(scrollToSpy).not.toHaveBeenCalled();
+  });
+
+  it('should re-enable auto-scroll when user scrolls to bottom', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Message 1', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container, rerender } = render(<MessageStream messages={messages} />);
+
+    const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+    // First: user scrolls up (disable auto-scroll)
+    mockScrollProperties(scrollContainer, {
+      scrollTop: 100,
+      scrollHeight: 500,
+      clientHeight: 300,
+    });
+    fireEvent.scroll(scrollContainer);
+
+    // Then: user scrolls back to bottom (re-enable auto-scroll)
+    mockScrollProperties(scrollContainer, {
+      scrollTop: 200, // 500 - 300 = 200 means at bottom
+      scrollHeight: 500,
+      clientHeight: 300,
+    });
+    fireEvent.scroll(scrollContainer);
+
+    // Now add a new message
+    let scrollTopValue = 200;
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      get: () => scrollTopValue,
+      set: (v) => { scrollTopValue = v; scrollToSpy(v); },
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 600, // New message increases height
+      configurable: true,
+    });
+
+    const newMessages = [
+      ...messages,
+      { type: 'assistant' as const, content: 'New message', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    rerender(<MessageStream messages={newMessages} />);
+
+    // Should auto-scroll again
+    expect(scrollToSpy).toHaveBeenCalledWith(600);
+  });
+
+  it('should re-enable auto-scroll when user posts a message', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container, rerender } = render(<MessageStream messages={messages} />);
+
+    const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+    // User scrolls up (disable auto-scroll)
+    mockScrollProperties(scrollContainer, {
+      scrollTop: 50,
+      scrollHeight: 500,
+      clientHeight: 300,
+    });
+    fireEvent.scroll(scrollContainer);
+
+    // User posts a message (should re-enable auto-scroll)
+    let scrollTopValue = 50;
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      get: () => scrollTopValue,
+      set: (v) => { scrollTopValue = v; scrollToSpy(v); },
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 600,
+      configurable: true,
+    });
+
+    const newMessages = [
+      ...messages,
+      { type: 'user' as const, content: 'User reply', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    rerender(<MessageStream messages={newMessages} />);
+
+    // Should auto-scroll because user posted
+    expect(scrollToSpy).toHaveBeenCalledWith(600);
+  });
+
+  it('should not re-enable auto-scroll for assistant messages when scrolled up', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container, rerender } = render(<MessageStream messages={messages} />);
+
+    const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+    // User scrolls up (disable auto-scroll)
+    mockScrollProperties(scrollContainer, {
+      scrollTop: 50,
+      scrollHeight: 500,
+      clientHeight: 300,
+    });
+    fireEvent.scroll(scrollContainer);
+
+    // Assistant replies (should NOT re-enable auto-scroll)
+    let scrollTopValue = 50;
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      get: () => scrollTopValue,
+      set: (v) => { scrollTopValue = v; scrollToSpy(v); },
+      configurable: true,
+    });
+
+    const newMessages = [
+      ...messages,
+      { type: 'assistant' as const, content: 'Assistant reply', timestamp: '2024-01-01T00:00:01Z' },
+    ];
+    rerender(<MessageStream messages={newMessages} />);
+
+    // Should NOT auto-scroll because it's not a user message
+    expect(scrollToSpy).not.toHaveBeenCalled();
   });
 });

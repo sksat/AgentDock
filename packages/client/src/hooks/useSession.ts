@@ -60,6 +60,7 @@ export interface UseSessionReturn {
   pendingPermission: PendingPermission | null;
   pendingQuestion: PendingQuestion | null;
   isLoading: boolean;
+  loadingReason: 'compact' | null;
   error: string | null;
   systemInfo: SystemInfo | null;
   usageInfo: UsageInfo | null;
@@ -132,6 +133,7 @@ export function useSession(): UseSessionReturn {
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingReason, setLoadingReason] = useState<'compact' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [globalUsage, setGlobalUsage] = useState<GlobalUsage | null>(null);
@@ -327,6 +329,7 @@ export function useSession(): UseSessionReturn {
       },
     ]);
     setIsLoading(true);
+    setLoadingReason('compact');
     send({
       type: 'compact_session',
       sessionId: activeSessionId,
@@ -374,6 +377,7 @@ export function useSession(): UseSessionReturn {
       sessionId: activeSessionId,
     });
     setIsLoading(false);
+    setLoadingReason(null);
     setPendingPermission(null);
     setPendingQuestion(null);
   }, [activeSessionId, send]);
@@ -702,6 +706,7 @@ export function useSession(): UseSessionReturn {
 
         case 'result':
           setIsLoading(false);
+          setLoadingReason(null);
           break;
 
         case 'permission_request':
@@ -755,6 +760,7 @@ export function useSession(): UseSessionReturn {
         case 'error':
           setError(message.message);
           setIsLoading(false);
+          setLoadingReason(null);
           break;
       }
     },
@@ -770,6 +776,7 @@ export function useSession(): UseSessionReturn {
     pendingPermission,
     pendingQuestion,
     isLoading,
+    loadingReason,
     error,
     systemInfo,
     usageInfo,
