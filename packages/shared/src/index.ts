@@ -370,16 +370,17 @@ export interface BlockUsage {
   modelsUsed: string[];
 }
 
-/** Usage data for a session (from ccusage session) */
+/** Usage data for a session (from ccusage or internal tracking) */
 export interface SessionUsageInfo {
-  /** ccusage session ID (derived from working directory path) */
-  ccusageSessionId: string;
+  /** ccusage session ID (derived from working directory path, optional for internal data) */
+  ccusageSessionId?: string;
   totalCost: number;
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  lastActivity: string;
+  /** Last activity timestamp (ISO 8601 or date string), optional for internal data */
+  lastActivity?: string;
   modelsUsed: string[];
 }

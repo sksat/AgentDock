@@ -192,21 +192,10 @@ export function createServer(options: ServerOptions): BridgeServer {
     broadcastStatusChange(sessionId, status);
   }
 
-  // Get sessions with usage data (uses UsageMonitor's cache)
+  // Get sessions with usage data (internal tracking from SessionManager)
   function getSessionsWithUsage() {
-    const sessions = sessionManager.listSessions();
-    if (!usageMonitor) return sessions;
-
-    return sessions.map((session) => {
-      const usage = usageMonitor.getSessionUsageFromCache(session.workingDir);
-      return usage ? { ...session, usage } : session;
-    });
-  }
-
-  // Trigger background refresh of session usage
-  async function refreshSessionUsageInBackground(): Promise<void> {
-    if (!usageMonitor) return;
-    await usageMonitor.fetchSessionUsage();
+    // SessionManager now includes usage data directly from internal tracking
+    return sessionManager.listSessions();
   }
 
   // Set up usage monitor events
@@ -496,14 +485,12 @@ export function createServer(options: ServerOptions): BridgeServer {
 
     switch (message.type) {
       case 'list_sessions': {
-        // Return cached data immediately for fast response
+        // Return sessions with internal usage data
         const sessionsWithUsage = getSessionsWithUsage();
         response = {
           type: 'session_list',
           sessions: sessionsWithUsage,
         };
-        // Trigger background refresh of session usage
-        refreshSessionUsageInBackground();
         break;
       }
 

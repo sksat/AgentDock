@@ -197,7 +197,75 @@ export class SessionManager {
 
   listSessions(): SessionInfo[] {
     const rows = this.stmts.listSessions.all() as SessionRow[];
-    return rows.map((row) => this.rowToSessionInfo(row));
+    return rows.map((row) => {
+      const session = this.rowToSessionInfo(row);
+      const modelUsage = this.getModelUsage(row.id);
+
+      if (modelUsage.length > 0) {
+        const totals = modelUsage.reduce(
+          (acc, m) => ({
+            inputTokens: acc.inputTokens + m.inputTokens,
+            outputTokens: acc.outputTokens + m.outputTokens,
+            cacheCreationTokens: acc.cacheCreationTokens + m.cacheCreationTokens,
+            cacheReadTokens: acc.cacheReadTokens + m.cacheReadTokens,
+          }),
+          { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+        );
+
+        const totalTokens =
+          totals.inputTokens +
+          totals.outputTokens +
+          totals.cacheCreationTokens +
+          totals.cacheReadTokens;
+
+        // Calculate cost based on model pricing (USD per 1M tokens)
+        const totalCost = modelUsage.reduce((acc, m) => {
+          const pricing = this.getModelPricing(m.modelName);
+          return (
+            acc +
+            (m.inputTokens * pricing.input) / 1_000_000 +
+            (m.outputTokens * pricing.output) / 1_000_000 +
+            (m.cacheCreationTokens * pricing.cacheCreation) / 1_000_000 +
+            (m.cacheReadTokens * pricing.cacheRead) / 1_000_000
+          );
+        }, 0);
+
+        session.usage = {
+          totalCost,
+          totalTokens,
+          inputTokens: totals.inputTokens,
+          outputTokens: totals.outputTokens,
+          cacheCreationTokens: totals.cacheCreationTokens,
+          cacheReadTokens: totals.cacheReadTokens,
+          modelsUsed: modelUsage.map((m) => m.modelName),
+        };
+      }
+
+      return session;
+    });
+  }
+
+  /**
+   * Get pricing for a model (USD per 1M tokens)
+   */
+  private getModelPricing(modelName: string): {
+    input: number;
+    output: number;
+    cacheCreation: number;
+    cacheRead: number;
+  } {
+    // Default pricing based on model family
+    if (modelName.includes('opus')) {
+      return { input: 15, output: 75, cacheCreation: 18.75, cacheRead: 1.5 };
+    }
+    if (modelName.includes('sonnet')) {
+      return { input: 3, output: 15, cacheCreation: 3.75, cacheRead: 0.3 };
+    }
+    if (modelName.includes('haiku')) {
+      return { input: 0.25, output: 1.25, cacheCreation: 0.3, cacheRead: 0.03 };
+    }
+    // Default to Sonnet pricing
+    return { input: 3, output: 15, cacheCreation: 3.75, cacheRead: 0.3 };
   }
 
   deleteSession(id: string): boolean {

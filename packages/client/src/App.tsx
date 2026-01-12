@@ -153,6 +153,7 @@ function App() {
     name: s.name,
     status: s.status,
     createdAt: s.createdAt,
+    usage: s.usage,
   }));
 
   return (
