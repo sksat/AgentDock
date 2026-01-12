@@ -51,6 +51,14 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+// Shorten model name for display
+function shortModelName(modelName: string): string {
+  if (modelName.includes('opus')) return 'opus';
+  if (modelName.includes('sonnet')) return 'sonnet';
+  if (modelName.includes('haiku')) return 'haiku';
+  return modelName.split('-')[0];
+}
+
 function App() {
   const {
     sessions,
@@ -64,6 +72,7 @@ function App() {
     error,
     systemInfo,
     usageInfo,
+    modelUsage,
     globalUsage,
     listSessions,
     createSession,
@@ -169,7 +178,8 @@ function App() {
             {/* Session usage */}
             {usageInfo && (
               <div className="flex items-center gap-3 text-xs text-text-secondary">
-                <span className="font-medium text-accent-primary" title="Estimated cost">
+                {/* Total cost */}
+                <span className="font-medium text-accent-primary" title="Session total cost">
                   {formatCost(calculateCost(
                     systemInfo?.model,
                     usageInfo.inputTokens,
@@ -178,6 +188,23 @@ function App() {
                     usageInfo.cacheCreationInputTokens
                   ))}
                 </span>
+                {/* Model breakdown */}
+                {modelUsage && modelUsage.length > 0 && (
+                  <span className="text-text-secondary" title="Cost by model">
+                    ({modelUsage.map((m, i) => (
+                      <span key={m.modelName}>
+                        {i > 0 && ' / '}
+                        {shortModelName(m.modelName)}: {formatCost(calculateCost(
+                          m.modelName,
+                          m.inputTokens,
+                          m.outputTokens,
+                          m.cacheReadTokens,
+                          m.cacheCreationTokens
+                        ))}
+                      </span>
+                    ))})
+                  </span>
+                )}
                 <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
                 <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
               </div>

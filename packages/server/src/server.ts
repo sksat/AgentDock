@@ -347,6 +347,10 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (systemData.sessionId) {
           sessionManager.setClaudeSessionId(sessionId, systemData.sessionId);
         }
+        // Save model to session for model-specific usage tracking
+        if (systemData.model) {
+          sessionManager.setModel(sessionId, systemData.model);
+        }
         // Send system info to client
         sendToSession(sessionId, {
           type: 'system_info',
@@ -366,13 +370,19 @@ export function createServer(options: ServerOptions): BridgeServer {
           cacheCreationInputTokens?: number;
           cacheReadInputTokens?: number;
         };
-        // Save usage to DB
-        sessionManager.addUsage(sessionId, {
+        const usage = {
           inputTokens: usageData.inputTokens,
           outputTokens: usageData.outputTokens,
           cacheCreationTokens: usageData.cacheCreationInputTokens ?? 0,
           cacheReadTokens: usageData.cacheReadInputTokens ?? 0,
-        });
+        };
+        // Save total usage to DB
+        sessionManager.addUsage(sessionId, usage);
+        // Save model-specific usage
+        const session = sessionManager.getSession(sessionId);
+        if (session?.model) {
+          sessionManager.addModelUsage(sessionId, session.model, usage);
+        }
         // Send to client
         sendToSession(sessionId, {
           type: 'usage_info',
@@ -450,11 +460,13 @@ export function createServer(options: ServerOptions): BridgeServer {
         const session = sessionManager.getSession(message.sessionId);
         if (session) {
           const usage = sessionManager.getUsage(message.sessionId);
+          const modelUsage = sessionManager.getModelUsage(message.sessionId);
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
             history: sessionManager.getHistory(message.sessionId),
             usage: usage ?? undefined,
+            modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
           };
         } else {
           response = {

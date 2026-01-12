@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -36,6 +36,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
   const migrations: Record<number, () => void> = {
     1: () => migrateToV1(db),
     2: () => migrateToV2(db),
+    3: () => migrateToV3(db),
   };
 
   db.transaction(() => {
@@ -88,6 +89,25 @@ function migrateToV1(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(session_id, timestamp);
   `);
+
+  // Session model usage table (for tracking usage per model)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_model_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cache_creation_tokens INTEGER DEFAULT 0,
+      cache_read_tokens INTEGER DEFAULT 0,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      UNIQUE(session_id, model_name)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_session_model_usage_session_id ON session_model_usage(session_id);
+  `);
 }
 
 function migrateToV2(db: Database.Database): void {
@@ -107,6 +127,30 @@ function migrateToV2(db: Database.Database): void {
   }
   if (!columns.has('cache_read_tokens')) {
     db.exec('ALTER TABLE sessions ADD COLUMN cache_read_tokens INTEGER DEFAULT 0');
+  }
+}
+
+function migrateToV3(db: Database.Database): void {
+  // Add session_model_usage table if it doesn't exist
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='session_model_usage'").all();
+  if (tables.length === 0) {
+    db.exec(`
+      CREATE TABLE session_model_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        cache_creation_tokens INTEGER DEFAULT 0,
+        cache_read_tokens INTEGER DEFAULT 0,
+        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+        UNIQUE(session_id, model_name)
+      )
+    `);
+
+    db.exec(`
+      CREATE INDEX idx_session_model_usage_session_id ON session_model_usage(session_id);
+    `);
   }
 }
 

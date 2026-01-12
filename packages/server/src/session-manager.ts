@@ -41,6 +41,14 @@ export interface SessionUsage {
   cacheReadTokens: number;
 }
 
+export interface ModelUsage {
+  modelName: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
 interface MessageRow {
   id: number;
   session_id: string;
@@ -70,6 +78,8 @@ export class SessionManager {
     countSessions: Database.Statement;
     addUsage: Database.Statement;
     getUsage: Database.Statement;
+    upsertModelUsage: Database.Statement;
+    getModelUsage: Database.Statement;
   };
 
   constructor(options: SessionManagerOptions = {}) {
@@ -108,6 +118,19 @@ export class SessionManager {
       getUsage: this.db.prepare(`
         SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
         FROM sessions WHERE id = ?
+      `),
+      upsertModelUsage: this.db.prepare(`
+        INSERT INTO session_model_usage (session_id, model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id, model_name) DO UPDATE SET
+          input_tokens = input_tokens + excluded.input_tokens,
+          output_tokens = output_tokens + excluded.output_tokens,
+          cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
+          cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens
+      `),
+      getModelUsage: this.db.prepare(`
+        SELECT model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+        FROM session_model_usage WHERE session_id = ?
       `),
     };
 
@@ -249,6 +272,41 @@ export class SessionManager {
       cacheCreationTokens: row.cache_creation_tokens ?? 0,
       cacheReadTokens: row.cache_read_tokens ?? 0,
     };
+  }
+
+  /**
+   * Add usage for a specific model in a session
+   */
+  addModelUsage(sessionId: string, modelName: string, usage: SessionUsage): void {
+    this.stmts.upsertModelUsage.run(
+      sessionId,
+      modelName,
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.cacheCreationTokens,
+      usage.cacheReadTokens
+    );
+  }
+
+  /**
+   * Get model breakdown for a session
+   */
+  getModelUsage(sessionId: string): ModelUsage[] {
+    const rows = this.stmts.getModelUsage.all(sessionId) as Array<{
+      model_name: string;
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_tokens: number;
+      cache_read_tokens: number;
+    }>;
+
+    return rows.map((row) => ({
+      modelName: row.model_name,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+    }));
   }
 
   /**

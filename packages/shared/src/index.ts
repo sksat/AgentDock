@@ -145,6 +145,13 @@ export interface SessionAttachedMessage {
     cacheCreationTokens: number;
     cacheReadTokens: number;
   };
+  modelUsage?: Array<{
+    modelName: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+  }>;
 }
 
 export interface SessionListMessage {
