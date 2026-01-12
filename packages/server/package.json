@@ -14,12 +14,14 @@
   "dependencies": {
     "@claude-bridge/shared": "workspace:*",
     "@hono/node-server": "^1.14.0",
+    "better-sqlite3": "^12.6.0",
     "hono": "^4.11.3",
     "nanoid": "^5.0.0",
     "node-pty": "^1.1.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
     "tsx": "^4.0.0",

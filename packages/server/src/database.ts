@@ -1,0 +1,88 @@
+import Database from 'better-sqlite3';
+
+const SCHEMA_VERSION = 1;
+
+/**
+ * Initialize the SQLite database with the required schema.
+ * Creates tables if they don't exist and runs migrations if needed.
+ */
+export function initDatabase(dbPath: string): Database.Database {
+  const db = new Database(dbPath);
+
+  // Enable foreign keys
+  db.pragma('foreign_keys = ON');
+
+  // Create schema version table if not exists
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_version (
+      version INTEGER PRIMARY KEY
+    )
+  `);
+
+  // Get current schema version
+  const versionRow = db.prepare('SELECT version FROM schema_version LIMIT 1').get() as
+    | { version: number }
+    | undefined;
+  const currentVersion = versionRow?.version ?? 0;
+
+  if (currentVersion < SCHEMA_VERSION) {
+    runMigrations(db, currentVersion, SCHEMA_VERSION);
+  }
+
+  return db;
+}
+
+function runMigrations(db: Database.Database, from: number, to: number): void {
+  const migrations: Record<number, () => void> = {
+    1: () => migrateToV1(db),
+  };
+
+  db.transaction(() => {
+    for (let version = from + 1; version <= to; version++) {
+      const migrate = migrations[version];
+      if (migrate) {
+        migrate();
+      }
+    }
+
+    // Update schema version
+    db.prepare('DELETE FROM schema_version').run();
+    db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(to);
+  })();
+}
+
+function migrateToV1(db: Database.Database): void {
+  // Sessions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      working_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'idle',
+      claude_session_id TEXT,
+      permission_mode TEXT,
+      model TEXT
+    )
+  `);
+
+  // Messages table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(session_id, timestamp);
+  `);
+}
+
+export type { Database };

@@ -17,6 +17,8 @@ export interface ServerOptions {
   mockScenarios?: Scenario[];
   /** Base directory for auto-created session directories. Defaults to ~/.claude-bridge/sessions */
   sessionsBaseDir?: string;
+  /** Database file path. Defaults to './data.db' */
+  dbPath?: string;
 }
 
 export interface BridgeServer {
@@ -27,10 +29,10 @@ export interface BridgeServer {
 }
 
 export function createServer(options: ServerOptions): BridgeServer {
-  const { port, host = '0.0.0.0', useMock = false, mockScenarios = [], sessionsBaseDir } = options;
+  const { port, host = '0.0.0.0', useMock = false, mockScenarios = [], sessionsBaseDir, dbPath } = options;
 
   const app = new Hono();
-  const sessionManager = new SessionManager({ sessionsBaseDir });
+  const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
 
   // Create runner factory based on mock mode
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
@@ -628,6 +630,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         runnerManager.stopAll();
         wss?.close();
         httpServer?.close(() => {
+          // Close database connection
+          sessionManager.close();
           resolve();
         });
       });
