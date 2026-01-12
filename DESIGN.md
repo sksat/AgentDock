@@ -442,3 +442,89 @@ cd packages/server && pnpm test
 - `ANTHROPIC_API_KEY` 環境変数が **設定されていない** ことを確認
 - Claude Max subscription で実行されていることを確認
 - Anthropic が公式に許可している方法のみ使用
+
+---
+
+## 設計パターン
+
+### Per-Session State Management
+
+複数セッションを同時に扱う場合、グローバル state ではなく **Map でセッションごとに状態を分離**する。
+
+**問題**: 単一の state で管理すると、セッション切り替え時に状態が混乱する。
+- 例: Session A の PermissionRequest が Session B を見ているときに表示される
+
+**解決策**: Map<sessionId, State> でセッションごとに分離
+
+```typescript
+// Bad: 単一の state（セッション切り替え時に混乱）
+const [pendingQuestion, setPendingQuestion] = useState(null);
+
+// Good: セッションごとに分離
+const [sessionPendingQuestion, setSessionPendingQuestion] = useState<Map<string, PendingQuestion>>(new Map());
+
+// 現在のセッションの state を computed value として取得
+const pendingQuestion = activeSessionId
+  ? sessionPendingQuestion.get(activeSessionId)
+  : null;
+```
+
+**適用箇所**:
+- `pendingPermission`: パーミッション要求
+- `pendingQuestion`: AskUserQuestion 要求
+- `sessionMessages`: メッセージ履歴
+- `sessionUsageInfo`: トークン使用量
+
+### Real-time Status Broadcast
+
+セッション状態の変更（idle → running など）は、**全クライアントにブロードキャスト**する。
+
+**理由**: 複数ブラウザタブ/ウィンドウからアクセスした場合に状態を同期するため。
+
+```typescript
+// サーバー側: 状態変更時に全クライアントへ通知
+function broadcastStatusChange(sessionId: string, status: SessionStatus) {
+  broadcastToAll({
+    type: 'session_status_changed',
+    sessionId,
+    status,
+  });
+}
+```
+
+**注意**: `session_attached` のような特定クライアント向けメッセージと異なり、ステータス変更は全クライアントが知る必要がある。
+
+### Defensive Rendering for External Data
+
+DB やネットワークから取得したデータを表示するコンポーネントは、**Guard clause で不正データを防御**する。
+
+**問題**: 古いDBデータや予期せぬ形式のデータでコンポーネントがクラッシュする可能性がある。
+
+**解決策**: コンポーネント冒頭で Guard clause を入れ、フォールバック UI を表示
+
+```typescript
+function QuestionMessage({ content }: { content: QuestionMessageContent }) {
+  // Guard against invalid content
+  if (!content || !Array.isArray(content.answers)) {
+    return (
+      <div data-testid="message-item">
+        <span>AskUserQuestion</span>
+        <span>User answered questions.</span>
+      </div>
+    );
+  }
+
+  // Normal rendering
+  return content.answers.map(...);
+}
+```
+
+**テスト要件**: 外部データを扱うコンポーネントには堅牢性テストを追加する
+
+```typescript
+describe('QuestionMessage robustness', () => {
+  it('should not crash with null content', () => { ... });
+  it('should not crash with undefined content', () => { ... });
+  it('should not crash with legacy data structure', () => { ... });
+});
+```
