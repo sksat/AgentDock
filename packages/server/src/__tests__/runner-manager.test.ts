@@ -50,6 +50,7 @@ describe('RunnerManager', () => {
       expect(runner).toBeDefined();
       expect(runner?.start).toHaveBeenCalledWith('Hello Claude', {
         sessionId: undefined,
+        images: undefined,
       });
     });
 
@@ -62,6 +63,26 @@ describe('RunnerManager', () => {
       const runner = manager.getRunner('session1');
       expect(runner?.start).toHaveBeenCalledWith('Hello', {
         sessionId: 'claude-abc123',
+        images: undefined,
+      });
+    });
+
+    it('should pass images to runner when provided', () => {
+      const images = [{
+        type: 'image' as const,
+        data: 'base64data',
+        mediaType: 'image/png' as const,
+      }];
+
+      manager.startSession('session1', 'What color?', {
+        images,
+        onEvent: vi.fn(),
+      });
+
+      const runner = manager.getRunner('session1');
+      expect(runner?.start).toHaveBeenCalledWith('What color?', {
+        sessionId: undefined,
+        images,
       });
     });
 
