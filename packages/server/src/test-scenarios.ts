@@ -164,6 +164,71 @@ export const echoScenario: Scenario = {
   ],
 };
 
+/** Slow thinking scenario for testing real-time streaming updates */
+export const slowThinkingScenario: Scenario = {
+  name: 'slow-thinking',
+  promptPattern: /slow|stream|realtime|real-time/i,
+  steps: [
+    {
+      type: 'system',
+      subtype: 'init',
+      model: 'claude-sonnet-4-20250514',
+      tools: ['Read', 'Write', 'Edit', 'Bash'],
+    },
+    { type: 'thinking', thinking: 'Hmm, let me think about this carefully...', delay: 500 },
+    { type: 'thinking', thinking: '\n\nFirst, I need to break down the problem into smaller parts.', delay: 800 },
+    { type: 'thinking', thinking: '\n\nLet me consider the different approaches:', delay: 600 },
+    { type: 'thinking', thinking: '\n1. We could use a recursive solution', delay: 400 },
+    { type: 'thinking', thinking: '\n2. Or perhaps an iterative approach would be better', delay: 400 },
+    { type: 'thinking', thinking: '\n3. There might also be a mathematical formula', delay: 400 },
+    { type: 'thinking', thinking: '\n\nAfter weighing the options, I think approach #2 is best because it will be more efficient and easier to understand.', delay: 1000 },
+    { type: 'thinking', thinking: '\n\nNow let me formulate my response...', delay: 500 },
+    { type: 'text', text: 'After careful consideration, I recommend using an iterative approach. ', delay: 300 },
+    { type: 'text', text: 'This will give us O(n) time complexity ', delay: 200 },
+    { type: 'text', text: 'while keeping the code readable and maintainable.', delay: 200 },
+    {
+      type: 'usage',
+      inputTokens: 2500,
+      outputTokens: 800,
+      cacheReadInputTokens: 500,
+    },
+    { type: 'result', result: 'Slow thinking analysis complete' },
+  ],
+};
+
+/** Very slow scenario with many small thinking chunks for streaming test */
+export const streamingThinkingScenario: Scenario = {
+  name: 'streaming-thinking',
+  promptPattern: /streaming|chunks|incremental/i,
+  steps: [
+    {
+      type: 'system',
+      subtype: 'init',
+      model: 'claude-sonnet-4-20250514',
+    },
+    { type: 'thinking', thinking: 'Processing', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '\n\nAnalyzing input', delay: 200 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '\n\nGenerating response', delay: 200 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: '.', delay: 100 },
+    { type: 'thinking', thinking: ' Done!', delay: 200 },
+    { type: 'text', text: 'Here is my response after thinking through it step by step.', delay: 100 },
+    {
+      type: 'usage',
+      inputTokens: 500,
+      outputTokens: 100,
+    },
+    { type: 'result', result: 'Streaming test complete' },
+  ],
+};
+
 /** All test scenarios */
 export const testScenarios: Scenario[] = [
   thinkingScenario,
@@ -171,4 +236,6 @@ export const testScenarios: Scenario[] = [
   askQuestionScenario,
   multiQuestionScenario,
   echoScenario,
+  slowThinkingScenario,
+  streamingThinkingScenario,
 ];

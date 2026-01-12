@@ -83,15 +83,33 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
         break;
 
-      case 'tool_use':
-        sendToSession(sessionId, {
-          type: 'tool_use',
-          sessionId,
-          toolName: (eventData as { name: string }).name,
-          toolUseId: (eventData as { id: string }).id,
-          input: (eventData as { input: unknown }).input,
-        });
+      case 'tool_use': {
+        const toolName = (eventData as { name: string }).name;
+        const toolUseId = (eventData as { id: string }).id;
+        const input = (eventData as { input: unknown }).input;
+
+        // Handle AskUserQuestion specially - convert to ask_user_question message
+        if (toolName === 'AskUserQuestion') {
+          const askInput = input as { questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }>; multiSelect: boolean }> };
+          sendToSession(sessionId, {
+            type: 'ask_user_question',
+            sessionId,
+            requestId: toolUseId,
+            questions: askInput.questions,
+          });
+          // Update session status
+          sessionManager.updateSessionStatus(sessionId, 'waiting_input');
+        } else {
+          sendToSession(sessionId, {
+            type: 'tool_use',
+            sessionId,
+            toolName,
+            toolUseId,
+            input,
+          });
+        }
         break;
+      }
 
       case 'tool_result':
         sendToSession(sessionId, {
@@ -438,13 +456,30 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'question_response': {
-        // TODO: Implement question response handling
-        response = {
-          type: 'error',
-          sessionId: message.sessionId,
-          message: 'Not implemented yet',
-        };
-        break;
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Send the answer to the runner (for mock runner, this triggers wait_for_input to continue)
+        const runner = runnerManager.getRunner(message.sessionId);
+        if (runner) {
+          // Convert answers to a string (take the first answer value)
+          const answerValues = Object.values(message.answers);
+          const answerText = answerValues.join(', ');
+          runner.sendInput(answerText);
+        }
+
+        // Update session status back to running
+        sessionManager.updateSessionStatus(message.sessionId, 'running');
+
+        // No response needed
+        return;
       }
 
       default: {
