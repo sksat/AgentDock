@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@claude-bridge/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, ImageAttachment } from '@claude-bridge/shared';
+import { randomBytes } from 'node:crypto';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
@@ -88,6 +89,41 @@ function cleanupMcpConfig(sessionId: string): void {
   const configPath = join(tmpdir(), 'claude-bridge-mcp', `mcp-config-${sessionId}.json`);
   if (existsSync(configPath)) {
     rmSync(configPath);
+  }
+}
+
+/**
+ * Save images to temporary files and return their paths
+ */
+function saveImagesToTempFiles(images: ImageAttachment[]): string[] {
+  const imageDir = join(tmpdir(), 'claude-bridge-images');
+  if (!existsSync(imageDir)) {
+    mkdirSync(imageDir, { recursive: true });
+  }
+
+  const imagePaths: string[] = [];
+  for (const image of images) {
+    const ext = image.mediaType.split('/')[1]; // e.g., 'jpeg', 'png'
+    const filename = `${randomBytes(16).toString('hex')}.${ext}`;
+    const filepath = join(imageDir, filename);
+
+    // Decode base64 and save to file
+    const buffer = Buffer.from(image.data, 'base64');
+    writeFileSync(filepath, buffer);
+    imagePaths.push(filepath);
+  }
+
+  return imagePaths;
+}
+
+/**
+ * Clean up temporary image files
+ */
+function cleanupImageFiles(imagePaths: string[]): void {
+  for (const filepath of imagePaths) {
+    if (existsSync(filepath)) {
+      rmSync(filepath);
+    }
   }
 }
 
@@ -579,15 +615,21 @@ export function createServer(options: ServerOptions): BridgeServer {
           break;
         }
 
-        // Add user message to history
+        // Add user message to history (including images if present)
         sessionManager.addToHistory(message.sessionId, {
           type: 'user',
-          content: message.content,
+          content: message.images ? { text: message.content, images: message.images } : message.content,
           timestamp: new Date().toISOString(),
         });
 
         // Update session status
         sessionManager.updateSessionStatus(message.sessionId, 'running');
+
+        // Save images to temporary files if present
+        let imageFiles: string[] = [];
+        if (message.images && message.images.length > 0) {
+          imageFiles = saveImagesToTempFiles(message.images);
+        }
 
         // Start Claude CLI with MCP permission handling
         try {
@@ -610,17 +652,27 @@ export function createServer(options: ServerOptions): BridgeServer {
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
+            imageFiles: imageFiles.length > 0 ? imageFiles : undefined,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
-              // Clean up MCP config on exit
-              if (eventType === 'exit' && mcpConfigPath) {
-                cleanupMcpConfig(sessionId);
+              // Clean up MCP config and image files on exit
+              if (eventType === 'exit') {
+                if (mcpConfigPath) {
+                  cleanupMcpConfig(sessionId);
+                }
+                if (imageFiles.length > 0) {
+                  cleanupImageFiles(imageFiles);
+                }
               }
             },
           });
           // Don't send response here - events will be sent via handleRunnerEvent
           return;
         } catch (error) {
+          // Clean up image files on error
+          if (imageFiles.length > 0) {
+            cleanupImageFiles(imageFiles);
+          }
           sessionManager.updateSessionStatus(message.sessionId, 'idle');
           response = {
             type: 'error',
@@ -742,6 +794,91 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // No response needed
         return;
+      }
+
+      case 'compact_session': {
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Check if already running
+        if (runnerManager.hasRunningSession(message.sessionId)) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Cannot compact while session is running',
+          };
+          break;
+        }
+
+        // Get current history for this session
+        const history = sessionManager.getHistory(message.sessionId);
+        if (history.length === 0) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'No messages to compact',
+          };
+          break;
+        }
+
+        // Store WebSocket for this session
+        sessionWebSockets.set(message.sessionId, ws);
+
+        // Update session status
+        sessionManager.updateSessionStatus(message.sessionId, 'running');
+
+        // Create a summary prompt based on conversation history
+        const summaryPrompt = `Please provide a brief summary of our conversation so far. Focus on:
+1. The main topics discussed
+2. Key decisions or conclusions reached
+3. Any pending tasks or questions
+
+Keep it concise but comprehensive.`;
+
+        // Start Claude CLI with the summary request
+        try {
+          let mcpConfigPath: string | undefined;
+          let permissionToolName: string | undefined;
+          if (!useMock) {
+            mcpConfigPath = generateMcpConfig(
+              message.sessionId,
+              wsUrl,
+              mcpServerCommand,
+              mcpServerArgs,
+              mcpServerCwd
+            );
+            permissionToolName = 'mcp__bridge__permission_prompt';
+          }
+
+          runnerManager.startSession(message.sessionId, summaryPrompt, {
+            workingDir: session.workingDir,
+            claudeSessionId: session.claudeSessionId,
+            mcpConfigPath,
+            permissionToolName,
+            onEvent: (sessionId, eventType, data) => {
+              handleRunnerEvent(sessionId, eventType, data);
+              if (eventType === 'exit' && mcpConfigPath) {
+                cleanupMcpConfig(sessionId);
+              }
+            },
+          });
+          return;
+        } catch (error) {
+          sessionManager.updateSessionStatus(message.sessionId, 'idle');
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: error instanceof Error ? error.message : 'Failed to compact session',
+          };
+        }
+        break;
       }
 
       default: {

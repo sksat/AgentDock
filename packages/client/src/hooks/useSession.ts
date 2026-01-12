@@ -8,7 +8,7 @@ import type {
   DailyUsage,
   UsageTotals,
 } from '@claude-bridge/shared';
-import type { MessageStreamItem, BashToolContent, McpToolContent } from '../components/MessageStream';
+import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent } from '../components/MessageStream';
 
 export interface PendingPermission {
   requestId: string;
@@ -74,8 +74,10 @@ export interface UseSessionReturn {
   renameSession: (sessionId: string, name: string) => void;
 
   // Message handling
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, images?: ImageAttachment[]) => void;
   clearMessages: () => void;
+  addSystemMessage: (content: SystemMessageContent) => void;
+  compactSession: () => void;
   respondToPermission: (
     requestId: string,
     response: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }
@@ -241,9 +243,10 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string) => {
+    (content: string, images?: ImageAttachment[]) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
+        // TODO: Store images with pending message
         setPendingMessage(content);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
@@ -251,16 +254,28 @@ export function useSession(): UseSessionReturn {
         return;
       }
 
+      // Create message content with optional images
+      const messageContent: UserMessageContent = {
+        text: content,
+        images,
+      };
+
       updateSessionMessages(activeSessionId, (prev) => [
         ...prev,
         {
           type: 'user',
-          content,
+          content: messageContent,
           timestamp: new Date().toISOString(),
         },
       ]);
       setIsLoading(true);
-      send({ type: 'user_message', sessionId: activeSessionId, content });
+      // Send message with images to server
+      send({
+        type: 'user_message',
+        sessionId: activeSessionId,
+        content,
+        images: images && images.length > 0 ? images : undefined,
+      });
     },
     [activeSessionId, send, updateSessionMessages]
   );
@@ -284,6 +299,30 @@ export function useSession(): UseSessionReturn {
       return newMap;
     });
   }, [activeSessionId]);
+
+  const addSystemMessage = useCallback(
+    (content: SystemMessageContent) => {
+      if (!activeSessionId) return;
+      updateSessionMessages(activeSessionId, (prev) => [
+        ...prev,
+        {
+          type: 'system',
+          content,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    },
+    [activeSessionId, updateSessionMessages]
+  );
+
+  const compactSession = useCallback(() => {
+    if (!activeSessionId) return;
+    setIsLoading(true);
+    send({
+      type: 'compact_session',
+      sessionId: activeSessionId,
+    });
+  }, [activeSessionId, send]);
 
   const respondToPermission = useCallback(
     (
@@ -734,6 +773,8 @@ export function useSession(): UseSessionReturn {
     renameSession,
     sendMessage,
     clearMessages,
+    addSystemMessage,
+    compactSession,
     respondToPermission,
     respondToQuestion,
     interrupt,

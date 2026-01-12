@@ -81,6 +81,8 @@ function App() {
     renameSession,
     sendMessage,
     clearMessages,
+    addSystemMessage,
+    compactSession,
     respondToPermission,
     respondToQuestion,
     interrupt,
@@ -286,10 +288,7 @@ function App() {
             onToggleThinking={handleToggleThinking}
             onNewSession={() => setIsNewSessionModalOpen(true)}
             onClearMessages={clearMessages}
-            onCompact={() => {
-              // TODO: Implement server-side conversation compaction
-              showToast('Compact', 'Not implemented yet. This will summarize conversation to save context.', 'warning');
-            }}
+            onCompact={compactSession}
             onShowContext={() => {
               const usage = usageInfo;
               if (usage) {

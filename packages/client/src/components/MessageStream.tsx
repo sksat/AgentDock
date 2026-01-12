@@ -1,10 +1,17 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool';
+  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system';
   content: unknown;
   timestamp: string;
+}
+
+export interface SystemMessageContent {
+  title: string;
+  message: string;
+  type?: 'info' | 'success' | 'warning' | 'error';
 }
 
 export interface BashToolContent {
@@ -23,6 +30,18 @@ export interface McpToolContent {
   output: string;
   isComplete: boolean;
   isError?: boolean;
+}
+
+export interface ImageAttachment {
+  type: 'image';
+  data: string; // base64 encoded image data
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  name?: string;
+}
+
+export interface UserMessageContent {
+  text: string;
+  images?: ImageAttachment[];
 }
 
 export interface MessageStreamProps {
@@ -63,7 +82,11 @@ interface MessageItemProps {
 function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageItemProps) {
   switch (message.type) {
     case 'user':
-      return <UserMessage content={message.content as string} />;
+      // Support both old string format and new object format with images
+      if (typeof message.content === 'string') {
+        return <UserMessage content={{ text: message.content }} />;
+      }
+      return <UserMessage content={message.content as UserMessageContent} />;
     case 'assistant':
       return <AssistantMessage content={message.content as string} />;
     case 'thinking':
@@ -76,16 +99,42 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
       return <ToolUseMessage content={message.content as ToolUseContent} />;
     case 'tool_result':
       return <ToolResultMessage content={message.content as ToolResultContent} />;
+    case 'system':
+      return <SystemMessage content={message.content as SystemMessageContent} />;
     default:
       return null;
   }
 }
 
-function UserMessage({ content }: { content: string }) {
+function UserMessage({ content }: { content: UserMessageContent }) {
+  const hasImages = content.images && content.images.length > 0;
+
   return (
     <div data-testid="message-item" className="flex justify-end">
-      <div className="max-w-[80%] px-4 py-3 rounded-lg bg-accent-primary text-white">
-        {content}
+      <div className="max-w-[80%] flex flex-col gap-2">
+        {/* Images */}
+        {hasImages && (
+          <div className="flex flex-wrap gap-2 justify-end">
+            {content.images!.map((img, idx) => (
+              <div
+                key={idx}
+                className="relative rounded-lg overflow-hidden border border-border bg-bg-secondary"
+              >
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name ?? `Attached image ${idx + 1}`}
+                  className="max-w-[200px] max-h-[150px] object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Text content */}
+        {content.text && (
+          <div className="px-4 py-3 rounded-lg bg-accent-primary text-white">
+            {content.text}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -135,103 +184,127 @@ function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps
 }
 
 function BashToolMessage({ content }: { content: BashToolContent }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Generate compact description from command
+  const compactDescription = content.description || content.command.split('\n')[0].slice(0, 60) + (content.command.length > 60 ? '...' : '');
+
   return (
     <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
-        {/* Header: Green dot + Bash label + description */}
-        <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+      <div className="rounded-lg overflow-hidden">
+        {/* Compact header - always visible */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
+        >
           <span className={clsx(
-            'w-2 h-2 rounded-full',
+            'w-2 h-2 rounded-full flex-shrink-0',
             content.isComplete
               ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
               : 'bg-accent-warning animate-pulse'
           )}></span>
-          <span className="font-mono text-sm font-medium">Bash</span>
-          {content.description && (
-            <span className="text-sm text-text-secondary ml-2">
-              {content.description}
-            </span>
-          )}
-        </div>
+          <span className="text-text-primary font-medium">Bash</span>
+          <span className="text-text-secondary text-sm">{compactDescription}</span>
+        </button>
 
-        {/* IN Section: Command */}
-        <div className="border-b border-border">
-          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
-            IN
-          </div>
-          <pre className="px-4 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto">
-            {content.command}
-          </pre>
-        </div>
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
+            {/* IN Section: Command */}
+            <div className="border-b border-border">
+              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
+                IN
+              </div>
+              <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto">
+                {content.command}
+              </pre>
+            </div>
 
-        {/* OUT Section: Output */}
-        <div>
-          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
-            OUT
-            {!content.isComplete && (
-              <span className="text-accent-warning">...</span>
-            )}
+            {/* OUT Section: Output */}
+            <div>
+              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+                OUT
+                {!content.isComplete && (
+                  <span className="text-accent-warning">...</span>
+                )}
+              </div>
+              <pre
+                className={clsx(
+                  'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+                  content.isError
+                    ? 'bg-accent-danger/10 text-accent-danger'
+                    : 'bg-bg-secondary text-text-secondary'
+                )}
+              >
+                {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+              </pre>
+            </div>
           </div>
-          <pre
-            className={clsx(
-              'px-4 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-              content.isError
-                ? 'bg-accent-danger/10 text-accent-danger'
-                : 'bg-bg-secondary text-text-secondary'
-            )}
-          >
-            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-          </pre>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
 function McpToolMessage({ content }: { content: McpToolContent }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Generate compact description from input
+  const inputStr = JSON.stringify(content.input);
+  const compactDescription = inputStr.length > 60 ? inputStr.slice(0, 60) + '...' : inputStr;
+
   return (
     <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
-        {/* Header: Green dot + MCP tool name */}
-        <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+      <div className="rounded-lg overflow-hidden">
+        {/* Compact header - always visible */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
+        >
           <span className={clsx(
-            'w-2 h-2 rounded-full',
+            'w-2 h-2 rounded-full flex-shrink-0',
             content.isComplete
               ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
               : 'bg-accent-warning animate-pulse'
           )}></span>
-          <span className="font-mono text-sm font-medium">{content.toolName}</span>
-        </div>
+          <span className="text-text-primary font-medium">{content.toolName}</span>
+          <span className="text-text-secondary text-sm">{compactDescription}</span>
+        </button>
 
-        {/* IN Section: Input */}
-        <div className="border-b border-border">
-          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
-            IN
-          </div>
-          <pre className="px-4 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto whitespace-pre-wrap">
-            {JSON.stringify(content.input, null, 2)}
-          </pre>
-        </div>
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
+            {/* IN Section: Input */}
+            <div className="border-b border-border">
+              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
+                IN
+              </div>
+              <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(content.input, null, 2)}
+              </pre>
+            </div>
 
-        {/* OUT Section: Output */}
-        <div>
-          <div className="px-4 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
-            OUT
-            {!content.isComplete && (
-              <span className="text-accent-warning">...</span>
-            )}
+            {/* OUT Section: Output */}
+            <div>
+              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+                OUT
+                {!content.isComplete && (
+                  <span className="text-accent-warning">...</span>
+                )}
+              </div>
+              <pre
+                className={clsx(
+                  'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+                  content.isError
+                    ? 'bg-accent-danger/10 text-accent-danger'
+                    : 'bg-bg-secondary text-text-secondary'
+                )}
+              >
+                {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+              </pre>
+            </div>
           </div>
-          <pre
-            className={clsx(
-              'px-4 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-              content.isError
-                ? 'bg-accent-danger/10 text-accent-danger'
-                : 'bg-bg-secondary text-text-secondary'
-            )}
-          >
-            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-          </pre>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -282,6 +355,51 @@ function ToolResultMessage({ content }: { content: ToolResultContent }) {
         >
           {content.content}
         </pre>
+      </div>
+    </div>
+  );
+}
+
+function SystemMessage({ content }: { content: SystemMessageContent }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const dotColors = {
+    info: 'bg-accent-primary',
+    success: 'bg-accent-success',
+    warning: 'bg-accent-warning',
+    error: 'bg-accent-danger',
+  };
+
+  // Get first line for compact view, rest for expanded
+  const lines = content.message.split('\n');
+  const firstLine = lines[0];
+  const hasMore = lines.length > 1;
+
+  return (
+    <div data-testid="message-item" className="flex justify-start">
+      <div className="rounded-lg overflow-hidden">
+        {/* Compact header - always visible */}
+        <button
+          onClick={() => hasMore && setIsExpanded(!isExpanded)}
+          className={clsx(
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-left',
+            hasMore && 'hover:bg-bg-tertiary/50 cursor-pointer'
+          )}
+        >
+          <span className={clsx(
+            'w-2 h-2 rounded-full flex-shrink-0',
+            dotColors[content.type ?? 'info']
+          )}></span>
+          <span className="text-text-primary font-medium">{content.title}</span>
+          <span className="text-text-secondary text-sm">{firstLine}</span>
+        </button>
+
+        {/* Expanded content */}
+        {isExpanded && hasMore && (
+          <div className="ml-7 px-3 py-2 text-text-secondary text-sm whitespace-pre-wrap">
+            {lines.slice(1).join('\n')}
+          </div>
+        )}
       </div>
     </div>
   );

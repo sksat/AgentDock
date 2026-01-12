@@ -12,6 +12,7 @@ export type ClientMessage =
   | DeleteSessionMessage
   | RenameSessionMessage
   | ListSessionsMessage
+  | CompactSessionMessage
   // User input
   | UserMessageMessage
   | InterruptMessage
@@ -56,10 +57,23 @@ export interface ListSessionsMessage {
   type: 'list_sessions';
 }
 
+export interface CompactSessionMessage {
+  type: 'compact_session';
+  sessionId: string;
+}
+
+export interface ImageAttachment {
+  type: 'image';
+  data: string; // base64 encoded image data
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  name?: string;
+}
+
 export interface UserMessageMessage {
   type: 'user_message';
   sessionId: string;
   content: string;
+  images?: ImageAttachment[];
 }
 
 export interface InterruptMessage {

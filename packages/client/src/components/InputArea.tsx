@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, type KeyboardEvent, type ChangeEvent, type ClipboardEvent } from 'react';
 import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
 import { PermissionModeSelector } from './PermissionModeSelector';
 import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
+import type { ImageAttachment } from './MessageStream';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -12,7 +13,7 @@ export interface TokenUsage {
 export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
 
 export interface InputAreaProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, images?: ImageAttachment[]) => void;
   onInterrupt?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
@@ -63,7 +64,9 @@ export function InputArea({
   const [showPermissionModeSelector, setShowPermissionModeSelector] = useState(false);
   const [showSlashCommands, setShowSlashCommands] = useState(false);
   const [slashCommandIndex, setSlashCommandIndex] = useState(0);
+  const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Permission mode cycling: ask -> auto-edit -> plan -> ask
   const cyclePermissionMode = useCallback(() => {
@@ -94,39 +97,61 @@ export function InputArea({
     setShowPermissionModeSelector(false);
   }, [onPermissionModeChange]);
 
-  // Handle slash command selection
+  // Handle slash command selection - insert command into input
   const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
     setShowSlashCommands(false);
-    setValue(''); // Clear input
-    switch (command.name) {
+    // Insert the full command into input
+    const fullCommand = command.prefix ? `/${command.prefix}:${command.name}` : `/${command.name}`;
+    setValue(fullCommand);
+    textareaRef.current?.focus();
+  }, []);
+
+  // Execute slash command
+  const executeSlashCommand = useCallback((commandText: string) => {
+    const trimmed = commandText.trim().toLowerCase();
+    if (!trimmed.startsWith('/')) return false;
+
+    const commandName = trimmed.slice(1); // Remove leading /
+
+    switch (commandName) {
       case 'model':
-        // Use setTimeout to ensure state updates don't conflict
+        setValue('');
         setTimeout(() => setShowModelSelector(true), 0);
-        break;
+        return true;
       case 'permission':
+        setValue('');
         setTimeout(() => setShowPermissionModeSelector(true), 0);
-        break;
+        return true;
       case 'new':
+        setValue('');
         onNewSession?.();
-        break;
+        return true;
       case 'clear':
+        setValue('');
         onClearMessages?.();
-        break;
+        return true;
       case 'compact':
+        setValue('');
         onCompact?.();
-        break;
+        return true;
       case 'context':
+        setValue('');
         onShowContext?.();
-        break;
+        return true;
       case 'cost':
+        setValue('');
         onShowCost?.();
-        break;
+        return true;
       case 'config':
+        setValue('');
         onShowConfig?.();
-        break;
+        return true;
       case 'help':
+        setValue('');
         onShowHelp?.();
-        break;
+        return true;
+      default:
+        return false;
     }
   }, [onNewSession, onClearMessages, onCompact, onShowContext, onShowCost, onShowConfig, onShowHelp]);
 
@@ -149,21 +174,94 @@ export function InputArea({
     }
   }, []);
 
+  // Handle image file processing
+  const processImageFile = useCallback((file: File): Promise<ImageAttachment | null> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        // Extract base64 data (remove data:image/xxx;base64, prefix)
+        const base64Data = result.split(',')[1];
+        const mediaType = file.type as ImageAttachment['mediaType'];
+
+        resolve({
+          type: 'image',
+          data: base64Data,
+          mediaType,
+          name: file.name,
+        });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  // Handle paste event for images
+  const handlePaste = useCallback(async (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const imageAttachment = await processImageFile(file);
+          if (imageAttachment) {
+            setAttachedImages((prev) => [...prev, imageAttachment]);
+          }
+        }
+        break;
+      }
+    }
+  }, [processImageFile]);
+
+  // Handle file input change
+  const handleFileSelect = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (const file of files) {
+      const imageAttachment = await processImageFile(file);
+      if (imageAttachment) {
+        setAttachedImages((prev) => [...prev, imageAttachment]);
+      }
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [processImageFile]);
+
+  // Remove attached image
+  const removeImage = useCallback((index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (trimmed && !disabled && !isLoading) {
+    const hasContent = trimmed || attachedImages.length > 0;
+
+    if (hasContent && !disabled && !isLoading) {
       // Don't send slash commands as messages
       if (trimmed.startsWith('/')) {
         return;
       }
-      onSend(trimmed);
+      onSend(trimmed, attachedImages.length > 0 ? attachedImages : undefined);
       setValue('');
+      setAttachedImages([]);
     }
-  }, [value, onSend, disabled, isLoading]);
+  }, [value, attachedImages, onSend, disabled, isLoading]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Handle slash command navigation
+      // Handle slash command navigation (suggestions are open)
       if (showSlashCommands) {
         const filteredCommands = getFilteredCommands(value);
         if (e.key === 'ArrowUp') {
@@ -193,10 +291,15 @@ export function InputArea({
         }
       }
 
-      // Enter to send, Shift+Enter for newline
+      // Enter to send or execute slash command, Shift+Enter for newline
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        // Check if it's a slash command (no suggestions open = complete command)
+        if (value.trim().startsWith('/')) {
+          executeSlashCommand(value);
+        } else {
+          handleSend();
+        }
       }
       // Shift+Tab to cycle permission mode
       if (e.key === 'Tab' && e.shiftKey && onPermissionModeChange) {
@@ -209,7 +312,7 @@ export function InputArea({
         onToggleThinking();
       }
     },
-    [handleSend, onToggleThinking, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
+    [handleSend, executeSlashCommand, onToggleThinking, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
   );
 
   // Auto-resize textarea
@@ -349,12 +452,40 @@ export function InputArea({
           </div>
         )}
 
+        {/* Attached images preview */}
+        {attachedImages.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3">
+            {attachedImages.map((img, idx) => (
+              <div
+                key={idx}
+                className="relative group rounded-lg overflow-hidden border border-border bg-bg-secondary"
+              >
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name ?? `Attached image ${idx + 1}`}
+                  className="w-16 h-16 object-cover"
+                />
+                <button
+                  onClick={() => removeImage(idx)}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-bg-primary/80 text-text-secondary hover:text-text-primary hover:bg-bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Remove image"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Text input area */}
         <textarea
           ref={textareaRef}
           value={value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
@@ -454,11 +585,11 @@ export function InputArea({
 
           {/* Right side - action buttons */}
           <div className="flex items-center gap-2">
-            {/* Attachment button (placeholder) */}
+            {/* Attachment button */}
             <button
               className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
-              title="Attach file"
-              disabled
+              title="Attach image"
+              onClick={() => fileInputRef.current?.click()}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -469,6 +600,15 @@ export function InputArea({
                 />
               </svg>
             </button>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
 
             {/* Slash command button */}
             <button
@@ -493,10 +633,10 @@ export function InputArea({
             ) : (
               <button
                 onClick={handleSend}
-                disabled={disabled || !value.trim() || value.trim().startsWith('/')}
+                disabled={disabled || (!value.trim() && attachedImages.length === 0) || value.trim().startsWith('/')}
                 className={clsx(
                   'p-1.5 rounded transition-colors',
-                  value.trim() && !disabled && !value.trim().startsWith('/')
+                  (value.trim() || attachedImages.length > 0) && !disabled && !value.trim().startsWith('/')
                     ? 'bg-accent-primary text-white hover:bg-accent-primary/90'
                     : 'bg-bg-secondary text-text-secondary'
                 )}
