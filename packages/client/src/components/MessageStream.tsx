@@ -111,7 +111,7 @@ function UserMessage({ content }: { content: UserMessageContent }) {
 
   return (
     <div data-testid="message-item" className="flex justify-end">
-      <div className="max-w-[80%] flex flex-col gap-2">
+      <div className="max-w-[80%] flex flex-col gap-2 items-end">
         {/* Images */}
         {hasImages && (
           <div className="flex flex-wrap gap-2 justify-end">
@@ -123,7 +123,7 @@ function UserMessage({ content }: { content: UserMessageContent }) {
                 <img
                   src={`data:${img.mediaType};base64,${img.data}`}
                   alt={img.name ?? `Attached image ${idx + 1}`}
-                  className="max-w-[200px] max-h-[150px] object-cover"
+                  className="max-w-[300px] max-h-[200px] object-contain"
                 />
               </div>
             ))}
