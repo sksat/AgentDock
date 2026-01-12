@@ -233,11 +233,11 @@ export function WelcomePage({
           </div>
         </div>
 
-        {/* Usage chart - below input */}
+        {/* Usage chart - with more separation */}
         {globalUsage && globalUsage.daily.length > 0 && (
-          <div className="w-full max-w-2xl pt-8">
-            <div className="text-xs text-text-secondary mb-2">Daily Usage</div>
-            <UsageChart daily={globalUsage.daily} height={150} />
+          <div className="w-full max-w-4xl mt-12 pt-6 border-t border-border/30">
+            <div className="text-xs text-text-secondary mb-2">Usage</div>
+            <UsageChart daily={globalUsage.daily} blocks={globalUsage.blocks} height={150} />
           </div>
         )}
       </div>

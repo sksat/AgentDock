@@ -65,6 +65,7 @@ describe('WelcomePage', () => {
       { ...mockDailyUsage, date: '2025-01-12', totalCost: 3.5 },
       mockDailyUsage,
     ],
+    blocks: [],
   };
 
   const defaultProps = {
@@ -242,13 +243,13 @@ describe('WelcomePage', () => {
     it('displays usage chart when daily data is provided', () => {
       render(<WelcomePage {...defaultProps} globalUsage={mockGlobalUsage} />);
 
-      expect(screen.getByText('Daily Usage')).toBeInTheDocument();
+      expect(screen.getByText('Usage')).toBeInTheDocument();
     });
 
     it('does not show usage chart when globalUsage is null', () => {
       render(<WelcomePage {...defaultProps} globalUsage={null} />);
 
-      expect(screen.queryByText('Daily Usage')).not.toBeInTheDocument();
+      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
     });
 
     it('does not show usage chart when daily array is empty', () => {
@@ -258,7 +259,7 @@ describe('WelcomePage', () => {
       };
       render(<WelcomePage {...defaultProps} globalUsage={emptyDailyUsage} />);
 
-      expect(screen.queryByText('Daily Usage')).not.toBeInTheDocument();
+      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
     });
   });
 

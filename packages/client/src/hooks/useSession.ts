@@ -7,6 +7,7 @@ import type {
   PermissionMode,
   DailyUsage,
   UsageTotals,
+  BlockUsage,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -42,6 +43,8 @@ export interface GlobalUsage {
   totals: UsageTotals;
   /** Daily usage history (sorted by date ascending) */
   daily: DailyUsage[];
+  /** Block usage history for finer granularity (sorted by startTime ascending) */
+  blocks: BlockUsage[];
 }
 
 export interface ModelUsage {
@@ -836,6 +839,7 @@ export function useSession(): UseSessionReturn {
             today: message.today,
             totals: message.totals,
             daily: message.daily,
+            blocks: message.blocks,
           });
           break;
 

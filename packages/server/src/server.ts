@@ -156,6 +156,7 @@ export function createServer(options: ServerOptions): BridgeServer {
       today: data.today,
       totals: data.totals,
       daily: data.daily,
+      blocks: data.blocks,
     };
     const messageStr = JSON.stringify(message);
     for (const ws of allClients) {
@@ -919,6 +920,7 @@ Keep it concise but comprehensive.`;
                 today: lastUsage.today,
                 totals: lastUsage.totals,
                 daily: lastUsage.daily,
+                blocks: lastUsage.blocks,
               }));
             }
           }

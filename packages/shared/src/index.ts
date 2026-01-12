@@ -313,6 +313,8 @@ export interface GlobalUsageMessage {
   totals: UsageTotals;
   /** Daily usage history (sorted by date ascending) */
   daily: DailyUsage[];
+  /** Block usage history for finer granularity (sorted by startTime ascending) */
+  blocks: BlockUsage[];
 }
 
 export interface DailyUsage {
@@ -343,4 +345,25 @@ export interface UsageTotals {
   cacheReadTokens: number;
   totalCost: number;
   totalTokens: number;
+}
+
+/** Usage data for a 5-hour block (from ccusage blocks) */
+export interface BlockUsage {
+  /** Block ID (ISO timestamp of start time) */
+  id: string;
+  /** Block start time (ISO 8601) */
+  startTime: string;
+  /** Block end time (ISO 8601) */
+  endTime: string;
+  /** Whether this block is currently active */
+  isActive: boolean;
+  /** Whether this is a gap between blocks (no activity) */
+  isGap: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  totalCost: number;
+  modelsUsed: string[];
 }

@@ -1,12 +1,14 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'events';
-import type { DailyUsage, UsageTotals } from '@agent-dock/shared';
+import type { DailyUsage, UsageTotals, BlockUsage } from '@agent-dock/shared';
 
 export interface UsageData {
   today: DailyUsage | null;
   totals: UsageTotals;
   /** Daily usage history (sorted by date ascending) */
   daily: DailyUsage[];
+  /** Block usage history for finer granularity (sorted by startTime ascending) */
+  blocks: BlockUsage[];
 }
 
 interface CcusageOutput {
@@ -36,6 +38,22 @@ interface CcusageOutput {
     totalCost: number;
     totalTokens: number;
   };
+  blocks?: Array<{
+    id: string;
+    startTime: string;
+    endTime: string;
+    isActive: boolean;
+    isGap: boolean;
+    tokenCounts: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationInputTokens: number;
+      cacheReadInputTokens: number;
+    };
+    totalTokens: number;
+    costUSD: number;
+    models: string[];
+  }>;
 }
 
 export interface UsageMonitorEvents {
@@ -48,8 +66,10 @@ export interface UsageMonitorOptions {
   interval?: number;
   /** Command to run ccusage (default: 'npx') */
   command?: string;
-  /** Arguments for ccusage (default: ['ccusage', '--json']) */
-  args?: string[];
+  /** Arguments for ccusage daily (default: ['ccusage', 'daily', '--json', '--breakdown']) */
+  dailyArgs?: string[];
+  /** Arguments for ccusage blocks (default: ['ccusage', 'blocks', '--json', '--recent']) */
+  blocksArgs?: string[];
 }
 
 export class UsageMonitor extends EventEmitter {
@@ -63,7 +83,8 @@ export class UsageMonitor extends EventEmitter {
     this.options = {
       interval: options.interval ?? 30000,
       command: options.command ?? 'npx',
-      args: options.args ?? ['ccusage', '--json'],
+      dailyArgs: options.dailyArgs ?? ['ccusage', 'daily', '--json', '--breakdown'],
+      blocksArgs: options.blocksArgs ?? ['ccusage', 'blocks', '--json', '--recent'],
     };
   }
 
@@ -116,22 +137,48 @@ export class UsageMonitor extends EventEmitter {
     this.isRunning = true;
 
     try {
-      const output = await this.runCcusage();
-      const data = JSON.parse(output) as CcusageOutput;
+      // Fetch daily and blocks data in parallel
+      const [dailyOutput, blocksOutput] = await Promise.all([
+        this.runCcusage(this.options.dailyArgs),
+        this.runCcusage(this.options.blocksArgs).catch(() => '{"blocks":[]}'), // Blocks may fail, default to empty
+      ]);
+
+      const dailyData = JSON.parse(dailyOutput) as CcusageOutput;
+      const blocksData = JSON.parse(blocksOutput) as { blocks?: CcusageOutput['blocks'] };
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split('T')[0];
 
       // Find today's usage
-      const todayUsage = data.daily.find((d) => d.date === today) ?? null;
+      const todayUsage = dailyData.daily.find((d) => d.date === today) ?? null;
 
       // Sort daily data by date ascending
-      const sortedDaily = [...data.daily].sort((a, b) => a.date.localeCompare(b.date));
+      const sortedDaily = [...dailyData.daily].sort((a, b) => a.date.localeCompare(b.date));
+
+      // Process blocks data
+      const blocks: BlockUsage[] = (blocksData.blocks ?? [])
+        .filter((b) => !b.isGap) // Filter out gap blocks
+        .map((b) => ({
+          id: b.id,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          isActive: b.isActive,
+          isGap: b.isGap,
+          inputTokens: b.tokenCounts.inputTokens,
+          outputTokens: b.tokenCounts.outputTokens,
+          cacheCreationTokens: b.tokenCounts.cacheCreationInputTokens,
+          cacheReadTokens: b.tokenCounts.cacheReadInputTokens,
+          totalTokens: b.totalTokens,
+          totalCost: b.costUSD,
+          modelsUsed: b.models,
+        }))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
       const usageData: UsageData = {
         today: todayUsage,
-        totals: data.totals,
+        totals: dailyData.totals,
         daily: sortedDaily,
+        blocks,
       };
 
       this.lastUsage = usageData;
@@ -147,9 +194,9 @@ export class UsageMonitor extends EventEmitter {
     }
   }
 
-  private runCcusage(): Promise<string> {
+  private runCcusage(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.options.command, this.options.args, {
+      const proc = spawn(this.options.command, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 

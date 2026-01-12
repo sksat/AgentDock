@@ -1,10 +1,12 @@
-import type { DailyUsage, UsageTotals } from '@agent-dock/shared';
+import type { BlockUsage, DailyUsage, UsageTotals } from '@agent-dock/shared';
 
 export interface GlobalUsageData {
   today: DailyUsage | null;
   totals: UsageTotals;
   /** Daily usage history (sorted by date ascending) */
   daily: DailyUsage[];
+  /** Block usage history for finer granularity (sorted by startTime ascending) */
+  blocks: BlockUsage[];
 }
 
 // Format cost to display nicely
