@@ -291,21 +291,25 @@ function SessionItem({
         </div>
       )}
 
-      {/* Delete button (shown on hover, not for active, running, or collapsed sessions) */}
-      {!isCollapsed && !isActive && session.status === 'idle' && (
+      {/* Delete button placeholder - always reserve space for consistent layout */}
+      {!isCollapsed && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
           aria-label={`Delete ${session.name}`}
+          disabled={isActive || session.status !== 'idle'}
           className={clsx(
-            'w-6 h-6 flex items-center justify-center rounded',
+            'w-6 h-6 flex items-center justify-center rounded flex-shrink-0',
             'text-text-secondary hover:text-accent-danger',
             'hover:bg-accent-danger/10',
-            'opacity-0 group-hover:opacity-100',
-            'focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent-danger/50',
-            'transition-all'
+            'focus:outline-none focus:ring-2 focus:ring-accent-danger/50',
+            'transition-all',
+            // Hide for active or non-idle sessions, show on hover for others
+            isActive || session.status !== 'idle'
+              ? 'invisible'
+              : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
           )}
         >
           <svg
