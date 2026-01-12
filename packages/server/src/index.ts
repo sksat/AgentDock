@@ -1,10 +1,16 @@
 import { createServer } from './server.js';
+import { testScenarios } from './test-scenarios.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const USE_MOCK = process.env.USE_MOCK === 'true' || process.env.USE_MOCK === '1';
 
-const server = createServer({ port: PORT, host: HOST, useMock: USE_MOCK });
+const server = createServer({
+  port: PORT,
+  host: HOST,
+  useMock: USE_MOCK,
+  mockScenarios: USE_MOCK ? testScenarios : [],
+});
 
 server.start().then(() => {
   console.log(`Claude Bridge server running at http://${HOST}:${PORT}`);
