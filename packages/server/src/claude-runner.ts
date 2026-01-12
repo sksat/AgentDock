@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
+import { spawn, ChildProcess } from 'child_process';
 import { StreamJsonParser, StreamEvent } from './stream-parser.js';
 
 export interface ClaudeRunnerOptions {
@@ -10,10 +11,17 @@ export interface ClaudeRunnerOptions {
   permissionToolName?: string;
 }
 
+export interface ImageContent {
+  type: 'image';
+  data: string; // base64 encoded image data
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+}
+
 export interface StartOptions {
   sessionId?: string;
   allowedTools?: string[];
   disallowedTools?: string[];
+  images?: ImageContent[];
 }
 
 export interface UsageData {
@@ -41,6 +49,7 @@ export interface ClaudeRunnerEvents {
 export class ClaudeRunner extends EventEmitter {
   private options: ClaudeRunnerOptions;
   private ptyProcess: IPty | null = null;
+  private childProcess: ChildProcess | null = null;
   private parser: StreamJsonParser;
   private buffer: string = '';
   private _isRunning: boolean = false;
@@ -62,7 +71,19 @@ export class ClaudeRunner extends EventEmitter {
 
   start(prompt: string, options: StartOptions = {}): void {
     const args = this.buildArgs(prompt, options);
+    const hasImages = options.images && options.images.length > 0;
 
+    if (hasImages) {
+      // Use child_process.spawn with pipes for image messages
+      // This allows us to write stdin before the process reads it
+      this.startWithPipes(prompt, args, options.images!);
+    } else {
+      // Use PTY for regular messages (supports interactive features)
+      this.startWithPty(prompt, args);
+    }
+  }
+
+  private startWithPty(prompt: string, args: string[]): void {
     console.log('[ClaudeRunner] Starting with PTY:', this.options.claudePath, args.join(' '));
 
     this.ptyProcess = pty.spawn(this.options.claudePath!, args, {
@@ -76,7 +97,6 @@ export class ClaudeRunner extends EventEmitter {
     console.log('[ClaudeRunner] PTY process started with PID:', this.ptyProcess.pid);
 
     this._isRunning = true;
-
     this.emit('started', { pid: this.ptyProcess.pid });
 
     this.ptyProcess.onData((data: string) => {
@@ -90,9 +110,102 @@ export class ClaudeRunner extends EventEmitter {
     });
   }
 
+  private startWithPipes(prompt: string, args: string[], images: ImageContent[]): void {
+    console.log('[ClaudeRunner] Starting with pipes for image:', this.options.claudePath, args.join(' '));
+    console.log('[ClaudeRunner] Images attached:', images.length);
+
+    // Build the user message with images
+    const userMessage = this.buildUserMessageWithImages(prompt, images);
+
+    this.childProcess = spawn(this.options.claudePath!, args, {
+      cwd: this.options.workingDir,
+      env: process.env as NodeJS.ProcessEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    console.log('[ClaudeRunner] Child process started with PID:', this.childProcess.pid);
+
+    // Write the image message to stdin immediately, then close stdin
+    if (this.childProcess.stdin) {
+      this.childProcess.stdin.write(userMessage + '\n');
+      this.childProcess.stdin.end();
+      console.log('[ClaudeRunner] Image message written to stdin');
+    }
+
+    this._isRunning = true;
+    this.emit('started', { pid: this.childProcess.pid ?? 0 });
+
+    // Handle stdout
+    if (this.childProcess.stdout) {
+      this.childProcess.stdout.on('data', (data: Buffer) => {
+        this.handleStdout(data.toString());
+      });
+    }
+
+    // Handle stderr (log but don't crash)
+    if (this.childProcess.stderr) {
+      this.childProcess.stderr.on('data', (data: Buffer) => {
+        console.error('[ClaudeRunner] stderr:', data.toString());
+      });
+    }
+
+    // Handle exit
+    this.childProcess.on('exit', (code, signal) => {
+      console.log('[ClaudeRunner] Child process exited:', code, signal);
+      this._isRunning = false;
+      this.emit('exit', { code, signal: signal ?? null });
+    });
+
+    this.childProcess.on('error', (error) => {
+      console.error('[ClaudeRunner] Child process error:', error);
+      this._isRunning = false;
+      this.emit('error', { type: 'process', message: error.message, error });
+    });
+  }
+
+  /**
+   * Build a stream-json user message with images
+   */
+  private buildUserMessageWithImages(prompt: string, images: ImageContent[]): string {
+    const content: Array<{ type: string; source?: { type: string; media_type: string; data: string }; text?: string }> = [];
+
+    // Add images first
+    for (const img of images) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType,
+          data: img.data,
+        },
+      });
+    }
+
+    // Add text prompt
+    if (prompt) {
+      content.push({
+        type: 'text',
+        text: prompt,
+      });
+    }
+
+    const message = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content,
+      },
+    };
+
+    return JSON.stringify(message);
+  }
+
   stop(): void {
     if (this.ptyProcess) {
       this.ptyProcess.kill();
+    }
+    if (this.childProcess) {
+      this.childProcess.kill();
     }
   }
 
@@ -100,10 +213,18 @@ export class ClaudeRunner extends EventEmitter {
     if (this.ptyProcess) {
       this.ptyProcess.write(input + '\n');
     }
+    // Note: sendInput is not supported for child process mode (image messages)
+    // as stdin is closed after sending the image
   }
 
   private buildArgs(prompt: string, options: StartOptions): string[] {
-    const args: string[] = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
+    const hasImages = options.images && options.images.length > 0;
+
+    // When images are present, use stream-json input format with empty prompt
+    // The actual content (including images) is sent via stdin using pipes
+    const args: string[] = hasImages
+      ? ['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']
+      : ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
     if (options.sessionId) {
       args.push('--resume', options.sessionId);
@@ -121,10 +242,6 @@ export class ClaudeRunner extends EventEmitter {
     if (options.disallowedTools && options.disallowedTools.length > 0) {
       args.push('--disallowedTools', options.disallowedTools.join(','));
     }
-
-    // TODO: Image support via stream-json input format
-    // The -f flag doesn't exist in Claude CLI
-    // Images need to be sent via stdin with --input-format stream-json
 
     return args;
   }
@@ -166,6 +283,7 @@ export class ClaudeRunner extends EventEmitter {
           permissionMode: event.permissionMode,
           cwd: event.cwd,
         });
+
         break;
 
       case 'assistant':

@@ -128,6 +128,13 @@ function App() {
     }
   }, [isConnected, sessionsLoaded, sessions, activeSessionId, selectSession]);
 
+  // Show toast when error occurs
+  useEffect(() => {
+    if (error) {
+      showToast('Error', error, 'error');
+    }
+  }, [error, showToast]);
+
   const handleAllow = useCallback(
     (requestId: string, updatedInput: unknown) => {
       respondToPermission(requestId, { behavior: 'allow', updatedInput });

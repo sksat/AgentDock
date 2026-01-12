@@ -329,11 +329,25 @@ export function createServer(options: ServerOptions): BridgeServer {
         });
         break;
 
-      case 'exit':
+      case 'exit': {
+        const exitData = eventData as { code: number | null; signal: string | null };
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
         sessionManager.updateSessionStatus(sessionId, 'idle');
+
+        // If process exited with error and no result was sent, notify client
+        const acc = turnAccumulator.get(sessionId);
+        const hadNoResult = !acc || (!acc.text && !acc.thinking);
+        if (exitData.code !== 0 && hadNoResult) {
+          console.log(`[Server] Claude process exited with error code ${exitData.code} for session ${sessionId}`);
+          sendToSession(sessionId, {
+            type: 'error',
+            sessionId,
+            message: `Claude process exited unexpectedly (code: ${exitData.code})`,
+          });
+        }
         break;
+      }
 
       case 'system': {
         const systemData = eventData as {
@@ -589,10 +603,15 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Update session status
         sessionManager.updateSessionStatus(message.sessionId, 'running');
 
-        // TODO: Image support - images are displayed in UI but not yet sent to Claude
-        // Claude CLI doesn't have a -f flag, need to use --input-format stream-json
-        if (message.images && message.images.length > 0) {
-          console.log('[Server] Images attached but not sent to Claude CLI (not yet supported)');
+        // Convert ImageAttachment to ImageContent for the runner
+        const images = message.images?.map((img) => ({
+          type: 'image' as const,
+          data: img.data,
+          mediaType: img.mediaType,
+        }));
+
+        if (images && images.length > 0) {
+          console.log('[Server] Images attached:', images.length);
         }
 
         // Start Claude CLI with MCP permission handling
@@ -616,6 +635,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
+            images,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit

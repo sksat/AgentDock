@@ -1,4 +1,4 @@
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions } from './claude-runner.js';
+import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent } from './claude-runner.js';
 import { EventEmitter } from 'events';
 
 export type RunnerEventType = keyof ClaudeRunnerEvents;
@@ -14,6 +14,7 @@ export interface StartSessionOptions {
   mcpConfigPath?: string;
   permissionToolName?: string;
   claudeSessionId?: string;
+  images?: ImageContent[];
   onEvent: RunnerEventHandler;
 }
 
@@ -78,6 +79,7 @@ export class RunnerManager {
     // Start the runner
     runner.start(prompt, {
       sessionId: options.claudeSessionId,
+      images: options.images,
     });
   }
 
