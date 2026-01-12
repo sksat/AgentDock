@@ -14,8 +14,6 @@ export interface StartSessionOptions {
   mcpConfigPath?: string;
   permissionToolName?: string;
   claudeSessionId?: string;
-  /** Image file paths to include with the prompt */
-  imageFiles?: string[];
   onEvent: RunnerEventHandler;
 }
 
@@ -80,7 +78,6 @@ export class RunnerManager {
     // Start the runner
     runner.start(prompt, {
       sessionId: options.claudeSessionId,
-      imageFiles: options.imageFiles,
     });
   }
 

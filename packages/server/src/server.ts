@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { serve, type ServerType } from '@hono/node-server';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import { writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,8 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, ImageAttachment } from '@claude-bridge/shared';
-import { randomBytes } from 'node:crypto';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage } from '@claude-bridge/shared';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
@@ -89,41 +88,6 @@ function cleanupMcpConfig(sessionId: string): void {
   const configPath = join(tmpdir(), 'claude-bridge-mcp', `mcp-config-${sessionId}.json`);
   if (existsSync(configPath)) {
     rmSync(configPath);
-  }
-}
-
-/**
- * Save images to temporary files and return their paths
- */
-function saveImagesToTempFiles(images: ImageAttachment[]): string[] {
-  const imageDir = join(tmpdir(), 'claude-bridge-images');
-  if (!existsSync(imageDir)) {
-    mkdirSync(imageDir, { recursive: true });
-  }
-
-  const imagePaths: string[] = [];
-  for (const image of images) {
-    const ext = image.mediaType.split('/')[1]; // e.g., 'jpeg', 'png'
-    const filename = `${randomBytes(16).toString('hex')}.${ext}`;
-    const filepath = join(imageDir, filename);
-
-    // Decode base64 and save to file
-    const buffer = Buffer.from(image.data, 'base64');
-    writeFileSync(filepath, buffer);
-    imagePaths.push(filepath);
-  }
-
-  return imagePaths;
-}
-
-/**
- * Clean up temporary image files
- */
-function cleanupImageFiles(imagePaths: string[]): void {
-  for (const filepath of imagePaths) {
-    if (existsSync(filepath)) {
-      rmSync(filepath);
-    }
   }
 }
 
@@ -625,10 +589,10 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Update session status
         sessionManager.updateSessionStatus(message.sessionId, 'running');
 
-        // Save images to temporary files if present
-        let imageFiles: string[] = [];
+        // TODO: Image support - images are displayed in UI but not yet sent to Claude
+        // Claude CLI doesn't have a -f flag, need to use --input-format stream-json
         if (message.images && message.images.length > 0) {
-          imageFiles = saveImagesToTempFiles(message.images);
+          console.log('[Server] Images attached but not sent to Claude CLI (not yet supported)');
         }
 
         // Start Claude CLI with MCP permission handling
@@ -652,16 +616,12 @@ export function createServer(options: ServerOptions): BridgeServer {
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
-            imageFiles: imageFiles.length > 0 ? imageFiles : undefined,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
-              // Clean up MCP config and image files on exit
+              // Clean up MCP config on exit
               if (eventType === 'exit') {
                 if (mcpConfigPath) {
                   cleanupMcpConfig(sessionId);
-                }
-                if (imageFiles.length > 0) {
-                  cleanupImageFiles(imageFiles);
                 }
               }
             },
@@ -669,10 +629,6 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Don't send response here - events will be sent via handleRunnerEvent
           return;
         } catch (error) {
-          // Clean up image files on error
-          if (imageFiles.length > 0) {
-            cleanupImageFiles(imageFiles);
-          }
           sessionManager.updateSessionStatus(message.sessionId, 'idle');
           response = {
             type: 'error',

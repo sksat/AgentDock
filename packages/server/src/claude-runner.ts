@@ -14,8 +14,6 @@ export interface StartOptions {
   sessionId?: string;
   allowedTools?: string[];
   disallowedTools?: string[];
-  /** Image file paths to include with the prompt */
-  imageFiles?: string[];
 }
 
 export interface UsageData {
@@ -124,12 +122,9 @@ export class ClaudeRunner extends EventEmitter {
       args.push('--disallowedTools', options.disallowedTools.join(','));
     }
 
-    // Add image files with -f option
-    if (options.imageFiles && options.imageFiles.length > 0) {
-      for (const imagePath of options.imageFiles) {
-        args.push('-f', imagePath);
-      }
-    }
+    // TODO: Image support via stream-json input format
+    // The -f flag doesn't exist in Claude CLI
+    // Images need to be sent via stdin with --input-format stream-json
 
     return args;
   }

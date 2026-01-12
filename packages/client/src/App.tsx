@@ -81,7 +81,6 @@ function App() {
     renameSession,
     sendMessage,
     clearMessages,
-    addSystemMessage,
     compactSession,
     respondToPermission,
     respondToQuestion,
