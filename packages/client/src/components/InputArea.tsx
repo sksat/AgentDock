@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
 import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
+import { PermissionModeSelector } from './PermissionModeSelector';
 import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
 
 export interface TokenUsage {
@@ -25,6 +26,9 @@ export interface InputAreaProps {
   tokenUsage?: TokenUsage;
   thinkingEnabled?: boolean;
   onToggleThinking?: () => void;
+  // Slash command callbacks
+  onNewSession?: () => void;
+  onClearMessages?: () => void;
 }
 
 export function InputArea({
@@ -41,9 +45,12 @@ export function InputArea({
   tokenUsage,
   thinkingEnabled = false,
   onToggleThinking,
+  onNewSession,
+  onClearMessages,
 }: InputAreaProps) {
   const [value, setValue] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showPermissionModeSelector, setShowPermissionModeSelector] = useState(false);
   const [showSlashCommands, setShowSlashCommands] = useState(false);
   const [slashCommandIndex, setSlashCommandIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,15 +76,34 @@ export function InputArea({
     }
   }, [onModelChange, value]);
 
+  // Handle permission mode selection
+  const handlePermissionModeSelect = useCallback((mode: PermissionMode) => {
+    if (onPermissionModeChange) {
+      onPermissionModeChange(mode);
+    }
+    setShowPermissionModeSelector(false);
+  }, [onPermissionModeChange]);
+
   // Handle slash command selection
   const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
     setShowSlashCommands(false);
     setValue(''); // Clear input
-    if (command.name === 'model') {
-      // Use setTimeout to ensure state updates don't conflict
-      setTimeout(() => setShowModelSelector(true), 0);
+    switch (command.name) {
+      case 'model':
+        // Use setTimeout to ensure state updates don't conflict
+        setTimeout(() => setShowModelSelector(true), 0);
+        break;
+      case 'permission':
+        setTimeout(() => setShowPermissionModeSelector(true), 0);
+        break;
+      case 'new':
+        onNewSession?.();
+        break;
+      case 'clear':
+        onClearMessages?.();
+        break;
     }
-  }, []);
+  }, [onNewSession, onClearMessages]);
 
   // Handle input change - detect slash commands
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -279,11 +305,24 @@ export function InputArea({
         <SlashCommandSuggestions
           query={value}
           currentModel={model}
+          permissionMode={permissionMode}
           selectedIndex={slashCommandIndex}
           onSelect={handleSlashCommandSelect}
           onClose={() => setShowSlashCommands(false)}
           isOpen={showSlashCommands}
         />
+
+        {/* Permission mode selector (triggered by /permission) */}
+        {showPermissionModeSelector && (
+          <div className="absolute bottom-full left-0 mb-2 z-50">
+            <PermissionModeSelector
+              currentMode={permissionMode}
+              onSelectMode={handlePermissionModeSelect}
+              isOpen={showPermissionModeSelector}
+              onClose={() => setShowPermissionModeSelector(false)}
+            />
+          </div>
+        )}
 
         {/* Text input area */}
         <textarea

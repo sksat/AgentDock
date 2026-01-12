@@ -4,6 +4,7 @@ export { InputArea, type InputAreaProps } from './InputArea';
 export { LoadingIndicator, type LoadingIndicatorProps } from './LoadingIndicator';
 export { MessageStream, type MessageStreamItem, type MessageStreamProps } from './MessageStream';
 export { NewSessionModal, type NewSessionModalProps } from './NewSessionModal';
+export { PermissionModeSelector, type PermissionModeSelectorProps } from './PermissionModeSelector';
 export { PermissionRequest, type PermissionRequestProps } from './PermissionRequest';
 export { Sidebar, type SidebarSession, type SidebarProps } from './Sidebar';
 export { SlashCommandSuggestions, type SlashCommand, type SlashCommandSuggestionsProps } from './SlashCommandSuggestions';

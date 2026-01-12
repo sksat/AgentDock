@@ -80,6 +80,7 @@ function App() {
     deleteSession,
     renameSession,
     sendMessage,
+    clearMessages,
     respondToPermission,
     respondToQuestion,
     interrupt,
@@ -278,6 +279,8 @@ function App() {
             tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
             thinkingEnabled={thinkingEnabled}
             onToggleThinking={handleToggleThinking}
+            onNewSession={() => setIsNewSessionModalOpen(true)}
+            onClearMessages={clearMessages}
           />
         </main>
       </div>

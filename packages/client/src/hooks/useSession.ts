@@ -75,6 +75,7 @@ export interface UseSessionReturn {
 
   // Message handling
   sendMessage: (content: string) => void;
+  clearMessages: () => void;
   respondToPermission: (
     requestId: string,
     response: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }
@@ -263,6 +264,26 @@ export function useSession(): UseSessionReturn {
     },
     [activeSessionId, send, updateSessionMessages]
   );
+
+  const clearMessages = useCallback(() => {
+    if (!activeSessionId) return;
+    setSessionMessages((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(activeSessionId, []);
+      return newMap;
+    });
+    // Also clear usage info for this session
+    setSessionUsageInfo((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(activeSessionId);
+      return newMap;
+    });
+    setSessionModelUsage((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(activeSessionId);
+      return newMap;
+    });
+  }, [activeSessionId]);
 
   const respondToPermission = useCallback(
     (
@@ -712,6 +733,7 @@ export function useSession(): UseSessionReturn {
     deleteSession,
     renameSession,
     sendMessage,
+    clearMessages,
     respondToPermission,
     respondToQuestion,
     interrupt,
