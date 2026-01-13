@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import type { ScreencastMetadata } from '@agent-dock/shared';
 
 export interface BrowserViewFrame {
@@ -47,6 +47,49 @@ export function BrowserView({
 }: BrowserViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
+
+  // Calculate canvas display size based on container size while maintaining aspect ratio
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !frame) return;
+
+    const updateSize = () => {
+      const containerRect = container.getBoundingClientRect();
+      // Account for padding (p-4 = 16px * 2 = 32px)
+      const availableWidth = containerRect.width - 32;
+      const availableHeight = containerRect.height - 32;
+
+      const frameWidth = frame.metadata.deviceWidth;
+      const frameHeight = frame.metadata.deviceHeight;
+      const aspectRatio = frameWidth / frameHeight;
+
+      let displayWidth: number;
+      let displayHeight: number;
+
+      // Fit within available space while maintaining aspect ratio
+      if (availableWidth / availableHeight > aspectRatio) {
+        // Container is wider than frame aspect ratio - height is limiting
+        displayHeight = availableHeight;
+        displayWidth = displayHeight * aspectRatio;
+      } else {
+        // Container is taller than frame aspect ratio - width is limiting
+        displayWidth = availableWidth;
+        displayHeight = displayWidth / aspectRatio;
+      }
+
+      setCanvasSize({ width: Math.floor(displayWidth), height: Math.floor(displayHeight) });
+    };
+
+    // Initial size calculation
+    updateSize();
+
+    // Update on resize
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [frame]);
 
   // Draw frame to canvas when it changes
   useEffect(() => {
@@ -127,14 +170,6 @@ export function BrowserView({
     [isActive, onMouseMove]
   );
 
-  // Prevent auxiliary button clicks (back/forward mouse buttons) from navigating
-  const handleAuxClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-    },
-    []
-  );
-
   // Prevent context menu on right-click
   const handleContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -144,16 +179,44 @@ export function BrowserView({
     [isActive]
   );
 
-  // Prevent mousedown default for non-left clicks (auxiliary buttons)
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      // button 0 = left, 1 = middle, 2 = right, 3 = back, 4 = forward
-      if (e.button !== 0) {
+  // Set up native event listeners for auxiliary button capture
+  // React's synthetic events don't always capture browser navigation gestures
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Prevent back/forward mouse button navigation
+    const handleMouseDown = (e: MouseEvent) => {
+      // button 3 = back, 4 = forward
+      if (e.button === 3 || e.button === 4) {
         e.preventDefault();
+        e.stopPropagation();
       }
-    },
-    []
-  );
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 3 || e.button === 4) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    // Some browsers use auxclick for navigation
+    const handleAuxClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    container.addEventListener('mousedown', handleMouseDown, { capture: true });
+    container.addEventListener('mouseup', handleMouseUp, { capture: true });
+    container.addEventListener('auxclick', handleAuxClick, { capture: true });
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown, { capture: true });
+      container.removeEventListener('mouseup', handleMouseUp, { capture: true });
+      container.removeEventListener('auxclick', handleAuxClick, { capture: true });
+    };
+  }, []);
 
   // Inactive state - show Start Browser button
   if (!isActive && !frame) {
@@ -221,14 +284,11 @@ export function BrowserView({
           onClick={handleClick}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
-          onMouseDown={handleMouseDown}
-          onAuxClick={handleAuxClick}
           onContextMenu={handleContextMenu}
           className="border border-border rounded shadow-lg"
           style={{
-            maxWidth: '100%',
-            maxHeight: '100%',
-            aspectRatio: `${width} / ${height}`,
+            width: canvasSize?.width ?? 'auto',
+            height: canvasSize?.height ?? 'auto',
             cursor: cursor || 'default',
           }}
         />
