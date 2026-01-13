@@ -62,6 +62,9 @@ export class SessionManager {
   private sessionCounter: number;
   private sessionsBaseDir: string;
 
+  // In-memory storage for ephemeral sessions (not yet persisted to DB)
+  private ephemeralSessions = new Map<string, SessionInfo>();
+
   // Prepared statements for better performance
   private stmts: {
     insertSession: Database.Statement;
@@ -177,15 +180,76 @@ export class SessionManager {
 
     const createdAt = new Date().toISOString();
     const name = options.name ?? `Session ${this.sessionCounter}`;
-    const status = 'idle';
+    const status: SessionStatus = 'idle';
 
-    this.stmts.insertSession.run(id, name, workingDir, createdAt, status, null, null, null);
+    const session: SessionInfo = {
+      id,
+      name,
+      workingDir,
+      createdAt,
+      status,
+    };
 
-    // Return the same structure as getSession for consistency
-    return this.getSession(id)!;
+    // If explicit name provided, persist immediately
+    // Otherwise, store as ephemeral (not persisted until first message or rename)
+    const hasExplicitName = options.name !== undefined && options.name !== '';
+    if (hasExplicitName) {
+      this.persistSession(session);
+    } else {
+      this.ephemeralSessions.set(id, session);
+    }
+
+    return session;
+  }
+
+  /**
+   * Check if a session is ephemeral (not yet persisted to DB)
+   */
+  isEphemeral(id: string): boolean {
+    return this.ephemeralSessions.has(id);
+  }
+
+  /**
+   * Persist an ephemeral session to the database.
+   * Can also be called with a new session to insert it directly.
+   */
+  persistSession(session: SessionInfo): void {
+    // Remove from ephemeral storage first (if present)
+    this.ephemeralSessions.delete(session.id);
+
+    // Check if already in DB
+    const existing = this.stmts.getSession.get(session.id);
+    if (existing) return;
+
+    this.stmts.insertSession.run(
+      session.id,
+      session.name,
+      session.workingDir,
+      session.createdAt,
+      session.status,
+      session.claudeSessionId ?? null,
+      session.permissionMode ?? null,
+      session.model ?? null
+    );
+  }
+
+  /**
+   * Ensure a session is persisted before modifying DB.
+   * Triggers persistence for ephemeral sessions.
+   */
+  private ensurePersisted(id: string): void {
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      this.persistSession(ephemeral);
+    }
   }
 
   getSession(id: string): SessionInfo | undefined {
+    // Check ephemeral first
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) return ephemeral;
+
+    // Then check DB
     const row = this.stmts.getSession.get(id) as SessionRow | undefined;
     return row ? this.rowToSessionInfo(row) : undefined;
   }
@@ -196,8 +260,9 @@ export class SessionManager {
   }
 
   listSessions(): SessionInfo[] {
+    // Get persisted sessions from DB
     const rows = this.stmts.listSessions.all() as SessionRow[];
-    return rows.map((row) => {
+    const persisted = rows.map((row) => {
       const session = this.rowToSessionInfo(row);
       const modelUsage = this.getModelUsage(row.id);
 
@@ -243,6 +308,13 @@ export class SessionManager {
 
       return session;
     });
+
+    // Add ephemeral sessions (sorted by creation time, newest first)
+    const ephemeral = Array.from(this.ephemeralSessions.values())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    // Combine: ephemeral first (newest), then persisted
+    return [...ephemeral, ...persisted];
   }
 
   /**
@@ -269,16 +341,31 @@ export class SessionManager {
   }
 
   deleteSession(id: string): boolean {
+    // Check ephemeral first
+    if (this.ephemeralSessions.has(id)) {
+      this.ephemeralSessions.delete(id);
+      return true;
+    }
+
+    // Then try DB
     const result = this.stmts.deleteSession.run(id);
     return result.changes > 0;
   }
 
   renameSession(id: string, name: string): boolean {
+    // Persist ephemeral session first (renaming triggers persistence)
+    this.ensurePersisted(id);
     const result = this.stmts.updateName.run(name, id);
     return result.changes > 0;
   }
 
   updateSessionStatus(id: string, status: SessionStatus): boolean {
+    // Handle ephemeral sessions in-memory (don't trigger persistence)
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      ephemeral.status = status;
+      return true;
+    }
     const result = this.stmts.updateStatus.run(status, id);
     return result.changes > 0;
   }
@@ -289,6 +376,8 @@ export class SessionManager {
   }
 
   addMessage(id: string, message: MessageItem): void {
+    // Persist ephemeral session first (adding message triggers persistence)
+    this.ensurePersisted(id);
     const content = JSON.stringify(message.content);
     this.stmts.insertMessage.run(id, message.type, content, message.timestamp);
   }
@@ -298,16 +387,34 @@ export class SessionManager {
   }
 
   setClaudeSessionId(id: string, claudeSessionId: string): boolean {
+    // Handle ephemeral sessions in-memory (don't trigger persistence)
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      ephemeral.claudeSessionId = claudeSessionId;
+      return true;
+    }
     const result = this.stmts.updateClaudeSessionId.run(claudeSessionId, id);
     return result.changes > 0;
   }
 
   setPermissionMode(id: string, mode: PermissionMode): boolean {
+    // Handle ephemeral sessions in-memory (don't trigger persistence)
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      ephemeral.permissionMode = mode;
+      return true;
+    }
     const result = this.stmts.updatePermissionMode.run(mode, id);
     return result.changes > 0;
   }
 
   setModel(id: string, model: string): boolean {
+    // Handle ephemeral sessions in-memory (don't trigger persistence)
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      ephemeral.model = model;
+      return true;
+    }
     const result = this.stmts.updateModel.run(model, id);
     return result.changes > 0;
   }
@@ -316,6 +423,8 @@ export class SessionManager {
    * Add usage to session (accumulates with existing usage)
    */
   addUsage(id: string, usage: SessionUsage): boolean {
+    // Persist ephemeral session first (usage means session is active)
+    this.ensurePersisted(id);
     const result = this.stmts.addUsage.run(
       usage.inputTokens,
       usage.outputTokens,
@@ -351,6 +460,8 @@ export class SessionManager {
    * Add usage for a specific model in a session
    */
   addModelUsage(sessionId: string, modelName: string, usage: SessionUsage): void {
+    // Persist ephemeral session first (usage means session is active)
+    this.ensurePersisted(sessionId);
     this.stmts.upsertModelUsage.run(
       sessionId,
       modelName,
