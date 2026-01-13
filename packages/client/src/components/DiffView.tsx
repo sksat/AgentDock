@@ -18,6 +18,9 @@ export function DiffView({
   // Get file extension for display
   const extension = filePath.split('.').pop() || '';
 
+  // Count lines
+  const lineCount = newContent.split('\n').length;
+
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       {/* Header */}
@@ -28,15 +31,18 @@ export function DiffView({
           </span>
           <span className="font-mono text-sm text-text-primary">{filePath}</span>
         </div>
-        {isNewFile && (
-          <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
-            New file
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-secondary">{lineCount} lines</span>
+          {isNewFile && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
+              New file
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Diff content */}
-      <div data-testid="diff-container" className="overflow-x-auto">
+      {/* Diff content - max height with scroll */}
+      <div data-testid="diff-container" className="overflow-x-auto max-h-[400px] overflow-y-auto">
         {isNewFile ? (
           <NewFileView content={newContent} extension={extension} />
         ) : (

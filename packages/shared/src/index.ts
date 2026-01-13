@@ -403,6 +403,12 @@ export interface SessionAttachedMessage {
     cacheCreationTokens: number;
     cacheReadTokens: number;
   }>;
+  /** Pending permission request that needs user response */
+  pendingPermission?: {
+    requestId: string;
+    toolName: string;
+    input: unknown;
+  };
 }
 
 export interface SessionListMessage {

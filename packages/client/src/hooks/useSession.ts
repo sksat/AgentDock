@@ -833,6 +833,14 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
           }
+          // Restore pending permission if there was one
+          if (message.pendingPermission) {
+            setSessionPendingPermissions((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(message.sessionId, message.pendingPermission!);
+              return newMap;
+            });
+          }
           break;
         }
 

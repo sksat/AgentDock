@@ -274,6 +274,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to set of tools that are allowed for the entire session
   const sessionAllowedTools = new Map<string, Set<string>>();
 
+  // Map session ID to pending permission request (for restoring on reload)
+  const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
+
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
     const message: GlobalUsageMessage = {
@@ -596,6 +599,12 @@ export function createServer(options: ServerOptions): BridgeServer {
         };
         // Update session status
         updateAndBroadcastStatus(sessionId, 'waiting_permission');
+        // Store pending permission for restoration on reload
+        sessionPendingPermissions.set(sessionId, {
+          requestId: permData.requestId,
+          toolName: permData.toolName,
+          input: permData.input,
+        });
         // Forward to client
         sendToSession(sessionId, {
           type: 'permission_request',
@@ -655,12 +664,14 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (session) {
           const usage = sessionManager.getUsage(message.sessionId);
           const modelUsage = sessionManager.getModelUsage(message.sessionId);
+          const pendingPermission = sessionPendingPermissions.get(message.sessionId);
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
             history: sessionManager.getHistory(message.sessionId),
             usage: usage ?? undefined,
             modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
+            pendingPermission: pendingPermission ?? undefined,
           };
         } else {
           response = {
@@ -912,6 +923,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           console.log(`[Session ${message.sessionId}] Tool "${message.response.toolName}" allowed for session`);
         }
 
+        // Clear the stored pending permission (no longer pending)
+        sessionPendingPermissions.delete(message.sessionId);
+
         // First check if this is for a mock runner
         const runner = runnerManager.getRunner(message.sessionId);
         if (runner && 'respondToPermission' in runner) {
@@ -983,6 +997,13 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // Store MCP WebSocket for response
         pendingPermissionRequests.set(message.requestId, ws);
+
+        // Store pending permission for restoration on reload
+        sessionPendingPermissions.set(message.sessionId, {
+          requestId: message.requestId,
+          toolName: message.toolName,
+          input: message.input,
+        });
 
         // Update session status
         updateAndBroadcastStatus(message.sessionId, 'waiting_permission');
