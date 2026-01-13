@@ -233,8 +233,13 @@ export class ClaudeRunner extends EventEmitter {
     if (this.options.mcpConfigPath && this.options.permissionToolName) {
       args.push('--permission-prompt-tool', this.options.permissionToolName);
       args.push('--mcp-config', this.options.mcpConfigPath);
-      // Only use our MCP config, ignore all other MCP configurations (including built-in Playwright)
-      args.push('--strict-mcp-config');
+      // Disable Playwright plugin to avoid conflict with AgentDock's built-in browser
+      // Other plugins (like frontend-design) remain enabled
+      args.push('--settings', JSON.stringify({
+        enabledPlugins: {
+          'playwright@claude-plugins-official': false,
+        },
+      }));
     }
 
     if (options.allowedTools && options.allowedTools.length > 0) {
