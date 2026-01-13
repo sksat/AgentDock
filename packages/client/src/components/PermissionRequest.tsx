@@ -23,6 +23,12 @@ interface EditInput {
   new_string: string;
 }
 
+interface ReadInput {
+  file_path: string;
+  offset?: number;
+  limit?: number;
+}
+
 function isWriteInput(input: unknown): input is WriteInput {
   return (
     typeof input === 'object' &&
@@ -44,6 +50,49 @@ function isEditInput(input: unknown): input is EditInput {
     typeof (input as EditInput).file_path === 'string' &&
     typeof (input as EditInput).old_string === 'string' &&
     typeof (input as EditInput).new_string === 'string'
+  );
+}
+
+function isReadInput(input: unknown): input is ReadInput {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'file_path' in input &&
+    typeof (input as ReadInput).file_path === 'string'
+  );
+}
+
+// Component for displaying Read tool requests
+function FileReadView({ filePath, offset, limit }: { filePath: string; offset?: number; limit?: number }) {
+  const hasRange = offset !== undefined || limit !== undefined;
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-primary overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="px-2 py-0.5 text-xs font-medium bg-blue-500/20 text-blue-400 rounded">
+            Read
+          </span>
+          <span className="font-mono text-sm text-text-primary">{filePath}</span>
+        </div>
+        {hasRange && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-bg-secondary text-text-secondary rounded">
+            {offset !== undefined && `offset: ${offset}`}
+            {offset !== undefined && limit !== undefined && ', '}
+            {limit !== undefined && `limit: ${limit}`}
+          </span>
+        )}
+      </div>
+
+      {/* Icon indicator */}
+      <div className="p-4 flex items-center gap-3 text-text-secondary">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span className="text-sm">Reading file contents</span>
+      </div>
+    </div>
   );
 }
 
@@ -93,6 +142,18 @@ export function PermissionRequest({
     return null;
   }, [toolName, input]);
 
+  // Determine if this is a Read operation
+  const readViewData = useMemo(() => {
+    if (toolName === 'Read' && isReadInput(input)) {
+      return {
+        filePath: input.file_path,
+        offset: input.offset,
+        limit: input.limit,
+      };
+    }
+    return null;
+  }, [toolName, input]);
+
   return (
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
       <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
@@ -107,6 +168,12 @@ export function PermissionRequest({
             filePath={diffViewData.filePath}
             oldContent={diffViewData.oldContent}
             newContent={diffViewData.newContent}
+          />
+        ) : readViewData ? (
+          <FileReadView
+            filePath={readViewData.filePath}
+            offset={readViewData.offset}
+            limit={readViewData.limit}
           />
         ) : (
           <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">

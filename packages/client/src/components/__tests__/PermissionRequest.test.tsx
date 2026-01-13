@@ -119,4 +119,31 @@ describe('PermissionRequest', () => {
     expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
+
+  it('should display Read tool with FileReadView', () => {
+    const readInput = {
+      file_path: '/home/user/document.txt',
+    };
+    render(<PermissionRequest {...defaultProps} toolName="Read" input={readInput} />);
+
+    // "Read" appears in both PermissionRequest header and FileReadView header
+    const readElements = screen.getAllByText('Read');
+    expect(readElements.length).toBe(2);
+    expect(screen.getByText('/home/user/document.txt')).toBeInTheDocument();
+    // Should show "Reading file contents" indicator
+    expect(screen.getByText(/Reading file contents/)).toBeInTheDocument();
+  });
+
+  it('should display Read tool with offset and limit', () => {
+    const readInput = {
+      file_path: '/home/user/large-file.log',
+      offset: 100,
+      limit: 50,
+    };
+    render(<PermissionRequest {...defaultProps} toolName="Read" input={readInput} />);
+
+    expect(screen.getByText('/home/user/large-file.log')).toBeInTheDocument();
+    expect(screen.getByText(/offset: 100/)).toBeInTheDocument();
+    expect(screen.getByText(/limit: 50/)).toBeInTheDocument();
+  });
 });

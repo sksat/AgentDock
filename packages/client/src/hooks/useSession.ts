@@ -146,6 +146,110 @@ type SessionPendingQuestion = Map<string, PendingQuestion>;
 // Store screencast state per session
 type SessionScreencast = Map<string, ScreencastState>;
 
+// Types for server-side message items
+interface ServerMessageItem {
+  type: string;
+  content: unknown;
+  timestamp: string;
+}
+
+interface ToolUseContent {
+  toolName: string;
+  toolUseId: string;
+  input: unknown;
+}
+
+interface ToolResultContent {
+  toolUseId: string;
+  content: string;
+  isError?: boolean;
+}
+
+/**
+ * Convert server-side history to client display format
+ * Merges tool_use + tool_result into bash_tool/mcp_tool for better display
+ */
+function convertHistoryForDisplay(history: ServerMessageItem[]): MessageStreamItem[] {
+  // Collect tool_result by toolUseId
+  const toolResults = new Map<string, ToolResultContent>();
+  for (const item of history) {
+    if (item.type === 'tool_result') {
+      const content = item.content as ToolResultContent;
+      toolResults.set(content.toolUseId, content);
+    }
+  }
+
+  // Convert and merge
+  const result: MessageStreamItem[] = [];
+  const processedToolUseIds = new Set<string>();
+
+  for (const item of history) {
+    if (item.type === 'tool_use') {
+      const content = item.content as ToolUseContent;
+      const toolResult = toolResults.get(content.toolUseId);
+
+      if (content.toolName === 'Bash') {
+        // Convert to bash_tool and merge with result
+        processedToolUseIds.add(content.toolUseId);
+        const bashInput = content.input as { command: string; description?: string };
+        result.push({
+          type: 'bash_tool',
+          content: {
+            toolUseId: content.toolUseId,
+            command: bashInput.command,
+            description: bashInput.description,
+            output: toolResult?.content ?? '',
+            isComplete: !!toolResult,
+            isError: toolResult?.isError ?? false,
+          } as BashToolContent,
+          timestamp: item.timestamp,
+        });
+      } else if (content.toolName.startsWith('mcp__')) {
+        // Convert to mcp_tool and merge with result
+        processedToolUseIds.add(content.toolUseId);
+        result.push({
+          type: 'mcp_tool',
+          content: {
+            toolUseId: content.toolUseId,
+            toolName: content.toolName,
+            input: content.input,
+            output: toolResult?.content ?? '',
+            isComplete: !!toolResult,
+            isError: toolResult?.isError ?? false,
+          } as McpToolContent,
+          timestamp: item.timestamp,
+        });
+      } else {
+        // Other tools stay as tool_use (don't merge with result)
+        result.push({
+          type: 'tool_use',
+          content: item.content,
+          timestamp: item.timestamp,
+        });
+      }
+    } else if (item.type === 'tool_result') {
+      const content = item.content as ToolResultContent;
+      // Skip if already merged into bash_tool/mcp_tool
+      if (!processedToolUseIds.has(content.toolUseId)) {
+        result.push({
+          type: 'tool_result',
+          content: item.content,
+          timestamp: item.timestamp,
+        });
+      }
+    } else {
+      // Pass through other message types
+      result.push({
+        type: item.type as MessageStreamItem['type'],
+        content: item.content,
+        timestamp: item.timestamp,
+      });
+    }
+  }
+
+  return result;
+}
+
 export function useSession(): UseSessionReturn {
   const sendRef = useRef<((message: ClientMessage) => void) | null>(null);
 
@@ -701,11 +805,8 @@ export function useSession(): UseSessionReturn {
 
         case 'session_attached': {
           // Convert MessageItem[] from server to MessageStreamItem[]
-          const history: MessageStreamItem[] = message.history.map((item) => ({
-            type: item.type as MessageStreamItem['type'],
-            content: item.content,
-            timestamp: item.timestamp,
-          }));
+          // Also merge tool_use/tool_result into bash_tool/mcp_tool for better display
+          const history = convertHistoryForDisplay(message.history);
           setSessionMessages((prev) => {
             const newMap = new Map(prev);
             newMap.set(message.sessionId, history);

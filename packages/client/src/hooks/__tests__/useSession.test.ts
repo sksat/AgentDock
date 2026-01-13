@@ -704,4 +704,144 @@ describe('useSession', () => {
       expect(result.current.screencast).toBeNull();
     });
   });
+
+  describe('History conversion for display', () => {
+    it('should convert Bash tool_use to bash_tool with merged result', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session history with Bash tool_use and tool_result
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [
+            {
+              type: 'tool_use',
+              content: { toolName: 'Bash', toolUseId: 'bash-1', input: { command: 'ls -la', description: 'List files' } },
+              timestamp: '2024-01-01T00:00:00Z',
+            },
+            {
+              type: 'tool_result',
+              content: { toolUseId: 'bash-1', content: 'file1.txt\nfile2.txt', isError: false },
+              timestamp: '2024-01-01T00:00:01Z',
+            },
+          ],
+        });
+      });
+
+      // Should have converted to bash_tool with merged result
+      expect(result.current.messages).toHaveLength(1);
+      expect(result.current.messages[0].type).toBe('bash_tool');
+      const content = result.current.messages[0].content as { command: string; output: string; isComplete: boolean };
+      expect(content.command).toBe('ls -la');
+      expect(content.output).toBe('file1.txt\nfile2.txt');
+      expect(content.isComplete).toBe(true);
+    });
+
+    it('should convert MCP tool_use to mcp_tool with merged result', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session history with MCP tool_use and tool_result
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [
+            {
+              type: 'tool_use',
+              content: { toolName: 'mcp__bridge__browser_navigate', toolUseId: 'mcp-1', input: { url: 'https://example.com' } },
+              timestamp: '2024-01-01T00:00:00Z',
+            },
+            {
+              type: 'tool_result',
+              content: { toolUseId: 'mcp-1', content: 'Navigated successfully', isError: false },
+              timestamp: '2024-01-01T00:00:01Z',
+            },
+          ],
+        });
+      });
+
+      // Should have converted to mcp_tool with merged result
+      expect(result.current.messages).toHaveLength(1);
+      expect(result.current.messages[0].type).toBe('mcp_tool');
+      const content = result.current.messages[0].content as { toolName: string; output: string; isComplete: boolean };
+      expect(content.toolName).toBe('mcp__bridge__browser_navigate');
+      expect(content.output).toBe('Navigated successfully');
+      expect(content.isComplete).toBe(true);
+    });
+
+    it('should keep other tool_use as tool_use type', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session history with Read tool (not Bash or mcp__)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [
+            {
+              type: 'tool_use',
+              content: { toolName: 'Read', toolUseId: 'read-1', input: { file_path: '/tmp/test.txt' } },
+              timestamp: '2024-01-01T00:00:00Z',
+            },
+            {
+              type: 'tool_result',
+              content: { toolUseId: 'read-1', content: 'file content', isError: false },
+              timestamp: '2024-01-01T00:00:01Z',
+            },
+          ],
+        });
+      });
+
+      // Read tool should stay as tool_use, and tool_result should be separate
+      expect(result.current.messages).toHaveLength(2);
+      expect(result.current.messages[0].type).toBe('tool_use');
+      expect(result.current.messages[1].type).toBe('tool_result');
+    });
+  });
 });
