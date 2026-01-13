@@ -350,6 +350,7 @@ export type ServerMessage =
   // Screencast
   | ScreencastFrameMessage
   | ScreencastStatusMessage
+  | ScreencastCursorMessage
   // Browser command result
   | BrowserCommandResultMessage
   // Error
@@ -506,6 +507,13 @@ export interface ScreencastStatusMessage {
   active: boolean;
   /** Current browser URL */
   browserUrl?: string;
+}
+
+export interface ScreencastCursorMessage {
+  type: 'screencast_cursor';
+  sessionId: string;
+  /** CSS cursor value (e.g., 'pointer', 'text', 'default') */
+  cursor: string;
 }
 
 // Browser command result (Server → MCP Server)

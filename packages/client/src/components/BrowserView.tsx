@@ -13,6 +13,8 @@ export interface BrowserViewProps {
   isActive: boolean;
   /** Current browser URL */
   browserUrl?: string;
+  /** Current cursor style from remote browser */
+  cursor?: string;
   /** Called when user clicks on the browser view */
   onMouseClick: (position: { x: number; y: number }) => void;
   /** Called when user presses a key while focused */
@@ -35,6 +37,7 @@ export function BrowserView({
   frame,
   isActive,
   browserUrl,
+  cursor,
   onMouseClick,
   onKeyPress,
   onScroll,
@@ -190,9 +193,10 @@ export function BrowserView({
           onClick={handleClick}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
-          className="border border-border rounded shadow-lg cursor-pointer max-w-full max-h-full"
+          className="border border-border rounded shadow-lg max-w-full max-h-full"
           style={{
             aspectRatio: `${width} / ${height}`,
+            cursor: cursor || 'default',
           }}
         />
       </div>

@@ -1155,6 +1155,25 @@ Keep it concise but comprehensive.`;
           const page = controller.getPage();
           if (page) {
             await page.mouse.move(message.x, message.y);
+
+            // Get cursor style at current position and send to client
+            const cursor = await page.evaluate(({ x, y }) => {
+              const el = document.elementFromPoint(x, y);
+              if (el) {
+                return window.getComputedStyle(el).cursor;
+              }
+              return 'default';
+            }, { x: message.x, y: message.y });
+
+            // Send cursor update to client
+            const clientWs = sessionWebSockets.get(message.sessionId);
+            if (clientWs && clientWs.readyState === 1) {
+              clientWs.send(JSON.stringify({
+                type: 'screencast_cursor',
+                sessionId: message.sessionId,
+                cursor,
+              }));
+            }
           }
         } catch {
           // Silent fail for mouse move

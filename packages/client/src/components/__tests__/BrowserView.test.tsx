@@ -15,6 +15,7 @@ const mockMetadata: ScreencastMetadata = {
 const defaultProps = {
   frame: null,
   isActive: false,
+  cursor: undefined,
   onMouseClick: () => {},
   onKeyPress: () => {},
   onScroll: () => {},

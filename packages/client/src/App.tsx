@@ -313,6 +313,7 @@ function App() {
                   frame={screencast?.frame ?? null}
                   isActive={screencast?.active ?? false}
                   browserUrl={screencast?.browserUrl}
+                  cursor={screencast?.cursor}
                   onMouseClick={(pos) => sendBrowserClick(pos.x, pos.y)}
                   onKeyPress={sendBrowserKeyPress}
                   onScroll={(delta) => sendBrowserScroll(delta.deltaX, delta.deltaY)}

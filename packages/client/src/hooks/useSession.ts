@@ -59,6 +59,7 @@ export interface ModelUsage {
 export interface ScreencastState {
   active: boolean;
   browserUrl?: string;
+  cursor?: string;
   frame?: {
     data: string;
     metadata: ScreencastMetadata;
@@ -1038,6 +1039,20 @@ export function useSession(): UseSessionReturn {
               ...current,
               active: message.active,
               browserUrl: message.browserUrl,
+            });
+            return newMap;
+          });
+          break;
+        }
+
+        case 'screencast_cursor': {
+          const sessionId = message.sessionId;
+          setSessionScreencast((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? { active: false };
+            newMap.set(sessionId, {
+              ...current,
+              cursor: message.cursor,
             });
             return newMap;
           });
