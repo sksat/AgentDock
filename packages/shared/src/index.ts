@@ -32,7 +32,9 @@ export type ClientMessage =
   | BrowserCommandMessage
   // User browser interaction (from client UI)
   | UserBrowserClickMessage
-  | UserBrowserKeyPressMessage;
+  | UserBrowserKeyPressMessage
+  | UserBrowserScrollMessage
+  | UserBrowserMouseMoveMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -149,6 +151,20 @@ export interface UserBrowserKeyPressMessage {
   type: 'user_browser_key_press';
   sessionId: string;
   key: string;
+}
+
+export interface UserBrowserScrollMessage {
+  type: 'user_browser_scroll';
+  sessionId: string;
+  deltaX: number;
+  deltaY: number;
+}
+
+export interface UserBrowserMouseMoveMessage {
+  type: 'user_browser_mouse_move';
+  sessionId: string;
+  x: number;
+  y: number;
 }
 
 // Browser command messages (MCP Server → AgentDock Server)

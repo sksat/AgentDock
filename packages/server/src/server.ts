@@ -1129,6 +1129,39 @@ Keep it concise but comprehensive.`;
         return;
       }
 
+      case 'user_browser_scroll': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for scroll in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.mouse.wheel(message.deltaX, message.deltaY);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Scroll failed:`, error);
+        }
+        return;
+      }
+
+      case 'user_browser_mouse_move': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          return; // Silent fail for mouse move (too frequent to log)
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.mouse.move(message.x, message.y);
+          }
+        } catch {
+          // Silent fail for mouse move
+        }
+        return;
+      }
+
       case 'browser_command': {
         const controller = browserSessionManager.getController(message.sessionId);
         if (!controller) {

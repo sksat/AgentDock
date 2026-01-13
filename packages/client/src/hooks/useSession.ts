@@ -114,6 +114,8 @@ export interface UseSessionReturn {
   stopScreencast: () => void;
   sendBrowserClick: (x: number, y: number) => void;
   sendBrowserKeyPress: (key: string) => void;
+  sendBrowserScroll: (deltaX: number, deltaY: number) => void;
+  sendBrowserMouseMove: (x: number, y: number) => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -598,6 +600,28 @@ export function useSession(): UseSessionReturn {
     }
   }, [activeSessionId, send]);
 
+  const sendBrowserScroll = useCallback((deltaX: number, deltaY: number) => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_scroll',
+        sessionId: activeSessionId,
+        deltaX,
+        deltaY,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const sendBrowserMouseMove = useCallback((x: number, y: number) => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_mouse_move',
+        sessionId: activeSessionId,
+        x,
+        y,
+      });
+    }
+  }, [activeSessionId, send]);
+
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
@@ -1059,6 +1083,8 @@ export function useSession(): UseSessionReturn {
     stopScreencast,
     sendBrowserClick,
     sendBrowserKeyPress,
+    sendBrowserScroll,
+    sendBrowserMouseMove,
     handleServerMessage,
     setSend,
   };

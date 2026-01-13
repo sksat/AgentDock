@@ -97,6 +97,8 @@ function App() {
     stopScreencast,
     sendBrowserClick,
     sendBrowserKeyPress,
+    sendBrowserScroll,
+    sendBrowserMouseMove,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -313,6 +315,8 @@ function App() {
                   browserUrl={screencast?.browserUrl}
                   onMouseClick={(pos) => sendBrowserClick(pos.x, pos.y)}
                   onKeyPress={sendBrowserKeyPress}
+                  onScroll={(delta) => sendBrowserScroll(delta.deltaX, delta.deltaY)}
+                  onMouseMove={(pos) => sendBrowserMouseMove(pos.x, pos.y)}
                   onStartBrowser={startScreencast}
                   onStopBrowser={stopScreencast}
                 />

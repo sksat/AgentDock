@@ -17,6 +17,10 @@ export interface BrowserViewProps {
   onMouseClick: (position: { x: number; y: number }) => void;
   /** Called when user presses a key while focused */
   onKeyPress: (key: string) => void;
+  /** Called when user scrolls on the browser view */
+  onScroll: (delta: { deltaX: number; deltaY: number }) => void;
+  /** Called when user moves mouse on the browser view */
+  onMouseMove: (position: { x: number; y: number }) => void;
   /** Called to start browser session */
   onStartBrowser: () => void;
   /** Called to stop browser session */
@@ -33,6 +37,8 @@ export function BrowserView({
   browserUrl,
   onMouseClick,
   onKeyPress,
+  onScroll,
+  onMouseMove,
   onStartBrowser,
   onStopBrowser,
 }: BrowserViewProps) {
@@ -86,6 +92,36 @@ export function BrowserView({
       onKeyPress(e.key);
     },
     [isActive, onKeyPress]
+  );
+
+  // Handle scroll (wheel event)
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<HTMLCanvasElement>) => {
+      if (!isActive) return;
+
+      e.preventDefault();
+      onScroll({ deltaX: e.deltaX, deltaY: e.deltaY });
+    },
+    [isActive, onScroll]
+  );
+
+  // Handle mouse move
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isActive || !canvasRef.current) return;
+
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+
+      // Calculate position relative to canvas
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+
+      onMouseMove({ x: Math.round(x), y: Math.round(y) });
+    },
+    [isActive, onMouseMove]
   );
 
   // Inactive state - show Start Browser button
@@ -152,6 +188,8 @@ export function BrowserView({
           width={width}
           height={height}
           onClick={handleClick}
+          onWheel={handleWheel}
+          onMouseMove={handleMouseMove}
           className="border border-border rounded shadow-lg cursor-pointer max-w-full max-h-full"
           style={{
             aspectRatio: `${width} / ${height}`,

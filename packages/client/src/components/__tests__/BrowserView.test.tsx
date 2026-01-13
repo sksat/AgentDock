@@ -17,6 +17,8 @@ const defaultProps = {
   isActive: false,
   onMouseClick: () => {},
   onKeyPress: () => {},
+  onScroll: () => {},
+  onMouseMove: () => {},
   onStartBrowser: () => {},
   onStopBrowser: () => {},
 };
