@@ -94,6 +94,16 @@ function cleanupMcpConfig(sessionId: string): void {
 }
 
 /**
+ * Check if a tool name is a browser tool (should be auto-allowed)
+ */
+export function isBrowserTool(toolName: string): boolean {
+  // Match patterns like:
+  // - mcp__plugin_playwright_playwright__browser_* (MCP Playwright tools)
+  // - browser_* (direct browser tools)
+  return /^mcp__.*__browser_/.test(toolName) || /^browser_/.test(toolName);
+}
+
+/**
  * Execute a browser command via BrowserController
  */
 async function executeBrowserCommand(controller: BrowserController, command: BrowserCommand): Promise<unknown> {
@@ -250,6 +260,9 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Map request ID to WebSocket for permission responses (from MCP server)
   const pendingPermissionRequests = new Map<string, WebSocket>();
+
+  // Map session ID to set of tools that are allowed for the entire session
+  const sessionAllowedTools = new Map<string, Set<string>>();
 
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
@@ -652,6 +665,8 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'delete_session': {
         const deleted = sessionManager.deleteSession(message.sessionId);
         if (deleted) {
+          // Clean up session-allowed tools
+          sessionAllowedTools.delete(message.sessionId);
           response = {
             type: 'session_deleted',
             sessionId: message.sessionId,
@@ -872,6 +887,21 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'permission_response': {
+        // Track session-wide tool allowance if requested
+        if (
+          message.response.behavior === 'allow' &&
+          message.response.allowForSession &&
+          message.response.toolName
+        ) {
+          let allowedTools = sessionAllowedTools.get(message.sessionId);
+          if (!allowedTools) {
+            allowedTools = new Set<string>();
+            sessionAllowedTools.set(message.sessionId, allowedTools);
+          }
+          allowedTools.add(message.response.toolName);
+          console.log(`[Session ${message.sessionId}] Tool "${message.response.toolName}" allowed for session`);
+        }
+
         // First check if this is for a mock runner
         const runner = runnerManager.getRunner(message.sessionId);
         if (runner && 'respondToPermission' in runner) {
@@ -915,6 +945,30 @@ export function createServer(options: ServerOptions): BridgeServer {
             message: 'Session not found',
           };
           break;
+        }
+
+        // Auto-allow browser tools (built-in AgentDock feature)
+        if (isBrowserTool(message.toolName)) {
+          ws.send(JSON.stringify({
+            type: 'permission_response',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            response: { behavior: 'allow', updatedInput: message.input },
+          }));
+          return;
+        }
+
+        // Check if tool is already allowed for this session
+        const allowedTools = sessionAllowedTools.get(message.sessionId);
+        if (allowedTools?.has(message.toolName)) {
+          // Auto-allow - respond immediately to MCP server
+          ws.send(JSON.stringify({
+            type: 'permission_response',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            response: { behavior: 'allow', updatedInput: message.input },
+          }));
+          return;
         }
 
         // Store MCP WebSocket for response

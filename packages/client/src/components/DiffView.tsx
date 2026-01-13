@@ -30,7 +30,7 @@ export function DiffView({
         </div>
         {isNewFile && (
           <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
-            新規作成
+            New file
           </span>
         )}
       </div>

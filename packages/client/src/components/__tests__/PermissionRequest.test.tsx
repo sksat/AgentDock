@@ -8,6 +8,7 @@ describe('PermissionRequest', () => {
     toolName: 'Bash',
     input: { command: 'rm -rf /' },
     onAllow: vi.fn(),
+    onAllowForSession: vi.fn(),
     onDeny: vi.fn(),
   };
 
@@ -23,27 +24,37 @@ describe('PermissionRequest', () => {
     expect(screen.getByText(/rm -rf/)).toBeInTheDocument();
   });
 
-  it('should render allow and deny buttons', () => {
+  it('should render allow, allow for session, and deny buttons', () => {
     render(<PermissionRequest {...defaultProps} />);
 
-    expect(screen.getByRole('button', { name: /許可/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /拒否/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Allow$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Deny/ })).toBeInTheDocument();
   });
 
   it('should call onAllow with updatedInput when allow is clicked', () => {
     const onAllow = vi.fn();
     render(<PermissionRequest {...defaultProps} onAllow={onAllow} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /許可/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Allow$/ }));
 
     expect(onAllow).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.input);
+  });
+
+  it('should call onAllowForSession when allow for session is clicked', () => {
+    const onAllowForSession = vi.fn();
+    render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.toolName, defaultProps.input);
   });
 
   it('should call onDeny when deny is clicked', () => {
     const onDeny = vi.fn();
     render(<PermissionRequest {...defaultProps} onDeny={onDeny} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /拒否/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Deny/ }));
 
     expect(onDeny).toHaveBeenCalledWith(defaultProps.requestId, expect.any(String));
   });
@@ -59,8 +70,8 @@ describe('PermissionRequest', () => {
     const writeElements = screen.getAllByText('Write');
     expect(writeElements.length).toBe(2);
     expect(screen.getByText(/\/home\/user\/test.txt/)).toBeInTheDocument();
-    // Should show "新規作成" indicator for Write without old content
-    expect(screen.getByText(/新規作成/)).toBeInTheDocument();
+    // Should show "New file" indicator for Write without old content
+    expect(screen.getByText(/New file/)).toBeInTheDocument();
   });
 
   it('should display Edit tool with DiffView showing changes', () => {
@@ -82,18 +93,30 @@ describe('PermissionRequest', () => {
   it('should disable buttons after clicking allow', () => {
     render(<PermissionRequest {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /許可/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Allow$/ }));
 
-    expect(screen.getByRole('button', { name: /許可/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /拒否/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
+  });
+
+  it('should disable buttons after clicking allow for session', () => {
+    render(<PermissionRequest {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+
+    expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
   it('should disable buttons after clicking deny', () => {
     render(<PermissionRequest {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /拒否/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Deny/ }));
 
-    expect(screen.getByRole('button', { name: /許可/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /拒否/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 });

@@ -598,7 +598,7 @@ export interface QuestionOption {
 
 // Permission result types (matches Claude Code's expected format)
 export type PermissionResult =
-  | { behavior: 'allow'; updatedInput: unknown }
+  | { behavior: 'allow'; updatedInput: unknown; allowForSession?: boolean; toolName?: string }
   | { behavior: 'deny'; message: string };
 
 // ==================== Global Usage (from ccusage) ====================

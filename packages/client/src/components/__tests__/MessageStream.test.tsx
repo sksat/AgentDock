@@ -476,3 +476,135 @@ describe('QuestionMessage robustness', () => {
     expect(screen.getByText(/AskUserQuestion/)).toBeInTheDocument();
   });
 });
+
+describe('McpToolMessage - Browser tool formatting', () => {
+  it('should display browser navigate tool with simplified format', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__plugin_playwright_playwright__browser_navigate',
+          input: { url: 'https://example.com' },
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('navigate')).toBeInTheDocument();
+    expect(screen.getByText('https://example.com')).toBeInTheDocument();
+  });
+
+  it('should display browser click tool with element description', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          input: { element: 'Submit button', ref: 'ref-123' },
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('click')).toBeInTheDocument();
+    expect(screen.getByText('Submit button')).toBeInTheDocument();
+  });
+
+  it('should display browser snapshot tool', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__plugin_playwright_playwright__browser_snapshot',
+          input: {},
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('snapshot')).toBeInTheDocument();
+    expect(screen.getByText('Capture page state')).toBeInTheDocument();
+  });
+
+  it('should display browser type tool with truncated text', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__plugin_playwright_playwright__browser_type',
+          input: { text: 'Hello World', element: 'input', ref: 'ref-1' },
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('type')).toBeInTheDocument();
+    expect(screen.getByText('"Hello World"')).toBeInTheDocument();
+  });
+
+  it('should display non-browser MCP tools with original format', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__other__some_tool',
+          input: { param: 'value' },
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Should show original tool name, not "browser:"
+    expect(screen.queryByText('browser:')).not.toBeInTheDocument();
+    expect(screen.getByText('mcp__other__some_tool')).toBeInTheDocument();
+  });
+
+  it('should show expanded content when clicked', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__plugin_playwright_playwright__browser_navigate',
+          input: { url: 'https://example.com' },
+          output: 'Navigation successful',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Click to expand
+    fireEvent.click(screen.getByRole('button'));
+
+    // Should show IN/OUT sections
+    expect(screen.getByText('IN')).toBeInTheDocument();
+    expect(screen.getByText('OUT')).toBeInTheDocument();
+    expect(screen.getByText('Navigation successful')).toBeInTheDocument();
+  });
+});

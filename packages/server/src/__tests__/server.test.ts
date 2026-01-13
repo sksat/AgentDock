@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { createServer, type BridgeServer } from '../server.js';
+import { createServer, isBrowserTool, type BridgeServer } from '../server.js';
 
 describe('BridgeServer', () => {
   let server: BridgeServer;
@@ -172,5 +172,32 @@ describe('BridgeServer', () => {
       ws1.close();
       ws2.close();
     });
+  });
+});
+
+describe('isBrowserTool', () => {
+  it('should return true for MCP Playwright browser tools', () => {
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_navigate')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_click')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_type')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_snapshot')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_take_screenshot')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_evaluate')).toBe(true);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_tabs')).toBe(true);
+  });
+
+  it('should return true for direct browser tools', () => {
+    expect(isBrowserTool('browser_navigate')).toBe(true);
+    expect(isBrowserTool('browser_click')).toBe(true);
+    expect(isBrowserTool('browser_type')).toBe(true);
+  });
+
+  it('should return false for non-browser tools', () => {
+    expect(isBrowserTool('Bash')).toBe(false);
+    expect(isBrowserTool('Write')).toBe(false);
+    expect(isBrowserTool('Edit')).toBe(false);
+    expect(isBrowserTool('Read')).toBe(false);
+    expect(isBrowserTool('mcp__bridge__permission_prompt')).toBe(false);
+    expect(isBrowserTool('mcp__some_other_tool')).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ export interface PermissionRequestProps {
   toolName: string;
   input: unknown;
   onAllow: (requestId: string, updatedInput: unknown) => void;
+  onAllowForSession: (requestId: string, toolName: string, updatedInput: unknown) => void;
   onDeny: (requestId: string, message: string) => void;
 }
 
@@ -51,6 +52,7 @@ export function PermissionRequest({
   toolName,
   input,
   onAllow,
+  onAllowForSession,
   onDeny,
 }: PermissionRequestProps) {
   const [responded, setResponded] = useState(false);
@@ -59,6 +61,11 @@ export function PermissionRequest({
     setResponded(true);
     onAllow(requestId, input);
   }, [requestId, input, onAllow]);
+
+  const handleAllowForSession = useCallback(() => {
+    setResponded(true);
+    onAllowForSession(requestId, toolName, input);
+  }, [requestId, toolName, input, onAllowForSession]);
 
   const handleDeny = useCallback(() => {
     setResponded(true);
@@ -90,7 +97,7 @@ export function PermissionRequest({
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
       <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
         <span className="text-accent-primary font-mono font-medium">{toolName}</span>
-        <span className="text-text-secondary text-sm">の実行を許可しますか？</span>
+        <span className="text-text-secondary text-sm">requests permission to run</span>
       </div>
 
       <div className="p-4">
@@ -121,7 +128,21 @@ export function PermissionRequest({
             responded && 'opacity-50 cursor-not-allowed'
           )}
         >
-          拒否
+          Deny
+        </button>
+        <button
+          onClick={handleAllowForSession}
+          disabled={responded}
+          className={clsx(
+            'px-4 py-2 rounded-lg font-medium',
+            'bg-accent-primary text-white',
+            'hover:bg-accent-primary/90',
+            'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+            'transition-colors',
+            responded && 'opacity-50 cursor-not-allowed'
+          )}
+        >
+          Allow for session
         </button>
         <button
           onClick={handleAllow}
@@ -135,7 +156,7 @@ export function PermissionRequest({
             responded && 'opacity-50 cursor-not-allowed'
           )}
         >
-          許可
+          Allow
         </button>
       </div>
     </div>

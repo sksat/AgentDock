@@ -293,10 +293,101 @@ function BashToolMessage({ content }: { content: BashToolContent }) {
   );
 }
 
+// Helper to format browser tool display
+function formatBrowserTool(toolName: string, input: unknown): { shortName: string; description: string } | null {
+  // Match MCP Playwright browser tools
+  const mcpMatch = toolName.match(/^mcp__.*__browser_(.+)$/);
+  // Also match direct browser_ prefix
+  const directMatch = toolName.match(/^browser_(.+)$/);
+  const match = mcpMatch || directMatch;
+
+  if (!match) return null;
+
+  const action = match[1];
+  const inp = input as Record<string, unknown>;
+
+  // Generate human-readable description based on action type
+  let description = '';
+  switch (action) {
+    case 'navigate':
+      description = inp.url ? String(inp.url) : '';
+      break;
+    case 'navigate_back':
+      description = 'Go back';
+      break;
+    case 'click':
+      description = inp.element ? String(inp.element) : '';
+      break;
+    case 'hover':
+      description = inp.element ? `Hover: ${inp.element}` : '';
+      break;
+    case 'type':
+      description = inp.text ? `"${String(inp.text).slice(0, 30)}${String(inp.text).length > 30 ? '...' : ''}"` : '';
+      break;
+    case 'press_key':
+      description = inp.key ? String(inp.key) : '';
+      break;
+    case 'fill_form':
+      description = inp.fields ? `${(inp.fields as unknown[]).length} fields` : '';
+      break;
+    case 'select_option':
+      description = inp.element ? String(inp.element) : '';
+      break;
+    case 'snapshot':
+      description = 'Capture page state';
+      break;
+    case 'take_screenshot':
+      description = inp.element ? String(inp.element) : 'Full page';
+      break;
+    case 'wait_for':
+      if (inp.text) description = `Text: "${inp.text}"`;
+      else if (inp.textGone) description = `Text gone: "${inp.textGone}"`;
+      else if (inp.time) description = `${inp.time}s`;
+      break;
+    case 'resize':
+      description = inp.width && inp.height ? `${inp.width}×${inp.height}` : '';
+      break;
+    case 'tabs':
+      description = inp.action ? String(inp.action) : '';
+      break;
+    case 'close':
+      description = 'Close browser';
+      break;
+    case 'install':
+      description = 'Install browser';
+      break;
+    case 'console_messages':
+      description = inp.level ? `Level: ${inp.level}` : 'All messages';
+      break;
+    case 'network_requests':
+      description = 'Capture requests';
+      break;
+    case 'evaluate':
+      description = 'Run JavaScript';
+      break;
+    case 'handle_dialog':
+      description = inp.accept ? 'Accept dialog' : 'Dismiss dialog';
+      break;
+    case 'drag':
+      description = inp.startElement && inp.endElement ? `${inp.startElement} → ${inp.endElement}` : '';
+      break;
+    default:
+      description = '';
+  }
+
+  return {
+    shortName: action.replace(/_/g, ' '),
+    description,
+  };
+}
+
 function McpToolMessage({ content }: { content: McpToolContent }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Generate compact description from input
+  // Check if this is a browser tool
+  const browserInfo = formatBrowserTool(content.toolName, content.input);
+
+  // Generate compact description from input (fallback for non-browser tools)
   const inputStr = JSON.stringify(content.input);
   const compactDescription = inputStr.length > 60 ? inputStr.slice(0, 60) + '...' : inputStr;
 
@@ -314,8 +405,23 @@ function McpToolMessage({ content }: { content: McpToolContent }) {
               ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
               : 'bg-accent-warning animate-pulse'
           )}></span>
-          <span className="text-text-primary font-medium">{content.toolName}</span>
-          <span className="text-text-secondary text-sm">{compactDescription}</span>
+
+          {browserInfo ? (
+            // Browser tool: show simplified format
+            <>
+              <span className="text-text-secondary text-sm">browser:</span>
+              <span className="text-text-primary font-medium">{browserInfo.shortName}</span>
+              {browserInfo.description && (
+                <span className="text-text-secondary text-sm truncate max-w-[300px]">{browserInfo.description}</span>
+              )}
+            </>
+          ) : (
+            // Other MCP tools: show original format
+            <>
+              <span className="text-text-primary font-medium">{content.toolName}</span>
+              <span className="text-text-secondary text-sm">{compactDescription}</span>
+            </>
+          )}
         </button>
 
         {/* Expanded content */}

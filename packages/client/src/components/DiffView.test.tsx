@@ -34,7 +34,7 @@ describe('DiffView', () => {
 
   it('shows new file indicator for Write without oldContent', () => {
     render(<DiffView {...writeToolProps} />);
-    expect(screen.getByText(/新規作成/)).toBeInTheDocument();
+    expect(screen.getByText(/New file/)).toBeInTheDocument();
   });
 
   it('renders diff view for Edit with changes', () => {

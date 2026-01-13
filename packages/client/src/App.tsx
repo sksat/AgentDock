@@ -159,6 +159,13 @@ function App() {
     [respondToPermission]
   );
 
+  const handleAllowForSession = useCallback(
+    (requestId: string, toolName: string, updatedInput: unknown) => {
+      respondToPermission(requestId, { behavior: 'allow', updatedInput, allowForSession: true, toolName });
+    },
+    [respondToPermission]
+  );
+
   const handleToggleThinking = useCallback(() => {
     setThinkingEnabled((prev) => !prev);
   }, []);
@@ -340,6 +347,7 @@ function App() {
                     toolName={pendingPermission.toolName}
                     input={pendingPermission.input}
                     onAllow={handleAllow}
+                    onAllowForSession={handleAllowForSession}
                     onDeny={handleDeny}
                   />
                 </div>
