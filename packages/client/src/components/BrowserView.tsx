@@ -385,7 +385,7 @@ export function BrowserView({
             <button
               onClick={onNavigateBack}
               disabled={!onNavigateBack}
-              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-primary/70 hover:text-text-primary disabled:text-text-disabled disabled:cursor-not-allowed transition-colors"
               title="Go back"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -395,7 +395,7 @@ export function BrowserView({
             <button
               onClick={onNavigateForward}
               disabled={!onNavigateForward}
-              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-primary/70 hover:text-text-primary disabled:text-text-disabled disabled:cursor-not-allowed transition-colors"
               title="Go forward"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -405,7 +405,7 @@ export function BrowserView({
             <button
               onClick={onRefresh}
               disabled={!onRefresh}
-              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-primary/70 hover:text-text-primary disabled:text-text-disabled disabled:cursor-not-allowed transition-colors"
               title="Refresh"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
