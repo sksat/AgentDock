@@ -1,6 +1,8 @@
-import { App, type AppMentionEvent, type GenericMessageEvent } from '@slack/bolt';
+import { App } from '@slack/bolt';
+import type { AppMentionEvent, GenericMessageEvent } from '@slack/types';
 import type { MessageBridge } from './message-bridge.js';
 import type { SlackSessionManager } from './slack-session-manager.js';
+import { ProgressIndicator } from './progress-indicator.js';
 
 /**
  * Check if a message should be ignored (e.g., marked as aside).
@@ -52,10 +54,16 @@ export interface SlackAppOptions {
   botUserId?: string;
 }
 
+export interface SlackAppResult {
+  app: App;
+  progressIndicator: ProgressIndicator;
+}
+
 /**
  * Creates and configures the Slack Bolt App with event handlers.
+ * Returns both the app and the progress indicator.
  */
-export function createSlackApp(options: SlackAppOptions): App {
+export function createSlackApp(options: SlackAppOptions): SlackAppResult {
   const { botToken, appToken, bridge, sessionManager, botUserId } = options;
 
   const app = new App({
@@ -63,6 +71,9 @@ export function createSlackApp(options: SlackAppOptions): App {
     appToken,
     socketMode: true,
   });
+
+  // Create progress indicator with the app's client
+  const progressIndicator = new ProgressIndicator(app.client);
 
   // Handle app_mention events (when bot is mentioned)
   app.event('app_mention', async ({ event, client, say }) => {
@@ -98,20 +109,24 @@ export function createSlackApp(options: SlackAppOptions): App {
         threadTs
       );
 
+      // Start progress indicator on the specific message
+      // ts is the timestamp of this message (for reaction)
+      // threadTs is the thread root (for tracking)
+      await progressIndicator.startProcessing(channel, threadTs, ts);
+
       // Send the user message to AgentDock
       bridge.sendUserMessage(binding.agentDockSessionId, messageText, {
         source: 'slack',
         slackContext: {
           channelId: channel,
           threadTs,
-          userId: user,
+          userId: user || 'unknown',
         },
       });
-
-      // Note: The actual response will come through the message listener
-      // and be handled by the message forwarding logic
     } catch (error) {
       console.error('Error handling app_mention:', error);
+      // Stop progress indicator on error
+      await progressIndicator.stopProcessing(channel, threadTs);
       await say({
         text: 'Sorry, I encountered an error. Please try again.',
         thread_ts: threadTs,
@@ -158,6 +173,11 @@ export function createSlackApp(options: SlackAppOptions): App {
         return;
       }
 
+      // Start progress indicator on this specific reply message
+      // messageEvent.ts is the timestamp of this reply (for reaction)
+      // thread_ts is the thread root (for tracking)
+      await progressIndicator.startProcessing(channel, thread_ts, messageEvent.ts);
+
       // Send the user message to AgentDock
       bridge.sendUserMessage(binding.agentDockSessionId, text, {
         source: 'slack',
@@ -169,10 +189,12 @@ export function createSlackApp(options: SlackAppOptions): App {
       });
     } catch (error) {
       console.error('Error handling message:', error);
+      // Stop progress indicator on error
+      await progressIndicator.stopProcessing(channel, thread_ts);
     }
   });
 
-  return app;
+  return { app, progressIndicator };
 }
 
 /**

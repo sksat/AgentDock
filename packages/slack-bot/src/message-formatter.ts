@@ -1,4 +1,4 @@
-import type { KnownBlock, SectionBlock, ContextBlock } from '@slack/bolt';
+import type { KnownBlock, SectionBlock, ContextBlock } from '@slack/types';
 
 // Slack has a limit of 3000 characters for text in blocks
 const SLACK_TEXT_LIMIT = 2900;

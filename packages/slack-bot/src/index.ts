@@ -1,8 +1,6 @@
 import 'dotenv/config';
-import { App } from '@slack/bolt';
 import { MessageBridge } from './message-bridge.js';
 import { SlackSessionManager } from './slack-session-manager.js';
-import { ProgressIndicator } from './progress-indicator.js';
 import { createSlackApp, setupMessageForwarding } from './slack-app.js';
 import {
   formatTextOutput,
@@ -55,16 +53,13 @@ async function main(): Promise<void> {
   // Create session manager
   const sessionManager = new SlackSessionManager(bridge, SLACK_DEFAULT_WORKING_DIR);
 
-  // Create Slack app
-  const app = createSlackApp({
+  // Create Slack app and progress indicator
+  const { app, progressIndicator } = createSlackApp({
     botToken: SLACK_BOT_TOKEN,
     appToken: SLACK_APP_TOKEN,
     bridge,
     sessionManager,
   });
-
-  // Create progress indicator
-  const progressIndicator = new ProgressIndicator(app.client);
 
   // Pending permission requests (requestId -> { channel, threadTs, input })
   const pendingPermissions = new Map<
@@ -169,12 +164,9 @@ async function main(): Promise<void> {
         }
 
         case 'session_status_changed': {
-          // Start/stop progress indicator based on status
-          if (message.status === 'running') {
-            if (!progressIndicator.isProcessing(channel, threadTs)) {
-              await progressIndicator.startProcessing(channel, threadTs);
-            }
-          } else {
+          // Stop progress indicator when no longer running
+          // (Starting is handled in slack-app.ts when user message is received)
+          if (message.status !== 'running') {
             if (progressIndicator.isProcessing(channel, threadTs)) {
               await progressIndicator.stopProcessing(channel, threadTs);
             }
@@ -193,7 +185,11 @@ async function main(): Promise<void> {
 
     if (action.type !== 'button') return;
 
-    const parsedAction = parsePermissionAction(action.action_id, action.value);
+    // Type assertion for button action
+    const buttonAction = action as { action_id: string; value?: string };
+    if (!buttonAction.action_id || !buttonAction.value) return;
+
+    const parsedAction = parsePermissionAction(buttonAction.action_id, buttonAction.value);
     if (!parsedAction) {
       console.error('Failed to parse permission action');
       return;
@@ -220,7 +216,20 @@ async function main(): Promise<void> {
     const response = actionToPermissionResponse(parsedAction, pending.input);
 
     // Send permission response to AgentDock
-    bridge.sendPermissionResponse(binding.agentDockSessionId, parsedAction.requestId, response);
+    // Type assertion to match PermissionResult
+    if (response.behavior === 'allow') {
+      bridge.sendPermissionResponse(binding.agentDockSessionId, parsedAction.requestId, {
+        behavior: 'allow',
+        updatedInput: response.updatedInput,
+        allowForSession: response.allowForSession,
+        toolName: response.toolName,
+      });
+    } else {
+      bridge.sendPermissionResponse(binding.agentDockSessionId, parsedAction.requestId, {
+        behavior: 'deny',
+        message: response.message || 'User denied permission',
+      });
+    }
 
     // Update the message to show result
     const userId = body.user?.id || 'unknown';
@@ -232,10 +241,11 @@ async function main(): Promise<void> {
 
     try {
       // Update the original message
-      if (body.message?.ts) {
+      const bodyWithMessage = body as { message?: { ts: string } };
+      if (bodyWithMessage.message?.ts) {
         await client.chat.update({
           channel: pending.channel,
-          ts: body.message.ts,
+          ts: bodyWithMessage.message.ts,
           blocks: resultBlocks,
           text:
             response.behavior === 'allow'

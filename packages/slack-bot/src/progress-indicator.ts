@@ -1,4 +1,4 @@
-import type { WebClient } from '@slack/bolt';
+import type { WebClient } from '@slack/web-api';
 
 // Progress phases to rotate through
 const PROGRESS_PHASES = [
@@ -16,6 +16,7 @@ const PROCESSING_REACTION = 'hourglass_flowing_sand';
 
 interface ProcessingState {
   messageTs: string | null;
+  reactionTs: string; // The message to add reaction to
   intervalId: NodeJS.Timeout | null;
   phaseIndex: number;
 }
@@ -41,8 +42,15 @@ export class ProgressIndicator {
 
   /**
    * Start showing a processing indicator for a thread.
+   * @param channel - The Slack channel ID
+   * @param threadTs - The thread timestamp (used for posting replies and as the key)
+   * @param reactionTs - The message timestamp to add the reaction to (defaults to threadTs)
    */
-  async startProcessing(channel: string, threadTs: string): Promise<void> {
+  async startProcessing(
+    channel: string,
+    threadTs: string,
+    reactionTs?: string
+  ): Promise<void> {
     const key = makeKey(channel, threadTs);
 
     // Don't start if already processing
@@ -50,19 +58,23 @@ export class ProgressIndicator {
       return;
     }
 
+    // Use reactionTs if provided, otherwise use threadTs
+    const targetReactionTs = reactionTs || threadTs;
+
     const state: ProcessingState = {
       messageTs: null,
+      reactionTs: targetReactionTs,
       intervalId: null,
       phaseIndex: 0,
     };
 
     this.processing.set(key, state);
 
-    // Add reaction to the original message
+    // Add reaction to the target message
     try {
       await this.client.reactions.add({
         channel,
-        timestamp: threadTs,
+        timestamp: targetReactionTs,
         name: PROCESSING_REACTION,
       });
     } catch (error) {
@@ -100,37 +112,36 @@ export class ProgressIndicator {
       return;
     }
 
+    // Immediately remove from map to prevent duplicate cleanup
+    this.processing.delete(key);
+
     // Clear the interval
     if (state.intervalId) {
       clearInterval(state.intervalId);
     }
 
-    // Remove reaction
+    // Remove reaction from the target message (ignore errors - may already be removed)
     try {
       await this.client.reactions.remove({
         channel,
-        timestamp: threadTs,
+        timestamp: state.reactionTs,
         name: PROCESSING_REACTION,
       });
-    } catch (error) {
-      // Ignore errors (reaction may not exist)
-      console.error('Failed to remove reaction:', error);
+    } catch {
+      // Ignore - reaction may not exist or already removed
     }
 
-    // Delete the processing message
+    // Delete the processing message (ignore errors - may already be deleted)
     if (state.messageTs) {
       try {
         await this.client.chat.delete({
           channel,
           ts: state.messageTs,
         });
-      } catch (error) {
-        // Ignore errors (message may not exist or permissions issue)
-        console.error('Failed to delete processing message:', error);
+      } catch {
+        // Ignore - message may not exist or already deleted
       }
     }
-
-    this.processing.delete(key);
   }
 
   /**

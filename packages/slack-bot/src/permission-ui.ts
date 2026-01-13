@@ -1,4 +1,4 @@
-import type { KnownBlock, HeaderBlock, SectionBlock, ContextBlock, ActionsBlock, Button } from '@slack/bolt';
+import type { KnownBlock, HeaderBlock, SectionBlock, ContextBlock, ActionsBlock, Button } from '@slack/types';
 import { truncateText } from './message-formatter.js';
 
 // Maximum length for formatted tool input
