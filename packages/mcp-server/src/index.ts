@@ -82,12 +82,15 @@ server.tool(
   }
 );
 
-// ==================== Playwright Browser Tools ====================
+// ==================== AgentDock Browser Tools ====================
+// IMPORTANT: When running inside AgentDock, ALWAYS use these browser tools (mcp__bridge__browser_*)
+// instead of the native Playwright MCP tools (mcp__plugin_playwright_*).
+// These tools stream the browser view to the AgentDock UI, allowing users to see browser activity.
 
 // Navigate to URL
 server.tool(
   'browser_navigate',
-  'Navigate to a URL in the browser',
+  '[AgentDock Browser - USE THIS instead of native Playwright MCP] Navigate to a URL. The browser view is streamed to the AgentDock UI.',
   {
     url: z.string().describe('The URL to navigate to'),
   },
