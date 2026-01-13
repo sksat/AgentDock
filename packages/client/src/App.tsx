@@ -93,6 +93,8 @@ function App() {
     interrupt,
     setPermissionMode,
     setModel,
+    startScreencast,
+    stopScreencast,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -257,6 +259,8 @@ function App() {
                 currentView={sessionView}
                 onToggle={setSessionView}
                 browserActive={screencast?.active ?? false}
+                onStartBrowser={startScreencast}
+                onStopBrowser={stopScreencast}
               />
               {usageInfo && (
               <div className="flex items-center gap-4">

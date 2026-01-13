@@ -1065,6 +1065,9 @@ Keep it concise but comprehensive.`;
           break;
         }
 
+        // Store WebSocket for this session (required for screencast events)
+        sessionWebSockets.set(message.sessionId, ws);
+
         // Create browser session if not exists
         if (!browserSessionManager.getController(message.sessionId)) {
           try {

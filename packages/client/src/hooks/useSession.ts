@@ -109,6 +109,10 @@ export interface UseSessionReturn {
   setPermissionMode: (mode: PermissionMode) => void;
   setModel: (model: string) => void;
 
+  // Browser/Screencast
+  startScreencast: () => void;
+  stopScreencast: () => void;
+
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
   setSend: (send: (message: ClientMessage) => void) => void;
@@ -552,6 +556,24 @@ export function useSession(): UseSessionReturn {
       });
     }
   }, [activeSessionId, send, systemInfo?.model]);
+
+  const startScreencast = useCallback(() => {
+    if (activeSessionId) {
+      send({
+        type: 'start_screencast',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const stopScreencast = useCallback(() => {
+    if (activeSessionId) {
+      send({
+        type: 'stop_screencast',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
 
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
@@ -1010,6 +1032,8 @@ export function useSession(): UseSessionReturn {
     interrupt,
     setPermissionMode,
     setModel,
+    startScreencast,
+    stopScreencast,
     handleServerMessage,
     setSend,
   };
