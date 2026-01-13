@@ -233,6 +233,8 @@ export class ClaudeRunner extends EventEmitter {
     if (this.options.mcpConfigPath && this.options.permissionToolName) {
       args.push('--permission-prompt-tool', this.options.permissionToolName);
       args.push('--mcp-config', this.options.mcpConfigPath);
+      // Only use our MCP config, ignore all other MCP configurations (including built-in Playwright)
+      args.push('--strict-mcp-config');
     }
 
     if (options.allowedTools && options.allowedTools.length > 0) {
