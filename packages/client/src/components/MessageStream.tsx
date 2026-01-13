@@ -474,7 +474,80 @@ interface ToolUseContent {
   input: unknown;
 }
 
+// Helper to format file tool display
+function formatFileTool(toolName: string, input: unknown): { icon: string; description: string; filePath?: string } | null {
+  const inp = input as Record<string, unknown>;
+
+  switch (toolName) {
+    case 'Read': {
+      const filePath = inp.file_path as string | undefined;
+      const offset = inp.offset as number | undefined;
+      const limit = inp.limit as number | undefined;
+      let desc = filePath || '';
+      if (offset !== undefined || limit !== undefined) {
+        const parts = [];
+        if (offset !== undefined) parts.push(`offset: ${offset}`);
+        if (limit !== undefined) parts.push(`limit: ${limit}`);
+        desc += ` (${parts.join(', ')})`;
+      }
+      return { icon: '📖', description: desc, filePath };
+    }
+    case 'Write': {
+      const filePath = inp.file_path as string | undefined;
+      return { icon: '✏️', description: filePath || '', filePath };
+    }
+    case 'Edit': {
+      const filePath = inp.file_path as string | undefined;
+      return { icon: '🔧', description: filePath || '', filePath };
+    }
+    case 'Glob': {
+      const pattern = inp.pattern as string | undefined;
+      const path = inp.path as string | undefined;
+      return { icon: '🔍', description: pattern ? `${pattern}${path ? ` in ${path}` : ''}` : '' };
+    }
+    case 'Grep': {
+      const pattern = inp.pattern as string | undefined;
+      const path = inp.path as string | undefined;
+      return { icon: '🔎', description: pattern ? `"${pattern}"${path ? ` in ${path}` : ''}` : '' };
+    }
+    default:
+      return null;
+  }
+}
+
 function ToolUseMessage({ content }: { content: ToolUseContent }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const fileInfo = formatFileTool(content.toolName, content.input);
+
+  if (fileInfo) {
+    // Compact display for file tools
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="rounded-lg overflow-hidden">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
+          >
+            <span className="text-base">{fileInfo.icon}</span>
+            <span className="text-text-primary font-medium">{content.toolName}</span>
+            <span className="text-text-secondary text-sm truncate max-w-[400px] font-mono">
+              {fileInfo.description}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
+              <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto">
+                {JSON.stringify(content.input, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Default display for other tools
   return (
     <div data-testid="message-item" className="flex justify-start">
       <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
