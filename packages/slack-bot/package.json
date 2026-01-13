@@ -13,6 +13,7 @@
   "dependencies": {
     "@agent-dock/shared": "workspace:*",
     "@slack/bolt": "^4.3.0",
+    "dotenv": "^17.2.3",
     "nanoid": "^5.1.5",
     "ws": "^8.18.2"
   },

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { App } from '@slack/bolt';
 import { MessageBridge } from './message-bridge.js';
 import { SlackSessionManager } from './slack-session-manager.js';
@@ -16,7 +17,7 @@ import {
   actionToPermissionResponse,
 } from './permission-ui.js';
 
-// Environment variables
+// Environment variables (loaded from .env file)
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_APP_TOKEN = process.env.SLACK_APP_TOKEN;
 const AGENTDOCK_WS_URL = process.env.AGENTDOCK_WS_URL || 'ws://localhost:3001/ws';
