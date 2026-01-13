@@ -835,7 +835,7 @@ export function useSession(): UseSessionReturn {
           }
           // Restore pending permission if there was one
           if (message.pendingPermission) {
-            setSessionPendingPermissions((prev) => {
+            setSessionPendingPermission((prev) => {
               const newMap = new Map(prev);
               newMap.set(message.sessionId, message.pendingPermission!);
               return newMap;
