@@ -112,6 +112,8 @@ export interface UseSessionReturn {
   // Browser/Screencast
   startScreencast: () => void;
   stopScreencast: () => void;
+  sendBrowserClick: (x: number, y: number) => void;
+  sendBrowserKeyPress: (key: string) => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -575,6 +577,27 @@ export function useSession(): UseSessionReturn {
     }
   }, [activeSessionId, send]);
 
+  const sendBrowserClick = useCallback((x: number, y: number) => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_click',
+        sessionId: activeSessionId,
+        x,
+        y,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const sendBrowserKeyPress = useCallback((key: string) => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_key_press',
+        sessionId: activeSessionId,
+        key,
+      });
+    }
+  }, [activeSessionId, send]);
+
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
@@ -1034,6 +1057,8 @@ export function useSession(): UseSessionReturn {
     setModel,
     startScreencast,
     stopScreencast,
+    sendBrowserClick,
+    sendBrowserKeyPress,
     handleServerMessage,
     setSend,
   };

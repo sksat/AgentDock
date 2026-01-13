@@ -29,7 +29,10 @@ export type ClientMessage =
   | StartScreencastMessage
   | StopScreencastMessage
   // Browser commands (from MCP server)
-  | BrowserCommandMessage;
+  | BrowserCommandMessage
+  // User browser interaction (from client UI)
+  | UserBrowserClickMessage
+  | UserBrowserKeyPressMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -132,6 +135,20 @@ export interface StartScreencastMessage {
 export interface StopScreencastMessage {
   type: 'stop_screencast';
   sessionId: string;
+}
+
+// User browser interaction (from client UI)
+export interface UserBrowserClickMessage {
+  type: 'user_browser_click';
+  sessionId: string;
+  x: number;
+  y: number;
+}
+
+export interface UserBrowserKeyPressMessage {
+  type: 'user_browser_key_press';
+  sessionId: string;
+  key: string;
 }
 
 // Browser command messages (MCP Server → AgentDock Server)

@@ -95,6 +95,8 @@ function App() {
     setModel,
     startScreencast,
     stopScreencast,
+    sendBrowserClick,
+    sendBrowserKeyPress,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -309,14 +311,8 @@ function App() {
                   frame={screencast?.frame ?? null}
                   isActive={screencast?.active ?? false}
                   browserUrl={screencast?.browserUrl}
-                  onMouseClick={(pos) => {
-                    // TODO: Send browser_click to server
-                    console.log('Browser click:', pos);
-                  }}
-                  onKeyPress={(key) => {
-                    // TODO: Send browser_key_press to server
-                    console.log('Browser key press:', key);
-                  }}
+                  onMouseClick={(pos) => sendBrowserClick(pos.x, pos.y)}
+                  onKeyPress={sendBrowserKeyPress}
                   onStartBrowser={startScreencast}
                   onStopBrowser={stopScreencast}
                 />

@@ -1093,6 +1093,42 @@ Keep it concise but comprehensive.`;
         return;
       }
 
+      case 'user_browser_click': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for click in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.mouse.click(message.x, message.y);
+            console.log(`[BrowserSession] Click at (${message.x}, ${message.y})`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Click failed:`, error);
+        }
+        return;
+      }
+
+      case 'user_browser_key_press': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for key press in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.keyboard.press(message.key);
+            console.log(`[BrowserSession] Key press: ${message.key}`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Key press failed:`, error);
+        }
+        return;
+      }
+
       case 'browser_command': {
         const controller = browserSessionManager.getController(message.sessionId);
         if (!controller) {
