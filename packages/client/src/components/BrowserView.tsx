@@ -182,7 +182,7 @@ export function BrowserView({
       {/* Canvas container */}
       <div
         ref={containerRef}
-        className="flex-1 flex items-center justify-center overflow-auto p-4"
+        className="flex-1 flex items-center justify-center overflow-hidden p-4 min-h-0"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
@@ -193,8 +193,13 @@ export function BrowserView({
           onClick={handleClick}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
-          className="border border-border rounded shadow-lg max-w-full max-h-full"
+          className="border border-border rounded shadow-lg"
           style={{
+            width: '100%',
+            height: '100%',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
             aspectRatio: `${width} / ${height}`,
             cursor: cursor || 'default',
           }}
