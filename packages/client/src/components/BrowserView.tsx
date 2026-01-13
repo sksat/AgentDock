@@ -127,6 +127,34 @@ export function BrowserView({
     [isActive, onMouseMove]
   );
 
+  // Prevent auxiliary button clicks (back/forward mouse buttons) from navigating
+  const handleAuxClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      e.preventDefault();
+    },
+    []
+  );
+
+  // Prevent context menu on right-click
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isActive) return;
+      e.preventDefault();
+    },
+    [isActive]
+  );
+
+  // Prevent mousedown default for non-left clicks (auxiliary buttons)
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      // button 0 = left, 1 = middle, 2 = right, 3 = back, 4 = forward
+      if (e.button !== 0) {
+        e.preventDefault();
+      }
+    },
+    []
+  );
+
   // Inactive state - show Start Browser button
   if (!isActive && !frame) {
     return (
@@ -193,13 +221,13 @@ export function BrowserView({
           onClick={handleClick}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onAuxClick={handleAuxClick}
+          onContextMenu={handleContextMenu}
           className="border border-border rounded shadow-lg"
           style={{
-            width: '100%',
-            height: '100%',
             maxWidth: '100%',
             maxHeight: '100%',
-            objectFit: 'contain',
             aspectRatio: `${width} / ${height}`,
             cursor: cursor || 'default',
           }}
