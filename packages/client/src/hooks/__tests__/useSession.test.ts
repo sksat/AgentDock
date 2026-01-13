@@ -844,4 +844,78 @@ describe('useSession', () => {
       expect(result.current.messages[1].type).toBe('tool_result');
     });
   });
+
+  describe('Permission persistence on reload', () => {
+    it('should restore pendingPermission from session_attached', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'waiting_permission' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Initially no pending permission
+      expect(result.current.pendingPermission).toBeNull();
+
+      // Receive session_attached with pendingPermission (simulating page reload)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          pendingPermission: {
+            requestId: 'perm-restored',
+            toolName: 'Write',
+            input: { file_path: '/tmp/test.txt', content: 'hello' },
+          },
+        });
+      });
+
+      // Should restore pendingPermission
+      expect(result.current.pendingPermission).not.toBeNull();
+      expect(result.current.pendingPermission?.requestId).toBe('perm-restored');
+      expect(result.current.pendingPermission?.toolName).toBe('Write');
+    });
+
+    it('should not set pendingPermission if not present in session_attached', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session_attached without pendingPermission
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+        });
+      });
+
+      // Should not have pendingPermission
+      expect(result.current.pendingPermission).toBeNull();
+    });
+  });
 });
