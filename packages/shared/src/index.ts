@@ -83,11 +83,23 @@ export interface ImageAttachment {
   name?: string;
 }
 
+export type InputSource = 'web' | 'slack';
+
+export interface SlackContext {
+  channelId: string;
+  threadTs: string;
+  userId: string;
+}
+
 export interface UserMessageMessage {
   type: 'user_message';
   sessionId: string;
   content: string;
   images?: ImageAttachment[];
+  /** Source of the input (web UI or Slack) */
+  source?: InputSource;
+  /** Slack context when source is 'slack' */
+  slackContext?: SlackContext;
 }
 
 export interface InterruptMessage {
@@ -684,4 +696,15 @@ export interface SessionUsageInfo {
   /** Last activity timestamp (ISO 8601 or date string), optional for internal data */
   lastActivity?: string;
   modelsUsed: string[];
+}
+
+// ==================== Slack Integration Types ====================
+
+/** Binding between a Slack thread and an AgentDock session */
+export interface SlackThreadBinding {
+  slackTeamId: string;
+  slackChannelId: string;
+  slackThreadTs: string;
+  agentDockSessionId: string;
+  createdAt: string;
 }
