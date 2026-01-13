@@ -1,0 +1,43 @@
+{
+  "name": "@anthropic/playwright-mcp",
+  "version": "0.1.0",
+  "description": "Playwright browser automation as MCP tools",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0",
+    "zod": "^3.25.34"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "playwright": "^1.40.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "playwright",
+    "mcp",
+    "browser",
+    "automation"
+  ],
+  "license": "MIT"
+}

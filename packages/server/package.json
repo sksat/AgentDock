@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@agent-dock/shared": "workspace:*",
+    "@anthropic/browser-streamer": "workspace:*",
+    "@anthropic/playwright-mcp": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "better-sqlite3": "^12.6.0",
     "hono": "^4.11.3",

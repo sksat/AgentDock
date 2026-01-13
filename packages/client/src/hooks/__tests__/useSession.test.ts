@@ -570,4 +570,138 @@ describe('useSession', () => {
       expect(result.current.pendingQuestion?.requestId).toBe('req-background');
     });
   });
+
+  describe('Screencast state', () => {
+    it('should handle screencast_frame message', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive screencast frame
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'screencast_frame',
+          sessionId: 'session-1',
+          data: 'base64data',
+          metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1234567890 },
+        });
+      });
+
+      // Should have frame data
+      expect(result.current.screencast).not.toBeNull();
+      expect(result.current.screencast?.frame?.data).toBe('base64data');
+      expect(result.current.screencast?.frame?.metadata.deviceWidth).toBe(1280);
+    });
+
+    it('should handle screencast_status message', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive screencast status
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'screencast_status',
+          sessionId: 'session-1',
+          active: true,
+          browserUrl: 'https://example.com',
+        });
+      });
+
+      // Should have status data
+      expect(result.current.screencast?.active).toBe(true);
+      expect(result.current.screencast?.browserUrl).toBe('https://example.com');
+    });
+
+    it('should store screencast state per session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive frame for session-1
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'screencast_frame',
+          sessionId: 'session-1',
+          data: 'frame-1',
+          metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1 },
+        });
+      });
+
+      // Receive frame for session-2
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'screencast_frame',
+          sessionId: 'session-2',
+          data: 'frame-2',
+          metadata: { deviceWidth: 800, deviceHeight: 600, timestamp: 2 },
+        });
+      });
+
+      // Should show session-1's frame
+      expect(result.current.screencast?.frame?.data).toBe('frame-1');
+
+      // Switch to session-2
+      act(() => {
+        result.current.selectSession('session-2');
+      });
+
+      // Should show session-2's frame
+      expect(result.current.screencast?.frame?.data).toBe('frame-2');
+
+      // Switch back to session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Should show session-1's frame again
+      expect(result.current.screencast?.frame?.data).toBe('frame-1');
+    });
+
+    it('should return null screencast when no session is active', () => {
+      const { result } = renderHook(() => useSession());
+
+      expect(result.current.screencast).toBeNull();
+    });
+  });
 });

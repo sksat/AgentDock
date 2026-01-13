@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@agent-dock/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "nanoid": "^5.1.5",
     "ws": "^8.18.2",

@@ -8,6 +8,7 @@ import type {
   DailyUsage,
   UsageTotals,
   BlockUsage,
+  ScreencastMetadata,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -55,6 +56,15 @@ export interface ModelUsage {
   cacheReadTokens: number;
 }
 
+export interface ScreencastState {
+  active: boolean;
+  browserUrl?: string;
+  frame?: {
+    data: string;
+    metadata: ScreencastMetadata;
+  };
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -73,6 +83,7 @@ export interface UseSessionReturn {
   usageInfo: UsageInfo | null;
   modelUsage: ModelUsage[] | null;
   globalUsage: GlobalUsage | null;
+  screencast: ScreencastState | null;
 
   // Session management
   listSessions: () => void;
@@ -118,6 +129,9 @@ type SessionPendingPermission = Map<string, PendingPermission>;
 // Store pending questions per session
 type SessionPendingQuestion = Map<string, PendingQuestion>;
 
+// Store screencast state per session
+type SessionScreencast = Map<string, ScreencastState>;
+
 export function useSession(): UseSessionReturn {
   const sendRef = useRef<((message: ClientMessage) => void) | null>(null);
 
@@ -146,6 +160,9 @@ export function useSession(): UseSessionReturn {
   // Pending permissions and questions stored per session
   const [sessionPendingPermission, setSessionPendingPermission] = useState<SessionPendingPermission>(new Map());
   const [sessionPendingQuestion, setSessionPendingQuestion] = useState<SessionPendingQuestion>(new Map());
+
+  // Screencast state stored per session
+  const [sessionScreencast, setSessionScreencast] = useState<SessionScreencast>(new Map());
 
   // Active session state
   const [isLoading, setIsLoading] = useState(false);
@@ -237,6 +254,7 @@ export function useSession(): UseSessionReturn {
   const modelUsage = activeSessionId ? (sessionModelUsage.get(activeSessionId) ?? null) : null;
   const pendingPermission = activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null;
   const pendingQuestion = activeSessionId ? (sessionPendingQuestion.get(activeSessionId) ?? null) : null;
+  const screencast = activeSessionId ? (sessionScreencast.get(activeSessionId) ?? null) : null;
 
   // Helper to update messages for a specific session
   const updateSessionMessages = useCallback(
@@ -924,6 +942,38 @@ export function useSession(): UseSessionReturn {
           setIsLoading(false);
           setLoadingReason(null);
           break;
+
+        case 'screencast_frame': {
+          const sessionId = message.sessionId;
+          setSessionScreencast((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? { active: false };
+            newMap.set(sessionId, {
+              ...current,
+              frame: {
+                data: message.data,
+                metadata: message.metadata,
+              },
+            });
+            return newMap;
+          });
+          break;
+        }
+
+        case 'screencast_status': {
+          const sessionId = message.sessionId;
+          setSessionScreencast((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? {};
+            newMap.set(sessionId, {
+              ...current,
+              active: message.active,
+              browserUrl: message.browserUrl,
+            });
+            return newMap;
+          });
+          break;
+        }
       }
     },
     [activeSessionId, updateSessionMessages]
@@ -944,6 +994,7 @@ export function useSession(): UseSessionReturn {
     usageInfo,
     modelUsage,
     globalUsage,
+    screencast,
     listSessions,
     createSession,
     selectSession,

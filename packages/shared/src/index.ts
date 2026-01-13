@@ -24,7 +24,12 @@ export type ClientMessage =
   // AskUserQuestion response
   | QuestionResponseMessage
   // Permission request (from MCP server)
-  | McpPermissionRequestMessage;
+  | McpPermissionRequestMessage
+  // Screencast control
+  | StartScreencastMessage
+  | StopScreencastMessage
+  // Browser commands (from MCP server)
+  | BrowserCommandMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -118,6 +123,169 @@ export interface McpPermissionRequestMessage {
   input: unknown;
 }
 
+// Screencast control messages
+export interface StartScreencastMessage {
+  type: 'start_screencast';
+  sessionId: string;
+}
+
+export interface StopScreencastMessage {
+  type: 'stop_screencast';
+  sessionId: string;
+}
+
+// Browser command messages (MCP Server → AgentDock Server)
+export interface BrowserCommandMessage {
+  type: 'browser_command';
+  sessionId: string;
+  requestId: string;
+  command: BrowserCommand;
+}
+
+// Browser command types
+export type BrowserCommand =
+  | BrowserNavigateCommand
+  | BrowserNavigateBackCommand
+  | BrowserClickCommand
+  | BrowserHoverCommand
+  | BrowserTypeCommand
+  | BrowserPressKeyCommand
+  | BrowserSelectOptionCommand
+  | BrowserDragCommand
+  | BrowserFillFormCommand
+  | BrowserSnapshotCommand
+  | BrowserScreenshotCommand
+  | BrowserConsoleMessagesCommand
+  | BrowserNetworkRequestsCommand
+  | BrowserEvaluateCommand
+  | BrowserWaitForCommand
+  | BrowserHandleDialogCommand
+  | BrowserResizeCommand
+  | BrowserTabsCommand
+  | BrowserCloseCommand;
+
+export interface BrowserNavigateCommand {
+  name: 'browser_navigate';
+  url: string;
+}
+
+export interface BrowserNavigateBackCommand {
+  name: 'browser_navigate_back';
+}
+
+export interface BrowserClickCommand {
+  name: 'browser_click';
+  element: string;
+  ref: string;
+  button?: 'left' | 'right' | 'middle';
+  modifiers?: ('Alt' | 'Control' | 'Meta' | 'Shift')[];
+  doubleClick?: boolean;
+}
+
+export interface BrowserHoverCommand {
+  name: 'browser_hover';
+  element: string;
+  ref: string;
+}
+
+export interface BrowserTypeCommand {
+  name: 'browser_type';
+  element: string;
+  ref: string;
+  text: string;
+  slowly?: boolean;
+  submit?: boolean;
+}
+
+export interface BrowserPressKeyCommand {
+  name: 'browser_press_key';
+  key: string;
+}
+
+export interface BrowserSelectOptionCommand {
+  name: 'browser_select_option';
+  element: string;
+  ref: string;
+  values: string[];
+}
+
+export interface BrowserDragCommand {
+  name: 'browser_drag';
+  startElement: string;
+  startRef: string;
+  endElement: string;
+  endRef: string;
+}
+
+export interface BrowserFormField {
+  name: string;
+  type: 'textbox' | 'checkbox' | 'radio' | 'combobox' | 'slider';
+  ref: string;
+  value: string;
+}
+
+export interface BrowserFillFormCommand {
+  name: 'browser_fill_form';
+  fields: BrowserFormField[];
+}
+
+export interface BrowserSnapshotCommand {
+  name: 'browser_snapshot';
+}
+
+export interface BrowserScreenshotCommand {
+  name: 'browser_take_screenshot';
+  element?: string;
+  ref?: string;
+  fullPage?: boolean;
+}
+
+export interface BrowserConsoleMessagesCommand {
+  name: 'browser_console_messages';
+  level?: 'error' | 'warning' | 'info' | 'debug';
+}
+
+export interface BrowserNetworkRequestsCommand {
+  name: 'browser_network_requests';
+  includeStatic?: boolean;
+}
+
+export interface BrowserEvaluateCommand {
+  name: 'browser_evaluate';
+  function: string;
+  element?: string;
+  ref?: string;
+}
+
+export interface BrowserWaitForCommand {
+  name: 'browser_wait_for';
+  text?: string;
+  textGone?: string;
+  time?: number;
+}
+
+export interface BrowserHandleDialogCommand {
+  name: 'browser_handle_dialog';
+  accept: boolean;
+  promptText?: string;
+}
+
+export interface BrowserResizeCommand {
+  name: 'browser_resize';
+  width: number;
+  height: number;
+}
+
+export interface BrowserTabsCommand {
+  name: 'browser_tabs';
+  action: 'list' | 'new' | 'close' | 'select';
+  index?: number;
+}
+
+export interface BrowserCloseCommand {
+  name: 'browser_close';
+}
+
 // ==================== Server → Client ====================
 
 export type ServerMessage =
@@ -146,6 +314,11 @@ export type ServerMessage =
   | PermissionRequestMessage
   // AskUserQuestion
   | AskUserQuestionMessage
+  // Screencast
+  | ScreencastFrameMessage
+  | ScreencastStatusMessage
+  // Browser command result
+  | BrowserCommandResultMessage
   // Error
   | ErrorMessage;
 
@@ -271,6 +444,45 @@ export interface AskUserQuestionMessage {
   sessionId: string;
   requestId: string;
   questions: QuestionItem[];
+}
+
+// ==================== Screencast Messages ====================
+
+export interface ScreencastMetadata {
+  /** Device width in pixels */
+  deviceWidth: number;
+  /** Device height in pixels */
+  deviceHeight: number;
+  /** Timestamp when the frame was captured */
+  timestamp: number;
+}
+
+export interface ScreencastFrameMessage {
+  type: 'screencast_frame';
+  sessionId: string;
+  /** Base64 encoded image data */
+  data: string;
+  /** Frame metadata */
+  metadata: ScreencastMetadata;
+}
+
+export interface ScreencastStatusMessage {
+  type: 'screencast_status';
+  sessionId: string;
+  /** Whether screencast is currently active */
+  active: boolean;
+  /** Current browser URL */
+  browserUrl?: string;
+}
+
+// Browser command result (Server → MCP Server)
+export interface BrowserCommandResultMessage {
+  type: 'browser_command_result';
+  sessionId: string;
+  requestId: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
 }
 
 export interface ErrorMessage {

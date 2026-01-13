@@ -3,6 +3,8 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { useNavigation } from './hooks/useNavigation';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
+import { BrowserView } from './components/BrowserView';
+import { ViewToggle, type SessionView } from './components/ViewToggle';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -76,6 +78,7 @@ function App() {
     usageInfo,
     modelUsage,
     globalUsage,
+    screencast,
     listSessions,
     createSession,
     selectSession,
@@ -97,6 +100,7 @@ function App() {
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' } | null>(null);
+  const [sessionView, setSessionView] = useState<SessionView>('stream');
 
   const showToast = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ title, message, type });
@@ -247,9 +251,15 @@ function App() {
               />
             ) : (
           <>
-            {/* Session usage bar */}
-            {usageInfo && (
-              <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-end gap-4 text-xs text-text-secondary">
+            {/* Session usage bar with view toggle */}
+            <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-between gap-4 text-xs text-text-secondary">
+              <ViewToggle
+                currentView={sessionView}
+                onToggle={setSessionView}
+                browserActive={screencast?.active ?? false}
+              />
+              {usageInfo && (
+              <div className="flex items-center gap-4">
                 <span className="font-medium text-accent-primary" title="Session total cost">
                   {formatCost(calculateCost(
                     systemInfo?.model,
@@ -278,7 +288,8 @@ function App() {
                 <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
                 <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
               </div>
-            )}
+              )}
+            </div>
 
             {/* Error banner */}
             {error && (
@@ -289,8 +300,24 @@ function App() {
 
             {/* Main content */}
             <main className="flex-1 flex flex-col overflow-hidden">
-              {/* Messages */}
-              <MessageStream messages={messages} />
+              {/* Messages or Browser view based on sessionView */}
+              {sessionView === 'stream' ? (
+                <MessageStream messages={messages} />
+              ) : (
+                <BrowserView
+                  frame={screencast?.frame ?? null}
+                  isActive={screencast?.active ?? false}
+                  browserUrl={screencast?.browserUrl}
+                  onMouseClick={(pos) => {
+                    // TODO: Send browser_click to server
+                    console.log('Browser click:', pos);
+                  }}
+                  onKeyPress={(key) => {
+                    // TODO: Send browser_key_press to server
+                    console.log('Browser key press:', key);
+                  }}
+                />
+              )}
 
               {/* Pending permission request */}
               {pendingPermission && (

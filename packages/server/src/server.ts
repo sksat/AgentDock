@@ -11,11 +11,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, BrowserCommand } from '@agent-dock/shared';
+import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
+import { BrowserSessionManager } from './browser-session-manager.js';
 
 export interface ServerOptions {
   port: number;
@@ -91,6 +93,100 @@ function cleanupMcpConfig(sessionId: string): void {
   }
 }
 
+/**
+ * Execute a browser command via BrowserController
+ */
+async function executeBrowserCommand(controller: BrowserController, command: BrowserCommand): Promise<unknown> {
+  switch (command.name) {
+    case 'browser_navigate':
+      await controller.navigate(command.url);
+      return { success: true };
+
+    case 'browser_navigate_back':
+      await controller.navigateBack();
+      return { success: true };
+
+    case 'browser_click':
+      await controller.click(command.ref, {
+        button: command.button,
+        modifiers: command.modifiers,
+        doubleClick: command.doubleClick,
+      });
+      return { success: true };
+
+    case 'browser_hover':
+      await controller.hover(command.ref);
+      return { success: true };
+
+    case 'browser_type':
+      await controller.type(command.ref, command.text, {
+        slowly: command.slowly,
+        submit: command.submit,
+      });
+      return { success: true };
+
+    case 'browser_press_key':
+      await controller.pressKey(command.key);
+      return { success: true };
+
+    case 'browser_select_option':
+      await controller.selectOption(command.ref, command.values);
+      return { success: true };
+
+    case 'browser_drag':
+      await controller.drag(command.startRef, command.endRef);
+      return { success: true };
+
+    case 'browser_fill_form':
+      await controller.fillForm(command.fields);
+      return { success: true };
+
+    case 'browser_snapshot':
+      return await controller.snapshot();
+
+    case 'browser_take_screenshot':
+      return await controller.takeScreenshot({
+        fullPage: command.fullPage,
+        ref: command.ref,
+      });
+
+    case 'browser_console_messages':
+      return await controller.getConsoleMessages(command.level);
+
+    case 'browser_network_requests':
+      return await controller.getNetworkRequests(command.includeStatic);
+
+    case 'browser_evaluate':
+      return await controller.evaluate(command.function, command.ref);
+
+    case 'browser_wait_for':
+      await controller.waitFor({
+        text: command.text,
+        textGone: command.textGone,
+        time: command.time,
+      });
+      return { success: true };
+
+    case 'browser_handle_dialog':
+      await controller.handleDialog(command.accept, command.promptText);
+      return { success: true };
+
+    case 'browser_resize':
+      await controller.resize(command.width, command.height);
+      return { success: true };
+
+    case 'browser_tabs':
+      return await controller.manageTabs(command.action, command.index);
+
+    case 'browser_close':
+      await controller.close();
+      return { success: true };
+
+    default:
+      throw new Error(`Unknown browser command: ${(command as { name: string }).name}`);
+  }
+}
+
 export interface BridgeServer {
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -142,6 +238,7 @@ export function createServer(options: ServerOptions): BridgeServer {
   }
 
   const runnerManager = new RunnerManager(runnerFactory);
+  const browserSessionManager = new BrowserSessionManager();
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
 
@@ -207,6 +304,29 @@ export function createServer(options: ServerOptions): BridgeServer {
       console.error('[UsageMonitor] Error:', error.message);
     });
   }
+
+  // Set up browser session manager events for screencast
+  browserSessionManager.on('frame', ({ sessionId, data, metadata }) => {
+    sendToSession(sessionId, {
+      type: 'screencast_frame',
+      sessionId,
+      data,
+      metadata,
+    });
+  });
+
+  browserSessionManager.on('status', ({ sessionId, active, browserUrl }) => {
+    sendToSession(sessionId, {
+      type: 'screencast_status',
+      sessionId,
+      active,
+      browserUrl,
+    });
+  });
+
+  browserSessionManager.on('error', ({ sessionId, message }) => {
+    console.error(`[BrowserSession] Error for ${sessionId}: ${message}`);
+  });
 
   // Accumulator for current turn's text (to save as single history entry)
   const turnAccumulator = new Map<string, { text: string; thinking: string }>();
@@ -934,6 +1054,84 @@ Keep it concise but comprehensive.`;
         break;
       }
 
+      case 'start_screencast': {
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Create browser session if not exists
+        if (!browserSessionManager.getController(message.sessionId)) {
+          try {
+            await browserSessionManager.createSession(message.sessionId);
+            console.log(`[BrowserSession] Created for session ${message.sessionId}`);
+          } catch (error) {
+            response = {
+              type: 'error',
+              sessionId: message.sessionId,
+              message: error instanceof Error ? error.message : 'Failed to create browser session',
+            };
+            break;
+          }
+        }
+        // Screencast starts automatically on session creation
+        return;
+      }
+
+      case 'stop_screencast': {
+        // Destroy browser session
+        await browserSessionManager.destroySession(message.sessionId);
+        console.log(`[BrowserSession] Destroyed for session ${message.sessionId}`);
+        return;
+      }
+
+      case 'browser_command': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          // Auto-create browser session if not exists
+          try {
+            await browserSessionManager.createSession(message.sessionId);
+            console.log(`[BrowserSession] Auto-created for session ${message.sessionId}`);
+          } catch (error) {
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: false,
+              error: error instanceof Error ? error.message : 'Failed to create browser session',
+            };
+            break;
+          }
+        }
+
+        // Execute the browser command
+        try {
+          const ctrl = browserSessionManager.getController(message.sessionId)!;
+          const result = await executeBrowserCommand(ctrl, message.command);
+          response = {
+            type: 'browser_command_result',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            success: true,
+            result,
+          };
+        } catch (error) {
+          response = {
+            type: 'browser_command_result',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            success: false,
+            error: error instanceof Error ? error.message : 'Browser command failed',
+          };
+        }
+        break;
+      }
+
       default: {
         response = {
           type: 'error',
@@ -1035,6 +1233,9 @@ Keep it concise but comprehensive.`;
     },
 
     async stop() {
+      // Clean up browser sessions first
+      await browserSessionManager.destroyAll();
+
       return new Promise((resolve) => {
         // Stop usage monitor
         usageMonitor?.stop();
