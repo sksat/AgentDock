@@ -76,8 +76,12 @@ claude -p "prompt" --permission-prompt-tool mcp__bridge__permission_prompt
 │  │  │  └────────────────┘  └────────────────┘          │  │ │
 │  │  └──────────────────────────────────────────────────┘  │ │
 │  │  ┌──────────────────────────────────────────────────┐  │ │
-│  │  │           MCP Server (Permission Handler)         │  │ │
-│  │  │    mcp__bridge__permission_prompt ◄──► WebSocket  │  │ │
+│  │  │         BrowserSessionManager (Playwright)        │  │ │
+│  │  │    ブラウザ操作 + CDP Screencast ストリーミング   │  │ │
+│  │  └──────────────────────────────────────────────────┘  │ │
+│  │  ┌──────────────────────────────────────────────────┐  │ │
+│  │  │      MCP Server (Permission + Browser Tools)      │  │ │
+│  │  │    permission_prompt / browser_* ◄──► WebSocket   │  │ │
 │  │  └──────────────────────────────────────────────────┘  │ │
 │  └────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
@@ -88,18 +92,15 @@ claude -p "prompt" --permission-prompt-tool mcp__bridge__permission_prompt
 │  ┌──────────────┐  ┌──────────────────────────────────────┐ │
 │  │   Sidebar    │  │            Main Area                  │ │
 │  │  ┌────────┐  │  │  ┌────────────────────────────────┐  │ │
-│  │  │Session1│  │  │  │      Message Stream            │  │ │
+│  │  │Session1│  │  │  │   MessageStream / BrowserView  │  │ │
 │  │  ├────────┤  │  │  │  ┌──────────────────────────┐  │  │ │
 │  │  │Session2│  │  │  │  │ [Text Output]            │  │  │ │
 │  │  ├────────┤  │  │  │  ├──────────────────────────┤  │  │ │
 │  │  │  [+]   │  │  │  │  │ [Permission Request UI]  │  │  │ │
 │  │  └────────┘  │  │  │  │  Allow / Deny / Modify   │  │  │ │
 │  │              │  │  │  ├──────────────────────────┤  │  │ │
-│  │              │  │  │  │ [AskUserQuestion UI]     │  │  │ │
-│  │              │  │  │  │  Option 1 / Option 2...  │  │  │ │
-│  │              │  │  │  ├──────────────────────────┤  │  │ │
-│  │              │  │  │  │ [Diff View UI]           │  │  │ │
-│  │              │  │  │  │  Accept / Reject         │  │  │ │
+│  │              │  │  │  │ [BrowserView]            │  │  │ │
+│  │              │  │  │  │  Canvas + URL bar        │  │  │ │
 │  │              │  │  │  └──────────────────────────┘  │  │ │
 │  │              │  │  └────────────────────────────────┘  │ │
 │  │              │  │  ┌────────────────────────────────┐  │ │
@@ -128,6 +129,10 @@ claude -p "prompt" --permission-prompt-tool mcp__bridge__permission_prompt
    - AskUserQuestion は `--allowedTools` に含めることで自動許可
    - または MCP Server で特別処理して WebSocket でフロントエンドに転送
 
+5. **ブラウザ画面ストリーミング**
+   - BrowserSessionManager → CDP Screencast → Base64 JPEG → WebSocket → BrowserView (Canvas)
+   - ユーザー操作 (click/key/scroll) → WebSocket → Playwright page 操作
+
 ---
 
 ## プロジェクト構成
@@ -145,14 +150,16 @@ agent-dock/
 │   │   │   ├── session-manager.ts  # セッション管理
 │   │   │   ├── claude-runner.ts    # claude CLI 実行
 │   │   │   ├── runner-manager.ts   # Runner インスタンス管理
-│   │   │   └── stream-parser.ts    # stream-json パーサー
+│   │   │   ├── stream-parser.ts    # stream-json パーサー
+│   │   │   └── browser-session-manager.ts  # ブラウザセッション管理
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   │
-│   ├── mcp-server/           # MCP サーバー（パーミッションハンドラー）
+│   ├── mcp-server/           # MCP サーバー（パーミッション + ブラウザ）
 │   │   ├── src/
 │   │   │   ├── index.ts      # MCP サーバーエントリポイント
-│   │   │   └── permission-handler.ts  # permission_prompt ツール
+│   │   │   ├── permission-handler.ts  # permission_prompt ツール
+│   │   │   └── playwright-handler.ts  # browser_* ツール
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   │
@@ -167,7 +174,8 @@ agent-dock/
 │   │   │   │   ├── PermissionRequest.tsx # パーミッション UI
 │   │   │   │   ├── AskUserQuestion.tsx   # 質問 UI
 │   │   │   │   ├── DiffView.tsx          # 差分表示
-│   │   │   │   └── InputArea.tsx         # 入力エリア
+│   │   │   │   ├── InputArea.tsx         # 入力エリア
+│   │   │   │   └── BrowserView.tsx       # ブラウザビュー
 │   │   │   ├── hooks/
 │   │   │   │   ├── useWebSocket.ts
 │   │   │   │   └── useSession.ts
@@ -204,6 +212,8 @@ agent-dock/
 | ビルド (server) | tsc | - |
 | モノレポ | pnpm workspaces | - |
 | テスト | vitest | 3.x |
+| ブラウザ自動化 | Playwright | (via @anthropic/playwright-mcp) |
+| 画面ストリーミング | CDP Screencast | (via @anthropic/browser-streamer) |
 
 ---
 
@@ -229,7 +239,17 @@ type ClientMessage =
       response: { behavior: 'allow'; updatedInput: any } | { behavior: 'deny'; message: string } }
   // AskUserQuestion 応答
   | { type: 'question_response'; sessionId: string; requestId: string;
-      answers: Record<string, string> };
+      answers: Record<string, string> }
+  // ブラウザ操作
+  | { type: 'start_screencast'; sessionId: string }
+  | { type: 'stop_screencast'; sessionId: string }
+  | { type: 'user_browser_click'; sessionId: string; x: number; y: number }
+  | { type: 'user_browser_key_press'; sessionId: string; key: string }
+  | { type: 'user_browser_scroll'; sessionId: string; deltaX: number; deltaY: number }
+  | { type: 'user_browser_navigate'; sessionId: string; url: string }
+  | { type: 'user_browser_back'; sessionId: string }
+  | { type: 'user_browser_forward'; sessionId: string }
+  | { type: 'user_browser_refresh'; sessionId: string };
 
 // サーバー → クライアント
 type ServerMessage =
@@ -251,8 +271,18 @@ type ServerMessage =
       questions: Array<{ question: string; header: string;
                          options: Array<{ label: string; description: string }>;
                          multiSelect: boolean }> }
+  // ブラウザ画面
+  | { type: 'screencast_frame'; sessionId: string; data: string; metadata: ScreencastMetadata }
+  | { type: 'screencast_status'; sessionId: string; active: boolean; browserUrl?: string; browserTitle?: string }
+  | { type: 'screencast_cursor'; sessionId: string; cursor: string }
   // エラー
   | { type: 'error'; sessionId?: string; message: string };
+
+interface ScreencastMetadata {
+  deviceWidth: number;
+  deviceHeight: number;
+  timestamp: number;
+}
 ```
 
 ### セッション情報
@@ -316,6 +346,27 @@ Claude CLI の stream-json 出力をパースするユーティリティ。
 - `user`: ツール結果
 - `result`: 処理完了
 - `system`: システムメッセージ
+
+### BrowserSessionManager (packages/server/src/browser-session-manager.ts)
+
+セッションごとにブラウザインスタンスを管理し、CDP Screencast による画面ストリーミングを提供。
+
+**責務:**
+- セッションごとのブラウザライフサイクル管理
+- CDP Screencast でフレーム取得・転送
+- `framenavigated` イベントで URL/タイトル同期
+
+**イベント:** `frame`, `status`, `error`
+
+### BrowserView (packages/client/src/components/BrowserView.tsx)
+
+ブラウザ画面ストリームを Canvas で表示し、ユーザー操作を処理するコンポーネント。
+
+**機能:**
+- Canvas によるフレーム描画（レスポンシブ、アスペクト比維持）
+- ブラウザ chrome UI（タイトルバー、ナビゲーションバー）
+- 編集可能な URL バー、戻る/進む/リロードボタン
+- マウス/キーボード操作のキャプチャ、カーソル同期
 
 ---
 
@@ -414,6 +465,11 @@ cd packages/server && pnpm test
 - [ ] 選択後に Claude が処理を継続する
 - [ ] 複数セッションを切り替えられる（--resume）
 - [ ] ブラウザを閉じて再接続しても履歴が表示される
+- [ ] ブラウザ画面がリアルタイムでストリーミングされる
+- [ ] URL バーに現在の URL/タイトルが表示される
+- [ ] URL バーから直接ナビゲーションできる
+- [ ] 戻る/進む/リロードボタンが機能する
+- [ ] マウスクリック・キーボード入力がブラウザに反映される
 
 ---
 
