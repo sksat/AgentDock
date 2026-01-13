@@ -32,6 +32,7 @@ const defaultProps = {
   onNavigateBack: undefined,
   onNavigateForward: undefined,
   onRefresh: undefined,
+  onNavigate: undefined,
 };
 
 // Reset mocks before each test

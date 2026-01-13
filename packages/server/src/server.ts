@@ -315,12 +315,13 @@ export function createServer(options: ServerOptions): BridgeServer {
     });
   });
 
-  browserSessionManager.on('status', ({ sessionId, active, browserUrl }) => {
+  browserSessionManager.on('status', ({ sessionId, active, browserUrl, browserTitle }) => {
     sendToSession(sessionId, {
       type: 'screencast_status',
       sessionId,
       active,
       browserUrl,
+      browserTitle,
     });
   });
 
@@ -1177,6 +1178,31 @@ Keep it concise but comprehensive.`;
           }
         } catch {
           // Silent fail for mouse move
+        }
+        return;
+      }
+
+      case 'user_browser_navigate': {
+        let controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          // Auto-create browser session if not exists
+          try {
+            await browserSessionManager.createSession(message.sessionId);
+            controller = browserSessionManager.getController(message.sessionId);
+            console.log(`[BrowserSession] Auto-created for navigate in session ${message.sessionId}`);
+          } catch (error) {
+            console.error(`[BrowserSession] Failed to create session for navigate:`, error);
+            return;
+          }
+        }
+        try {
+          const page = controller?.getPage();
+          if (page) {
+            await page.goto(message.url);
+            console.log(`[BrowserSession] Navigated to ${message.url}`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Navigate failed:`, error);
         }
         return;
       }

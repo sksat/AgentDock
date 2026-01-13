@@ -35,6 +35,8 @@ export interface BrowserViewProps {
   onNavigateForward?: () => void;
   /** Called to refresh the page */
   onRefresh?: () => void;
+  /** Called when user enters a URL to navigate */
+  onNavigate?: (url: string) => void;
 }
 
 /**
@@ -56,11 +58,15 @@ export function BrowserView({
   onNavigateBack,
   onNavigateForward,
   onRefresh,
+  onNavigate,
 }: BrowserViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const outerContainerRef = useRef<HTMLDivElement>(null);
   const browserWindowRef = useRef<HTMLDivElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [editedUrl, setEditedUrl] = useState('');
 
   // Chrome height (title bar + nav bar) - approximate
   const CHROME_HEIGHT = 72;
@@ -194,6 +200,45 @@ export function BrowserView({
     },
     [isActive]
   );
+
+  // Handle URL bar click to start editing
+  const handleUrlBarClick = useCallback(() => {
+    if (!onNavigate) return;
+    setEditedUrl(browserUrl || '');
+    setIsEditingUrl(true);
+    // Focus the input after state update
+    setTimeout(() => urlInputRef.current?.select(), 0);
+  }, [browserUrl, onNavigate]);
+
+  // Handle URL input change
+  const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditedUrl(e.target.value);
+  }, []);
+
+  // Handle URL input key down
+  const handleUrlKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (onNavigate && editedUrl.trim()) {
+        // Add protocol if missing
+        let url = editedUrl.trim();
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+        }
+        onNavigate(url);
+      }
+      setIsEditingUrl(false);
+    } else if (e.key === 'Escape') {
+      setIsEditingUrl(false);
+    }
+    // Stop propagation to prevent browser view key handler from firing
+    e.stopPropagation();
+  }, [editedUrl, onNavigate]);
+
+  // Handle URL input blur
+  const handleUrlBlur = useCallback(() => {
+    setIsEditingUrl(false);
+  }, []);
 
   // Prevent browser back/forward navigation when browser view is active
   // Uses History API as fallback since mouse event interception is unreliable
@@ -369,7 +414,12 @@ export function BrowserView({
             </button>
 
             {/* URL bar */}
-            <div className="flex-1 flex items-center gap-2 px-3 py-1 bg-bg-primary rounded border border-border mx-1 min-w-0">
+            <div
+              className={`flex-1 flex items-center gap-2 px-3 py-1 bg-bg-primary rounded border mx-1 min-w-0 ${
+                isEditingUrl ? 'border-accent-primary' : 'border-border'
+              } ${onNavigate ? 'cursor-text' : ''}`}
+              onClick={handleUrlBarClick}
+            >
               {isSecure ? (
                 <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -379,9 +429,22 @@ export function BrowserView({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               )}
-              <span className="text-sm text-text-primary font-mono truncate">
-                {displayUrl}
-              </span>
+              {isEditingUrl ? (
+                <input
+                  ref={urlInputRef}
+                  type="text"
+                  value={editedUrl}
+                  onChange={handleUrlChange}
+                  onKeyDown={handleUrlKeyDown}
+                  onBlur={handleUrlBlur}
+                  className="flex-1 text-sm text-text-primary font-mono bg-transparent outline-none min-w-0"
+                  placeholder="Enter URL..."
+                />
+              ) : (
+                <span className="text-sm text-text-primary font-mono truncate">
+                  {displayUrl}
+                </span>
+              )}
             </div>
           </div>
         </div>

@@ -34,7 +34,8 @@ export type ClientMessage =
   | UserBrowserClickMessage
   | UserBrowserKeyPressMessage
   | UserBrowserScrollMessage
-  | UserBrowserMouseMoveMessage;
+  | UserBrowserMouseMoveMessage
+  | UserBrowserNavigateMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -165,6 +166,12 @@ export interface UserBrowserMouseMoveMessage {
   sessionId: string;
   x: number;
   y: number;
+}
+
+export interface UserBrowserNavigateMessage {
+  type: 'user_browser_navigate';
+  sessionId: string;
+  url: string;
 }
 
 // Browser command messages (MCP Server → AgentDock Server)
@@ -507,6 +514,8 @@ export interface ScreencastStatusMessage {
   active: boolean;
   /** Current browser URL */
   browserUrl?: string;
+  /** Current page title */
+  browserTitle?: string;
 }
 
 export interface ScreencastCursorMessage {

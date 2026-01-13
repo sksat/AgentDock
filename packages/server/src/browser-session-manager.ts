@@ -27,6 +27,7 @@ export interface BrowserSessionStatus {
   sessionId: string;
   active: boolean;
   browserUrl?: string;
+  browserTitle?: string;
 }
 
 /**
@@ -124,11 +125,28 @@ export class BrowserSessionManager extends EventEmitter {
     // Store session
     this.sessions.set(sessionId, { controller, streamer });
 
+    // Set up page event listeners for URL/title changes
+    page.on('framenavigated', async (frame) => {
+      // Only care about main frame
+      if (frame === page.mainFrame()) {
+        const session = this.sessions.get(sessionId);
+        if (session) {
+          this.emit('status', {
+            sessionId,
+            active: session.streamer.isActive(),
+            browserUrl: page.url(),
+            browserTitle: await page.title(),
+          } satisfies BrowserSessionStatus);
+        }
+      }
+    });
+
     // Emit initial status
     this.emit('status', {
       sessionId,
       active: false,
       browserUrl: page.url(),
+      browserTitle: await page.title(),
     } satisfies BrowserSessionStatus);
 
     // Start screencast automatically
@@ -138,6 +156,7 @@ export class BrowserSessionManager extends EventEmitter {
         sessionId,
         active: true,
         browserUrl: page.url(),
+        browserTitle: await page.title(),
       } satisfies BrowserSessionStatus);
     } catch (error) {
       this.emit('error', {

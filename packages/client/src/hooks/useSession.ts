@@ -59,6 +59,7 @@ export interface ModelUsage {
 export interface ScreencastState {
   active: boolean;
   browserUrl?: string;
+  browserTitle?: string;
   cursor?: string;
   frame?: {
     data: string;
@@ -117,6 +118,7 @@ export interface UseSessionReturn {
   sendBrowserKeyPress: (key: string) => void;
   sendBrowserScroll: (deltaX: number, deltaY: number) => void;
   sendBrowserMouseMove: (x: number, y: number) => void;
+  sendBrowserNavigate: (url: string) => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -623,6 +625,16 @@ export function useSession(): UseSessionReturn {
     }
   }, [activeSessionId, send]);
 
+  const sendBrowserNavigate = useCallback((url: string) => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_navigate',
+        sessionId: activeSessionId,
+        url,
+      });
+    }
+  }, [activeSessionId, send]);
+
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
@@ -1039,6 +1051,7 @@ export function useSession(): UseSessionReturn {
               ...current,
               active: message.active,
               browserUrl: message.browserUrl,
+              browserTitle: message.browserTitle,
             });
             return newMap;
           });
@@ -1100,6 +1113,7 @@ export function useSession(): UseSessionReturn {
     sendBrowserKeyPress,
     sendBrowserScroll,
     sendBrowserMouseMove,
+    sendBrowserNavigate,
     handleServerMessage,
     setSend,
   };

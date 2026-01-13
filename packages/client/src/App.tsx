@@ -99,6 +99,7 @@ function App() {
     sendBrowserKeyPress,
     sendBrowserScroll,
     sendBrowserMouseMove,
+    sendBrowserNavigate,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -313,6 +314,7 @@ function App() {
                   frame={screencast?.frame ?? null}
                   isActive={screencast?.active ?? false}
                   browserUrl={screencast?.browserUrl}
+                  browserTitle={screencast?.browserTitle}
                   cursor={screencast?.cursor}
                   onMouseClick={(pos) => sendBrowserClick(pos.x, pos.y)}
                   onKeyPress={sendBrowserKeyPress}
@@ -320,6 +322,7 @@ function App() {
                   onMouseMove={(pos) => sendBrowserMouseMove(pos.x, pos.y)}
                   onStartBrowser={startScreencast}
                   onStopBrowser={stopScreencast}
+                  onNavigate={sendBrowserNavigate}
                 />
               )}
 
