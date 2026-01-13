@@ -515,11 +515,101 @@ function formatFileTool(toolName: string, input: unknown): { icon: string; descr
   }
 }
 
+// Helper to get content preview with line count info
+function getContentPreview(content: string, maxLines: number = 5): { preview: string; totalLines: number; isLong: boolean } {
+  const lines = content.split('\n');
+  const totalLines = lines.length;
+  const isLong = totalLines > maxLines;
+  const preview = isLong ? lines.slice(0, maxLines).join('\n') : content;
+  return { preview, totalLines, isLong };
+}
+
+// Component for Write/Edit content display with collapse
+function FileContentView({ toolName, input }: {
+  toolName: 'Write' | 'Edit';
+  input: unknown;
+}) {
+  const [showFull, setShowFull] = useState(false);
+  const inp = input as Record<string, unknown>;
+  const filePath = inp.file_path as string || '';
+
+  if (toolName === 'Write') {
+    const content = inp.content as string || '';
+    const { preview, totalLines, isLong } = getContentPreview(content, 8);
+
+    return (
+      <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
+        <div className="px-3 py-1.5 bg-bg-tertiary border-b border-border flex items-center justify-between">
+          <span className="font-mono text-xs text-text-secondary truncate">{filePath}</span>
+          <span className="text-xs text-text-secondary">{totalLines} lines</span>
+        </div>
+        <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto whitespace-pre-wrap">
+          {showFull ? content : preview}
+          {isLong && !showFull && (
+            <span className="text-text-secondary/50">...</span>
+          )}
+        </pre>
+        {isLong && (
+          <button
+            onClick={() => setShowFull(!showFull)}
+            className="w-full px-3 py-1.5 bg-bg-tertiary border-t border-border text-xs text-text-secondary hover:text-text-primary transition-colors"
+          >
+            {showFull ? '▲ Show less' : `▼ Show all ${totalLines} lines`}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Edit tool
+  const oldString = inp.old_string as string || '';
+  const newString = inp.new_string as string || '';
+  const oldPreview = getContentPreview(oldString, 4);
+  const newPreview = getContentPreview(newString, 4);
+  const totalLines = Math.max(oldPreview.totalLines, newPreview.totalLines);
+  const isLong = oldPreview.isLong || newPreview.isLong;
+
+  return (
+    <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
+      <div className="px-3 py-1.5 bg-bg-tertiary border-b border-border flex items-center justify-between">
+        <span className="font-mono text-xs text-text-secondary truncate">{filePath}</span>
+        <span className="text-xs text-text-secondary">{totalLines} lines</span>
+      </div>
+      <div className="p-3 bg-bg-secondary text-sm overflow-x-auto space-y-2">
+        <div>
+          <span className="text-accent-danger text-xs font-medium">- old</span>
+          <pre className="mt-1 text-accent-danger/80 whitespace-pre-wrap">
+            {showFull ? oldString : oldPreview.preview}
+            {oldPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
+          </pre>
+        </div>
+        <div>
+          <span className="text-accent-success text-xs font-medium">+ new</span>
+          <pre className="mt-1 text-accent-success/80 whitespace-pre-wrap">
+            {showFull ? newString : newPreview.preview}
+            {newPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
+          </pre>
+        </div>
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setShowFull(!showFull)}
+          className="w-full px-3 py-1.5 bg-bg-tertiary border-t border-border text-xs text-text-secondary hover:text-text-primary transition-colors"
+        >
+          {showFull ? '▲ Show less' : '▼ Show full content'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ToolUseMessage({ content }: { content: ToolUseContent }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInfo = formatFileTool(content.toolName, content.input);
 
   if (fileInfo) {
+    const isWriteOrEdit = content.toolName === 'Write' || content.toolName === 'Edit';
+
     // Compact display for file tools
     return (
       <div data-testid="message-item" className="flex justify-start">
@@ -533,14 +623,29 @@ function ToolUseMessage({ content }: { content: ToolUseContent }) {
             <span className="text-text-secondary text-sm truncate max-w-[400px] font-mono">
               {fileInfo.description}
             </span>
+            <svg
+              className={clsx('w-4 h-4 text-text-secondary transition-transform', isExpanded && 'rotate-180')}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
 
           {isExpanded && (
-            <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
-              <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto">
-                {JSON.stringify(content.input, null, 2)}
-              </pre>
-            </div>
+            isWriteOrEdit ? (
+              <FileContentView
+                toolName={content.toolName as 'Write' | 'Edit'}
+                input={content.input}
+              />
+            ) : (
+              <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
+                <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto">
+                  {JSON.stringify(content.input, null, 2)}
+                </pre>
+              </div>
+            )
           )}
         </div>
       </div>
