@@ -1207,6 +1207,60 @@ Keep it concise but comprehensive.`;
         return;
       }
 
+      case 'user_browser_back': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for back in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.goBack();
+            console.log(`[BrowserSession] Navigated back`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Go back failed:`, error);
+        }
+        return;
+      }
+
+      case 'user_browser_forward': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for forward in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.goForward();
+            console.log(`[BrowserSession] Navigated forward`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Go forward failed:`, error);
+        }
+        return;
+      }
+
+      case 'user_browser_refresh': {
+        const controller = browserSessionManager.getController(message.sessionId);
+        if (!controller) {
+          console.log(`[BrowserSession] No active browser for refresh in session ${message.sessionId}`);
+          return;
+        }
+        try {
+          const page = controller.getPage();
+          if (page) {
+            await page.reload();
+            console.log(`[BrowserSession] Page refreshed`);
+          }
+        } catch (error) {
+          console.error(`[BrowserSession] Refresh failed:`, error);
+        }
+        return;
+      }
+
       case 'browser_command': {
         const controller = browserSessionManager.getController(message.sessionId);
         if (!controller) {

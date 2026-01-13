@@ -119,6 +119,9 @@ export interface UseSessionReturn {
   sendBrowserScroll: (deltaX: number, deltaY: number) => void;
   sendBrowserMouseMove: (x: number, y: number) => void;
   sendBrowserNavigate: (url: string) => void;
+  sendBrowserBack: () => void;
+  sendBrowserForward: () => void;
+  sendBrowserRefresh: () => void;
 
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
@@ -635,6 +638,33 @@ export function useSession(): UseSessionReturn {
     }
   }, [activeSessionId, send]);
 
+  const sendBrowserBack = useCallback(() => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_back',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const sendBrowserForward = useCallback(() => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_forward',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const sendBrowserRefresh = useCallback(() => {
+    if (activeSessionId) {
+      send({
+        type: 'user_browser_refresh',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
@@ -1114,6 +1144,9 @@ export function useSession(): UseSessionReturn {
     sendBrowserScroll,
     sendBrowserMouseMove,
     sendBrowserNavigate,
+    sendBrowserBack,
+    sendBrowserForward,
+    sendBrowserRefresh,
     handleServerMessage,
     setSend,
   };

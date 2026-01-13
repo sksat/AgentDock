@@ -100,6 +100,9 @@ function App() {
     sendBrowserScroll,
     sendBrowserMouseMove,
     sendBrowserNavigate,
+    sendBrowserBack,
+    sendBrowserForward,
+    sendBrowserRefresh,
     handleServerMessage,
     setSend,
   } = useSession();
@@ -323,6 +326,9 @@ function App() {
                   onStartBrowser={startScreencast}
                   onStopBrowser={stopScreencast}
                   onNavigate={sendBrowserNavigate}
+                  onNavigateBack={sendBrowserBack}
+                  onNavigateForward={sendBrowserForward}
+                  onRefresh={sendBrowserRefresh}
                 />
               )}
 

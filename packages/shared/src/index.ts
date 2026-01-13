@@ -35,7 +35,10 @@ export type ClientMessage =
   | UserBrowserKeyPressMessage
   | UserBrowserScrollMessage
   | UserBrowserMouseMoveMessage
-  | UserBrowserNavigateMessage;
+  | UserBrowserNavigateMessage
+  | UserBrowserBackMessage
+  | UserBrowserForwardMessage
+  | UserBrowserRefreshMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -172,6 +175,21 @@ export interface UserBrowserNavigateMessage {
   type: 'user_browser_navigate';
   sessionId: string;
   url: string;
+}
+
+export interface UserBrowserBackMessage {
+  type: 'user_browser_back';
+  sessionId: string;
+}
+
+export interface UserBrowserForwardMessage {
+  type: 'user_browser_forward';
+  sessionId: string;
+}
+
+export interface UserBrowserRefreshMessage {
+  type: 'user_browser_refresh';
+  sessionId: string;
 }
 
 // Browser command messages (MCP Server → AgentDock Server)
