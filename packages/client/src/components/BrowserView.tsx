@@ -13,6 +13,8 @@ export interface BrowserViewProps {
   isActive: boolean;
   /** Current browser URL */
   browserUrl?: string;
+  /** Current page title */
+  browserTitle?: string;
   /** Current cursor style from remote browser */
   cursor?: string;
   /** Called when user clicks on the browser view */
@@ -27,6 +29,12 @@ export interface BrowserViewProps {
   onStartBrowser: () => void;
   /** Called to stop browser session */
   onStopBrowser: () => void;
+  /** Called to navigate back */
+  onNavigateBack?: () => void;
+  /** Called to navigate forward */
+  onNavigateForward?: () => void;
+  /** Called to refresh the page */
+  onRefresh?: () => void;
 }
 
 /**
@@ -37,6 +45,7 @@ export function BrowserView({
   frame,
   isActive,
   browserUrl,
+  browserTitle,
   cursor,
   onMouseClick,
   onKeyPress,
@@ -44,21 +53,28 @@ export function BrowserView({
   onMouseMove,
   onStartBrowser,
   onStopBrowser,
+  onNavigateBack,
+  onNavigateForward,
+  onRefresh,
 }: BrowserViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const outerContainerRef = useRef<HTMLDivElement>(null);
+  const browserWindowRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
+
+  // Chrome height (title bar + nav bar) - approximate
+  const CHROME_HEIGHT = 72;
 
   // Calculate canvas display size based on container size while maintaining aspect ratio
   useEffect(() => {
-    const container = containerRef.current;
+    const container = outerContainerRef.current;
     if (!container || !frame) return;
 
     const updateSize = () => {
       const containerRect = container.getBoundingClientRect();
-      // Account for padding (p-4 = 16px * 2 = 32px)
+      // Account for padding (p-4 = 16px * 2 = 32px) and chrome height
       const availableWidth = containerRect.width - 32;
-      const availableHeight = containerRect.height - 32;
+      const availableHeight = containerRect.height - 32 - CHROME_HEIGHT;
 
       const frameWidth = frame.metadata.deviceWidth;
       const frameHeight = frame.metadata.deviceHeight;
@@ -70,11 +86,11 @@ export function BrowserView({
       // Fit within available space while maintaining aspect ratio
       if (availableWidth / availableHeight > aspectRatio) {
         // Container is wider than frame aspect ratio - height is limiting
-        displayHeight = availableHeight;
+        displayHeight = Math.max(100, availableHeight);
         displayWidth = displayHeight * aspectRatio;
       } else {
         // Container is taller than frame aspect ratio - width is limiting
-        displayWidth = availableWidth;
+        displayWidth = Math.max(200, availableWidth);
         displayHeight = displayWidth / aspectRatio;
       }
 
@@ -89,7 +105,7 @@ export function BrowserView({
     resizeObserver.observe(container);
 
     return () => resizeObserver.disconnect();
-  }, [frame]);
+  }, [frame, CHROME_HEIGHT]);
 
   // Draw frame to canvas when it changes
   useEffect(() => {
@@ -184,7 +200,7 @@ export function BrowserView({
   useEffect(() => {
     if (!isActive) return;
 
-    const container = containerRef.current;
+    const container = browserWindowRef.current;
     if (!container) return;
 
     // Track if mouse is over the container
@@ -280,29 +296,97 @@ export function BrowserView({
   const width = frame?.metadata.deviceWidth ?? 1280;
   const height = frame?.metadata.deviceHeight ?? 720;
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary">
-      {/* URL bar with Stop button */}
-      <div className="px-3 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
-        <span className="text-text-secondary">🔒</span>
-        <span className="text-sm text-text-primary font-mono truncate flex-1">
-          {browserUrl || 'about:blank'}
-        </span>
-        <button
-          onClick={onStopBrowser}
-          className="px-2 py-1 text-xs rounded bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30 transition-colors"
-        >
-          Stop Browser
-        </button>
-      </div>
+  // Helper to get display URL (truncate long URLs)
+  const displayUrl = browserUrl || 'about:blank';
+  const isSecure = displayUrl.startsWith('https://');
 
-      {/* Canvas container */}
+  return (
+    <div ref={outerContainerRef} className="flex-1 flex items-center justify-center overflow-hidden bg-bg-secondary p-4">
+      {/* Browser window container - unified chrome + canvas */}
       <div
-        ref={containerRef}
-        className="flex-1 flex items-center justify-center overflow-hidden p-4 min-h-0"
+        ref={browserWindowRef}
+        className="flex flex-col rounded-lg border border-border shadow-lg overflow-hidden"
+        style={{
+          maxWidth: '100%',
+          maxHeight: '100%',
+        }}
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
+        {/* Browser chrome */}
+        <div className="bg-bg-tertiary flex-shrink-0" style={{ width: canvasSize?.width ?? 'auto' }}>
+          {/* Title bar */}
+          <div className="px-3 py-1.5 flex items-center justify-between border-b border-border/50">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="text-sm">🌐</span>
+              <span className="text-sm text-text-primary truncate">
+                {browserTitle || 'New Tab'}
+              </span>
+            </div>
+            <button
+              onClick={onStopBrowser}
+              className="p-1 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-accent-danger transition-colors"
+              title="Close browser"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Navigation bar */}
+          <div className="px-2 py-1.5 flex items-center gap-1">
+            {/* Navigation buttons */}
+            <button
+              onClick={onNavigateBack}
+              disabled={!onNavigateBack}
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Go back"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={onNavigateForward}
+              disabled={!onNavigateForward}
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Go forward"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={onRefresh}
+              disabled={!onRefresh}
+              className="p-1.5 rounded hover:bg-bg-secondary/50 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Refresh"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+
+            {/* URL bar */}
+            <div className="flex-1 flex items-center gap-2 px-3 py-1 bg-bg-primary rounded border border-border mx-1 min-w-0">
+              {isSecure ? (
+                <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-text-disabled flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="text-sm text-text-primary font-mono truncate">
+                {displayUrl}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Canvas */}
         <canvas
           ref={canvasRef}
           width={width}
@@ -311,7 +395,7 @@ export function BrowserView({
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
           onContextMenu={handleContextMenu}
-          className="border border-border rounded shadow-lg"
+          className="block"
           style={{
             width: canvasSize?.width ?? 'auto',
             height: canvasSize?.height ?? 'auto',

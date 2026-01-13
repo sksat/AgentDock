@@ -29,6 +29,9 @@ const defaultProps = {
   onMouseMove: vi.fn(),
   onStartBrowser: vi.fn(),
   onStopBrowser: vi.fn(),
+  onNavigateBack: undefined,
+  onNavigateForward: undefined,
+  onRefresh: undefined,
 };
 
 // Reset mocks before each test
@@ -101,7 +104,7 @@ describe('BrowserView', () => {
       expect(canvas).toHaveAttribute('height', '720');
     });
 
-    it('should show Stop Browser button when active', () => {
+    it('should show Close browser button when active', () => {
       render(
         <BrowserView
           {...defaultProps}
@@ -109,7 +112,7 @@ describe('BrowserView', () => {
           isActive={true}
         />
       );
-      expect(screen.getByRole('button', { name: /Stop Browser/i })).toBeInTheDocument();
+      expect(screen.getByTitle('Close browser')).toBeInTheDocument();
     });
   });
 
@@ -173,7 +176,7 @@ describe('BrowserView', () => {
       expect(handleStartBrowser).toHaveBeenCalled();
     });
 
-    it('should call onStopBrowser when Stop Browser button is clicked', () => {
+    it('should call onStopBrowser when Close browser button is clicked', () => {
       const handleStopBrowser = vi.fn();
       render(
         <BrowserView
@@ -184,7 +187,7 @@ describe('BrowserView', () => {
         />
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /Stop Browser/i }));
+      fireEvent.click(screen.getByTitle('Close browser'));
       expect(handleStopBrowser).toHaveBeenCalled();
     });
   });
@@ -568,6 +571,125 @@ describe('BrowserView', () => {
     });
   });
 
+  describe('browser chrome', () => {
+    it('should display page title in title bar', () => {
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          browserTitle="Example Page"
+        />
+      );
+
+      expect(screen.getByText('Example Page')).toBeInTheDocument();
+    });
+
+    it('should show "New Tab" when no title is provided', () => {
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          browserTitle={undefined}
+        />
+      );
+
+      expect(screen.getByText('New Tab')).toBeInTheDocument();
+    });
+
+    it('should render navigation buttons', () => {
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+        />
+      );
+
+      expect(screen.getByTitle('Go back')).toBeInTheDocument();
+      expect(screen.getByTitle('Go forward')).toBeInTheDocument();
+      expect(screen.getByTitle('Refresh')).toBeInTheDocument();
+    });
+
+    it('should call onNavigateBack when back button is clicked', () => {
+      const handleBack = vi.fn();
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onNavigateBack={handleBack}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Go back'));
+      expect(handleBack).toHaveBeenCalled();
+    });
+
+    it('should call onNavigateForward when forward button is clicked', () => {
+      const handleForward = vi.fn();
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onNavigateForward={handleForward}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Go forward'));
+      expect(handleForward).toHaveBeenCalled();
+    });
+
+    it('should call onRefresh when refresh button is clicked', () => {
+      const handleRefresh = vi.fn();
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onRefresh={handleRefresh}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Refresh'));
+      expect(handleRefresh).toHaveBeenCalled();
+    });
+
+    it('should disable navigation buttons when handlers are not provided', () => {
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onNavigateBack={undefined}
+          onNavigateForward={undefined}
+          onRefresh={undefined}
+        />
+      );
+
+      expect(screen.getByTitle('Go back')).toBeDisabled();
+      expect(screen.getByTitle('Go forward')).toBeDisabled();
+      expect(screen.getByTitle('Refresh')).toBeDisabled();
+    });
+
+    it('should render close button and call onStopBrowser when clicked', () => {
+      const handleStop = vi.fn();
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onStopBrowser={handleStop}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Close browser'));
+      expect(handleStop).toHaveBeenCalled();
+    });
+  });
+
   describe('robustness', () => {
     it('should handle frame with different dimensions gracefully', () => {
       const smallMetadata: ScreencastMetadata = {
@@ -659,7 +781,7 @@ describe('BrowserView', () => {
         />
       );
       expect(screen.queryByText(/Loading browser view/i)).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Stop Browser/i })).toBeInTheDocument();
+      expect(screen.getByTitle('Close browser')).toBeInTheDocument();
     });
 
     it('should handle stop and restart correctly', () => {
@@ -672,7 +794,7 @@ describe('BrowserView', () => {
       );
 
       // Active state
-      expect(screen.getByRole('button', { name: /Stop Browser/i })).toBeInTheDocument();
+      expect(screen.getByTitle('Close browser')).toBeInTheDocument();
 
       // Stop browser
       rerender(
@@ -688,7 +810,7 @@ describe('BrowserView', () => {
           frame={{ data: mockFrameData, metadata: mockMetadata }}
         />
       );
-      expect(screen.getByRole('button', { name: /Stop Browser/i })).toBeInTheDocument();
+      expect(screen.getByTitle('Close browser')).toBeInTheDocument();
     });
   });
 });
