@@ -294,15 +294,17 @@ function BashToolMessage({ content }: { content: BashToolContent }) {
 }
 
 // Helper to format browser tool display
-function formatBrowserTool(toolName: string, input: unknown): { shortName: string; description: string } | null {
-  // Match MCP Playwright browser tools
+function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string } | null {
+  // Match external MCP Playwright browser tools (not AgentDock's built-in)
   const mcpMatch = toolName.match(/^mcp__.*__browser_(.+)$/);
-  // Also match direct browser_ prefix
+  // Also match AgentDock's direct browser_ prefix
   const directMatch = toolName.match(/^browser_(.+)$/);
   const match = mcpMatch || directMatch;
 
   if (!match) return null;
 
+  // External Playwright MCP = "playwright:", AgentDock built-in = "browser:"
+  const isExternalPlaywright = !!mcpMatch;
   const action = match[1];
   const inp = input as Record<string, unknown>;
 
@@ -376,6 +378,7 @@ function formatBrowserTool(toolName: string, input: unknown): { shortName: strin
   }
 
   return {
+    prefix: isExternalPlaywright ? 'playwright' : 'browser',
     shortName: action.replace(/_/g, ' '),
     description,
   };
@@ -407,9 +410,9 @@ function McpToolMessage({ content }: { content: McpToolContent }) {
           )}></span>
 
           {browserInfo ? (
-            // Browser tool: show simplified format
+            // Browser/Playwright tool: show simplified format
             <>
-              <span className="text-text-secondary text-sm">browser:</span>
+              <span className="text-text-secondary text-sm">{browserInfo.prefix}:</span>
               <span className="text-text-primary font-medium">{browserInfo.shortName}</span>
               {browserInfo.description && (
                 <span className="text-text-secondary text-sm truncate max-w-[300px]">{browserInfo.description}</span>

@@ -94,13 +94,15 @@ function cleanupMcpConfig(sessionId: string): void {
 }
 
 /**
- * Check if a tool name is a browser tool (should be auto-allowed)
+ * Check if a tool name is an AgentDock built-in browser tool (should be auto-allowed)
+ * Note: This does NOT include external MCP Playwright tools (mcp__*__browser_*)
+ * because those are from a separate Playwright MCP server, not AgentDock's built-in browser.
+ * AgentDock's browser commands go through WebSocket directly, not MCP permission.
  */
 export function isBrowserTool(toolName: string): boolean {
-  // Match patterns like:
-  // - mcp__plugin_playwright_playwright__browser_* (MCP Playwright tools)
-  // - browser_* (direct browser tools)
-  return /^mcp__.*__browser_/.test(toolName) || /^browser_/.test(toolName);
+  // Only match direct browser_* tools (AgentDock internal, if any)
+  // Do NOT match mcp__*__browser_* (external Playwright MCP)
+  return /^browser_[a-z]/.test(toolName);
 }
 
 /**

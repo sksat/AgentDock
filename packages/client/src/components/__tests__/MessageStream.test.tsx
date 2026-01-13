@@ -478,7 +478,7 @@ describe('QuestionMessage robustness', () => {
 });
 
 describe('McpToolMessage - Browser tool formatting', () => {
-  it('should display browser navigate tool with simplified format', () => {
+  it('should display external Playwright MCP navigate tool as "playwright:"', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'mcp_tool',
@@ -494,12 +494,34 @@ describe('McpToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('browser:')).toBeInTheDocument();
+    // External Playwright MCP should show "playwright:" prefix
+    expect(screen.getByText('playwright:')).toBeInTheDocument();
     expect(screen.getByText('navigate')).toBeInTheDocument();
     expect(screen.getByText('https://example.com')).toBeInTheDocument();
   });
 
-  it('should display browser click tool with element description', () => {
+  it('should display AgentDock built-in browser tool as "browser:"', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'mcp_tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'browser_navigate',
+          input: { url: 'https://example.com' },
+          output: '',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // AgentDock built-in browser should show "browser:" prefix
+    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('navigate')).toBeInTheDocument();
+  });
+
+  it('should display external Playwright click tool with element description', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'mcp_tool',
@@ -515,12 +537,12 @@ describe('McpToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('playwright:')).toBeInTheDocument();
     expect(screen.getByText('click')).toBeInTheDocument();
     expect(screen.getByText('Submit button')).toBeInTheDocument();
   });
 
-  it('should display browser snapshot tool', () => {
+  it('should display external Playwright snapshot tool', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'mcp_tool',
@@ -536,12 +558,12 @@ describe('McpToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('playwright:')).toBeInTheDocument();
     expect(screen.getByText('snapshot')).toBeInTheDocument();
     expect(screen.getByText('Capture page state')).toBeInTheDocument();
   });
 
-  it('should display browser type tool with truncated text', () => {
+  it('should display external Playwright type tool with truncated text', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'mcp_tool',
@@ -557,7 +579,7 @@ describe('McpToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('browser:')).toBeInTheDocument();
+    expect(screen.getByText('playwright:')).toBeInTheDocument();
     expect(screen.getByText('type')).toBeInTheDocument();
     expect(screen.getByText('"Hello World"')).toBeInTheDocument();
   });

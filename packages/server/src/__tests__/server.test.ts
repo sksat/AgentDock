@@ -176,20 +176,20 @@ describe('BridgeServer', () => {
 });
 
 describe('isBrowserTool', () => {
-  it('should return true for MCP Playwright browser tools', () => {
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_navigate')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_click')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_type')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_snapshot')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_take_screenshot')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_evaluate')).toBe(true);
-    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_tabs')).toBe(true);
-  });
-
-  it('should return true for direct browser tools', () => {
+  it('should return true for AgentDock built-in browser tools', () => {
+    // Direct browser_* tools are AgentDock's built-in browser commands
     expect(isBrowserTool('browser_navigate')).toBe(true);
     expect(isBrowserTool('browser_click')).toBe(true);
     expect(isBrowserTool('browser_type')).toBe(true);
+  });
+
+  it('should return false for external MCP Playwright browser tools', () => {
+    // External Playwright MCP tools should NOT be auto-allowed
+    // They come from a separate MCP server, not AgentDock's built-in browser
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_navigate')).toBe(false);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_click')).toBe(false);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_type')).toBe(false);
+    expect(isBrowserTool('mcp__plugin_playwright_playwright__browser_snapshot')).toBe(false);
   });
 
   it('should return false for non-browser tools', () => {
