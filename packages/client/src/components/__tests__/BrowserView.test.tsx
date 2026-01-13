@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserView } from '../BrowserView';
 import type { ScreencastMetadata } from '@agent-dock/shared';
@@ -12,28 +12,30 @@ const mockMetadata: ScreencastMetadata = {
   timestamp: Date.now(),
 };
 
+const defaultProps = {
+  frame: null,
+  isActive: false,
+  onMouseClick: () => {},
+  onKeyPress: () => {},
+  onStartBrowser: () => {},
+  onStopBrowser: () => {},
+};
+
 describe('BrowserView', () => {
   describe('display', () => {
-    it('should render inactive state when no frame', () => {
-      render(
-        <BrowserView
-          frame={null}
-          isActive={false}
-          onMouseClick={() => {}}
-          onKeyPress={() => {}}
-        />
-      );
+    it('should render inactive state with Start Browser button when no frame', () => {
+      render(<BrowserView {...defaultProps} />);
       expect(screen.getByText(/Browser not active/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Start Browser/i })).toBeInTheDocument();
     });
 
     it('should display browser URL when provided', () => {
       render(
         <BrowserView
+          {...defaultProps}
           frame={{ data: mockFrameData, metadata: mockMetadata }}
           isActive={true}
           browserUrl="https://example.com"
-          onMouseClick={() => {}}
-          onKeyPress={() => {}}
         />
       );
       expect(screen.getByText('https://example.com')).toBeInTheDocument();
@@ -42,10 +44,9 @@ describe('BrowserView', () => {
     it('should render canvas element when frame is provided', () => {
       const { container } = render(
         <BrowserView
+          {...defaultProps}
           frame={{ data: mockFrameData, metadata: mockMetadata }}
           isActive={true}
-          onMouseClick={() => {}}
-          onKeyPress={() => {}}
         />
       );
       const canvas = container.querySelector('canvas');
@@ -55,15 +56,25 @@ describe('BrowserView', () => {
     it('should set canvas size based on metadata', () => {
       const { container } = render(
         <BrowserView
+          {...defaultProps}
           frame={{ data: mockFrameData, metadata: mockMetadata }}
           isActive={true}
-          onMouseClick={() => {}}
-          onKeyPress={() => {}}
         />
       );
       const canvas = container.querySelector('canvas');
       expect(canvas).toHaveAttribute('width', '1280');
       expect(canvas).toHaveAttribute('height', '720');
+    });
+
+    it('should show Stop Browser button when active', () => {
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Stop Browser/i })).toBeInTheDocument();
     });
   });
 
@@ -72,10 +83,10 @@ describe('BrowserView', () => {
       const handleClick = vi.fn();
       const { container } = render(
         <BrowserView
+          {...defaultProps}
           frame={{ data: mockFrameData, metadata: mockMetadata }}
           isActive={true}
           onMouseClick={handleClick}
-          onKeyPress={() => {}}
         />
       );
 
@@ -99,9 +110,9 @@ describe('BrowserView', () => {
       const handleKeyPress = vi.fn();
       const { container } = render(
         <BrowserView
+          {...defaultProps}
           frame={{ data: mockFrameData, metadata: mockMetadata }}
           isActive={true}
-          onMouseClick={() => {}}
           onKeyPress={handleKeyPress}
         />
       );
@@ -114,25 +125,32 @@ describe('BrowserView', () => {
       expect(handleKeyPress).toHaveBeenCalledWith('a');
     });
 
-    it('should not call handlers when inactive', () => {
-      const handleClick = vi.fn();
-      const handleKeyPress = vi.fn();
+    it('should call onStartBrowser when Start Browser button is clicked', () => {
+      const handleStartBrowser = vi.fn();
       render(
         <BrowserView
-          frame={null}
-          isActive={false}
-          onMouseClick={handleClick}
-          onKeyPress={handleKeyPress}
+          {...defaultProps}
+          onStartBrowser={handleStartBrowser}
         />
       );
 
-      // Try to interact with inactive view
-      const overlay = screen.getByText(/Browser not active/i);
-      fireEvent.click(overlay);
-      fireEvent.keyDown(overlay, { key: 'a' });
+      fireEvent.click(screen.getByRole('button', { name: /Start Browser/i }));
+      expect(handleStartBrowser).toHaveBeenCalled();
+    });
 
-      expect(handleClick).not.toHaveBeenCalled();
-      expect(handleKeyPress).not.toHaveBeenCalled();
+    it('should call onStopBrowser when Stop Browser button is clicked', () => {
+      const handleStopBrowser = vi.fn();
+      render(
+        <BrowserView
+          {...defaultProps}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+          isActive={true}
+          onStopBrowser={handleStopBrowser}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Stop Browser/i }));
+      expect(handleStopBrowser).toHaveBeenCalled();
     });
   });
 
@@ -140,14 +158,13 @@ describe('BrowserView', () => {
     it('should show loading indicator when active but no frame yet', () => {
       render(
         <BrowserView
-          frame={null}
+          {...defaultProps}
           isActive={true}
-          onMouseClick={() => {}}
-          onKeyPress={() => {}}
         />
       );
       // Should show some loading state, not "not active"
       expect(screen.queryByText(/Browser not active/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Loading browser view/i)).toBeInTheDocument();
     });
   });
 });

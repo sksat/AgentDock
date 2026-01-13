@@ -17,6 +17,10 @@ export interface BrowserViewProps {
   onMouseClick: (position: { x: number; y: number }) => void;
   /** Called when user presses a key while focused */
   onKeyPress: (key: string) => void;
+  /** Called to start browser session */
+  onStartBrowser: () => void;
+  /** Called to stop browser session */
+  onStopBrowser: () => void;
 }
 
 /**
@@ -29,6 +33,8 @@ export function BrowserView({
   browserUrl,
   onMouseClick,
   onKeyPress,
+  onStartBrowser,
+  onStopBrowser,
 }: BrowserViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,14 +88,22 @@ export function BrowserView({
     [isActive, onKeyPress]
   );
 
-  // Inactive state
+  // Inactive state - show Start Browser button
   if (!isActive && !frame) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg-secondary text-text-secondary">
         <div className="text-center">
-          <div className="text-4xl mb-2">🌐</div>
-          <div>Browser not active</div>
-          <div className="text-sm mt-1">Start a browser session to see the view</div>
+          <div className="text-6xl mb-4">🌐</div>
+          <div className="text-lg mb-2">Browser not active</div>
+          <div className="text-sm mb-6 text-text-disabled">
+            Start a browser session to view and interact with web pages
+          </div>
+          <button
+            onClick={onStartBrowser}
+            className="px-6 py-3 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/80 transition-colors font-medium"
+          >
+            Start Browser
+          </button>
         </div>
       </div>
     );
@@ -112,15 +126,19 @@ export function BrowserView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary">
-      {/* URL bar */}
-      {browserUrl && (
-        <div className="px-3 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
-          <span className="text-text-secondary">🔒</span>
-          <span className="text-sm text-text-primary font-mono truncate flex-1">
-            {browserUrl}
-          </span>
-        </div>
-      )}
+      {/* URL bar with Stop button */}
+      <div className="px-3 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+        <span className="text-text-secondary">🔒</span>
+        <span className="text-sm text-text-primary font-mono truncate flex-1">
+          {browserUrl || 'about:blank'}
+        </span>
+        <button
+          onClick={onStopBrowser}
+          className="px-2 py-1 text-xs rounded bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30 transition-colors"
+        >
+          Stop Browser
+        </button>
+      </div>
 
       {/* Canvas container */}
       <div

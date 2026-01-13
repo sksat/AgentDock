@@ -258,9 +258,6 @@ function App() {
               <ViewToggle
                 currentView={sessionView}
                 onToggle={setSessionView}
-                browserActive={screencast?.active ?? false}
-                onStartBrowser={startScreencast}
-                onStopBrowser={stopScreencast}
               />
               {usageInfo && (
               <div className="flex items-center gap-4">
@@ -320,6 +317,8 @@ function App() {
                     // TODO: Send browser_key_press to server
                     console.log('Browser key press:', key);
                   }}
+                  onStartBrowser={startScreencast}
+                  onStopBrowser={stopScreencast}
                 />
               )}
 

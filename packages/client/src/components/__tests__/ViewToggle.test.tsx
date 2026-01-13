@@ -9,7 +9,6 @@ describe('ViewToggle', () => {
         <ViewToggle
           currentView="stream"
           onToggle={() => {}}
-          browserActive={true}
         />
       );
 
@@ -22,7 +21,6 @@ describe('ViewToggle', () => {
         <ViewToggle
           currentView="stream"
           onToggle={() => {}}
-          browserActive={true}
         />
       );
 
@@ -35,7 +33,6 @@ describe('ViewToggle', () => {
         <ViewToggle
           currentView="browser"
           onToggle={() => {}}
-          browserActive={true}
         />
       );
 
@@ -51,7 +48,6 @@ describe('ViewToggle', () => {
         <ViewToggle
           currentView="stream"
           onToggle={handleToggle}
-          browserActive={true}
         />
       );
 
@@ -65,54 +61,35 @@ describe('ViewToggle', () => {
         <ViewToggle
           currentView="browser"
           onToggle={handleToggle}
-          browserActive={true}
         />
       );
 
       fireEvent.click(screen.getByRole('button', { name: /stream/i }));
       expect(handleToggle).toHaveBeenCalledWith('stream');
     });
-  });
 
-  describe('disabled state', () => {
-    it('should disable browser button when browserActive is false', () => {
+    it('should always have browser button enabled', () => {
       render(
         <ViewToggle
           currentView="stream"
           onToggle={() => {}}
-          browserActive={false}
-        />
-      );
-
-      const browserButton = screen.getByRole('button', { name: /browser/i });
-      expect(browserButton).toBeDisabled();
-    });
-
-    it('should not call onToggle when disabled browser button is clicked', () => {
-      const handleToggle = vi.fn();
-      render(
-        <ViewToggle
-          currentView="stream"
-          onToggle={handleToggle}
-          browserActive={false}
-        />
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: /browser/i }));
-      expect(handleToggle).not.toHaveBeenCalled();
-    });
-
-    it('should enable browser button when browserActive is true', () => {
-      render(
-        <ViewToggle
-          currentView="stream"
-          onToggle={() => {}}
-          browserActive={true}
         />
       );
 
       const browserButton = screen.getByRole('button', { name: /browser/i });
       expect(browserButton).not.toBeDisabled();
+    });
+
+    it('should always have stream button enabled', () => {
+      render(
+        <ViewToggle
+          currentView="browser"
+          onToggle={() => {}}
+        />
+      );
+
+      const streamButton = screen.getByRole('button', { name: /stream/i });
+      expect(streamButton).not.toBeDisabled();
     });
   });
 });
