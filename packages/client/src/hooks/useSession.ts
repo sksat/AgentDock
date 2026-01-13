@@ -78,6 +78,7 @@ export interface UseSessionReturn {
   listSessions: () => void;
   createSession: (name?: string, workingDir?: string) => void;
   selectSession: (sessionId: string) => void;
+  deselectSession: () => void;
   deleteSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
 
@@ -179,6 +180,56 @@ export function useSession(): UseSessionReturn {
     }
   }, [activeSessionId, pendingMessage]);
 
+  // Helper to extract session ID from URL
+  const getSessionIdFromUrl = useCallback((): string | null => {
+    const match = window.location.pathname.match(/^\/session\/(.+)$/);
+    return match ? match[1] : null;
+  }, []);
+
+  // Read session ID from URL on initial load (after sessions are loaded)
+  useEffect(() => {
+    if (!sessionsLoaded || sessions.length === 0) return;
+
+    const sessionId = getSessionIdFromUrl();
+    if (sessionId) {
+      const sessionExists = sessions.some((s) => s.id === sessionId);
+      if (sessionExists && activeSessionId !== sessionId) {
+        setActiveSessionId(sessionId);
+        setError(null);
+        // Request session history if not already loaded
+        if (!sessionMessages.has(sessionId)) {
+          sendRef.current?.({ type: 'attach_session', sessionId });
+        }
+      }
+    }
+  }, [sessionsLoaded, sessions, getSessionIdFromUrl, activeSessionId, sessionMessages]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const sessionId = getSessionIdFromUrl();
+      if (sessionId) {
+        const sessionExists = sessions.some((s) => s.id === sessionId);
+        if (sessionExists) {
+          setActiveSessionId(sessionId);
+          setError(null);
+          if (!sessionMessages.has(sessionId)) {
+            sendRef.current?.({ type: 'attach_session', sessionId });
+          }
+        } else {
+          // Session doesn't exist, go to home
+          setActiveSessionId(null);
+        }
+      } else {
+        // Home page
+        setActiveSessionId(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [sessions, getSessionIdFromUrl, sessionMessages]);
+
   // Computed values
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
   const messages = activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : [];
@@ -219,6 +270,8 @@ export function useSession(): UseSessionReturn {
       if (sessionExists) {
         setActiveSessionId(sessionId);
         setError(null);
+        // Update URL
+        window.history.pushState({ sessionId }, '', `/session/${sessionId}`);
         // Note: pendingPermission and pendingQuestion are per-session, no need to clear
         // Request session history if not already loaded
         if (!sessionMessages.has(sessionId)) {
@@ -228,6 +281,13 @@ export function useSession(): UseSessionReturn {
     },
     [sessions, sessionMessages, send]
   );
+
+  const deselectSession = useCallback(() => {
+    setActiveSessionId(null);
+    setError(null);
+    // Update URL to home
+    window.history.pushState({}, '', '/');
+  }, []);
 
   const deleteSession = useCallback(
     (sessionId: string) => {
@@ -491,6 +551,8 @@ export function useSession(): UseSessionReturn {
           });
           // Automatically select the new session
           setActiveSessionId(newSession.id);
+          // Update URL
+          window.history.pushState({ sessionId: newSession.id }, '', `/session/${newSession.id}`);
           // Initialize empty messages for new session
           setSessionMessages((prev) => {
             const newMap = new Map(prev);
@@ -546,13 +608,10 @@ export function useSession(): UseSessionReturn {
             newMap.delete(message.sessionId);
             return newMap;
           });
-          // If deleted session was active, select another one
+          // If deleted session was active, go to home
           if (activeSessionId === message.sessionId) {
-            setSessions((currentSessions) => {
-              const remaining = currentSessions.filter((s) => s.id !== message.sessionId);
-              setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
-              return remaining;
-            });
+            setActiveSessionId(null);
+            window.history.pushState({}, '', '/');
           }
           break;
         }
@@ -871,6 +930,7 @@ export function useSession(): UseSessionReturn {
     listSessions,
     createSession,
     selectSession,
+    deselectSession,
     deleteSession,
     renameSession,
     sendMessage,

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage } from './components';
+import { useNavigation } from './hooks/useNavigation';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
 import type { SidebarSession } from './components';
 import './App.css';
 
@@ -60,6 +61,7 @@ function shortModelName(modelName: string): string {
 }
 
 function App() {
+  const { currentView, navigate } = useNavigation();
   const {
     sessions,
     activeSessionId,
@@ -78,6 +80,7 @@ function App() {
     listSessions,
     createSession,
     selectSession,
+    deselectSession,
     deleteSession,
     renameSession,
     sendMessage,
@@ -156,92 +159,122 @@ function App() {
     usage: s.usage,
   }));
 
+  // Get page title based on current view and session
+  const pageTitle = currentView === 'settings'
+    ? 'Settings'
+    : currentView === 'usage'
+      ? 'Usage'
+      : activeSessionId && session
+        ? session.name
+        : 'Home';
+
   return (
-    <div className="h-screen flex">
-      {/* New Session Modal */}
-      <NewSessionModal
-        isOpen={isNewSessionModalOpen}
-        onClose={() => setIsNewSessionModalOpen(false)}
-        onCreateSession={createSession}
-      />
-
-      {/* Sidebar */}
-      <Sidebar
-        sessions={sidebarSessions}
-        activeSessionId={activeSessionId}
-        globalUsage={globalUsage}
-        onSelectSession={selectSession}
-        onCreateSession={() => setIsNewSessionModalOpen(true)}
-        onDeleteSession={deleteSession}
-        onRenameSession={renameSession}
-      />
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {activeSessionId === null ? (
-          /* Welcome page when no session is selected */
-          <WelcomePage
-            sessions={sessions}
-            globalUsage={globalUsage}
-            isConnected={isConnected}
-            onSendMessage={sendMessage}
-            onSelectSession={selectSession}
+    <div className="h-screen flex flex-col">
+      {/* Global Header */}
+      <header className="h-12 px-4 bg-bg-secondary border-b border-border flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              navigate('sessions');
+              deselectSession();
+            }}
+            className="text-base font-semibold text-text-primary hover:text-accent-primary transition-colors"
+          >
+            AgentDock
+          </button>
+          <span className="text-text-secondary">/</span>
+          <span className="text-sm text-text-secondary">{pageTitle}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isConnected ? 'bg-accent-success' : 'bg-accent-danger'
+            }`}
           />
-        ) : (
+          <span className="text-sm text-text-secondary">
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
+      </header>
+
+      {/* Main layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* New Session Modal */}
+        <NewSessionModal
+          isOpen={isNewSessionModalOpen}
+          onClose={() => setIsNewSessionModalOpen(false)}
+          onCreateSession={createSession}
+        />
+
+        {/* Navigation Rail - always visible */}
+        <NavRail activeView={currentView} onNavigate={navigate} />
+
+        {/* Sidebar - only visible in sessions view */}
+        {currentView === 'sessions' && (
+          <Sidebar
+            sessions={sidebarSessions}
+            activeSessionId={activeSessionId}
+            globalUsage={globalUsage}
+            onSelectSession={selectSession}
+            onCreateSession={() => setIsNewSessionModalOpen(true)}
+            onDeleteSession={deleteSession}
+            onRenameSession={renameSession}
+          />
+        )}
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Settings page */}
+          {currentView === 'settings' && <SettingsPage />}
+
+          {/* Usage page */}
+          {currentView === 'usage' && <UsagePage globalUsage={globalUsage} />}
+
+          {/* Sessions view */}
+          {currentView === 'sessions' && (
+            activeSessionId === null ? (
+              /* Welcome page when no session is selected */
+              <WelcomePage
+                sessions={sessions}
+                globalUsage={globalUsage}
+                isConnected={isConnected}
+                onSendMessage={sendMessage}
+                onSelectSession={selectSession}
+              />
+            ) : (
           <>
-            {/* Header */}
-            <header className="px-4 py-3 bg-bg-secondary border-b border-border flex items-center justify-between">
-              <h1 className="text-lg font-semibold">
-                {session?.name ?? 'AgentDock'}
-              </h1>
-              <div className="flex items-center gap-4">
-                {/* Session usage */}
-                {usageInfo && (
-                  <div className="flex items-center gap-3 text-xs text-text-secondary">
-                    {/* Total cost */}
-                    <span className="font-medium text-accent-primary" title="Session total cost">
-                      {formatCost(calculateCost(
-                        systemInfo?.model,
-                        usageInfo.inputTokens,
-                        usageInfo.outputTokens,
-                        usageInfo.cacheReadInputTokens,
-                        usageInfo.cacheCreationInputTokens
-                      ))}
-                    </span>
-                    {/* Model breakdown */}
-                    {modelUsage && modelUsage.length > 0 && (
-                      <span className="text-text-secondary" title="Cost by model">
-                        ({modelUsage.map((m, i) => (
-                          <span key={m.modelName}>
-                            {i > 0 && ' / '}
-                            {shortModelName(m.modelName)}: {formatCost(calculateCost(
-                              m.modelName,
-                              m.inputTokens,
-                              m.outputTokens,
-                              m.cacheReadTokens,
-                              m.cacheCreationTokens
-                            ))}
-                          </span>
-                        ))})
+            {/* Session usage bar */}
+            {usageInfo && (
+              <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-end gap-4 text-xs text-text-secondary">
+                <span className="font-medium text-accent-primary" title="Session total cost">
+                  {formatCost(calculateCost(
+                    systemInfo?.model,
+                    usageInfo.inputTokens,
+                    usageInfo.outputTokens,
+                    usageInfo.cacheReadInputTokens,
+                    usageInfo.cacheCreationInputTokens
+                  ))}
+                </span>
+                {modelUsage && modelUsage.length > 0 && (
+                  <span title="Cost by model">
+                    ({modelUsage.map((m, i) => (
+                      <span key={m.modelName}>
+                        {i > 0 && ' / '}
+                        {shortModelName(m.modelName)}: {formatCost(calculateCost(
+                          m.modelName,
+                          m.inputTokens,
+                          m.outputTokens,
+                          m.cacheReadTokens,
+                          m.cacheCreationTokens
+                        ))}
                       </span>
-                    )}
-                    <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
-                    <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
-                  </div>
-                )}
-                {/* Connection status */}
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isConnected ? 'bg-accent-success' : 'bg-accent-danger'
-                    }`}
-                  />
-                  <span className="text-sm text-text-secondary">
-                    {isConnected ? 'Connected' : 'Disconnected'}
+                    ))})
                   </span>
-                </div>
+                )}
+                <span title="Input tokens">↓{formatTokens(usageInfo.inputTokens + (usageInfo.cacheReadInputTokens ?? 0))}</span>
+                <span title="Output tokens">↑{formatTokens(usageInfo.outputTokens)}</span>
               </div>
-            </header>
+            )}
 
             {/* Error banner */}
             {error && (
@@ -332,7 +365,9 @@ function App() {
               />
             </main>
           </>
+          )
         )}
+        </div>
       </div>
 
       {/* Toast notification */}

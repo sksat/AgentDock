@@ -140,6 +140,23 @@ export class SessionManager {
     // Restore session counter from existing sessions
     const countRow = this.stmts.countSessions.get() as { count: number };
     this.sessionCounter = countRow.count;
+
+    // Reset all non-idle session statuses to 'idle' on startup
+    // This handles cases where the server was stopped/crashed while sessions were running
+    this.resetAllSessionStatuses();
+  }
+
+  /**
+   * Reset all session statuses to 'idle'.
+   * Called on server startup to clear stale running/waiting states.
+   */
+  private resetAllSessionStatuses(): void {
+    const result = this.db.prepare(
+      "UPDATE sessions SET status = 'idle' WHERE status != 'idle'"
+    ).run();
+    if (result.changes > 0) {
+      console.log(`[SessionManager] Reset ${result.changes} stale session(s) to idle status`);
+    }
   }
 
   private rowToSessionInfo(row: SessionRow): SessionInfo {

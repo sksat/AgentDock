@@ -149,6 +149,44 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('status reset on startup', () => {
+    it('should reset all non-idle statuses to idle when SessionManager is created', () => {
+      // Create a temporary database file (not :memory:)
+      const dbPath = join(tempBaseDir, 'test-status-reset.db');
+
+      // Create first SessionManager and set up sessions with various statuses
+      const sm1 = new SessionManager({ sessionsBaseDir: tempBaseDir, dbPath });
+      const session1 = sm1.createSession({ name: 'Session 1' });
+      const session2 = sm1.createSession({ name: 'Session 2' });
+      const session3 = sm1.createSession({ name: 'Session 3' });
+      const session4 = sm1.createSession({ name: 'Session 4' });
+
+      sm1.updateSessionStatus(session1.id, 'running');
+      sm1.updateSessionStatus(session2.id, 'waiting_input');
+      sm1.updateSessionStatus(session3.id, 'waiting_permission');
+      // session4 stays 'idle'
+
+      // Verify statuses before closing
+      expect(sm1.getSession(session1.id)?.status).toBe('running');
+      expect(sm1.getSession(session2.id)?.status).toBe('waiting_input');
+      expect(sm1.getSession(session3.id)?.status).toBe('waiting_permission');
+      expect(sm1.getSession(session4.id)?.status).toBe('idle');
+
+      sm1.close();
+
+      // Create a new SessionManager instance (simulating server restart)
+      const sm2 = new SessionManager({ sessionsBaseDir: tempBaseDir, dbPath });
+
+      // All sessions should now be 'idle'
+      expect(sm2.getSession(session1.id)?.status).toBe('idle');
+      expect(sm2.getSession(session2.id)?.status).toBe('idle');
+      expect(sm2.getSession(session3.id)?.status).toBe('idle');
+      expect(sm2.getSession(session4.id)?.status).toBe('idle');
+
+      sm2.close();
+    });
+  });
+
   describe('setClaudeSessionId', () => {
     it('should set Claude session ID', () => {
       const session = sessionManager.createSession();
