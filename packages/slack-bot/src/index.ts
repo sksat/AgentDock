@@ -14,6 +14,58 @@ import {
   parsePermissionAction,
   actionToPermissionResponse,
 } from './permission-ui.js';
+import { processAndUploadImages, uploadFile, processAndUploadBase64Image, extractBase64Image } from './file-uploader.js';
+
+/**
+ * Check if a tool result is trivial and should be skipped.
+ * Trivial results: empty, {}, {"success":true}, etc.
+ */
+function isTrivialToolResult(content: string): boolean {
+  try {
+    // Parse as JSON array (tool_result format: [{"type":"text","text":"..."}])
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return true; // Empty array is trivial
+    }
+
+    // Extract text content
+    for (const item of parsed) {
+      if (item.type === 'text' && typeof item.text === 'string') {
+        const text = item.text.trim();
+
+        // Check for trivial patterns
+        if (text === '' || text === '{}' || text === 'null' || text === 'undefined') {
+          return true;
+        }
+
+        // Check for simple success responses
+        try {
+          const innerParsed = JSON.parse(text);
+          if (typeof innerParsed === 'object' && innerParsed !== null) {
+            const keys = Object.keys(innerParsed);
+            // {"success": true} or similar single-key success objects
+            if (keys.length === 1 && keys[0] === 'success') {
+              return true;
+            }
+            // Empty object
+            if (keys.length === 0) {
+              return true;
+            }
+          }
+        } catch {
+          // Not JSON, check for short simple strings
+          if (text.length < 20 && /^(ok|done|success|true)$/i.test(text)) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 // Environment variables (loaded from .env file)
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
@@ -67,6 +119,7 @@ async function main(): Promise<void> {
     { channel: string; threadTs: string; toolName: string; input: unknown }
   >();
 
+
   // Set up message forwarding from AgentDock to Slack
   bridge.onMessage(async (message) => {
     if (!('sessionId' in message)) return;
@@ -109,6 +162,31 @@ async function main(): Promise<void> {
         }
 
         case 'tool_result': {
+          // Check if this is a base64 image (screenshot) - upload image only, skip message
+          if (!message.isError && message.content) {
+            const base64Image = extractBase64Image(message.content);
+            if (base64Image) {
+              console.log('[DEBUG] Detected base64 image, uploading...');
+              const uploadedBase64 = await processAndUploadBase64Image(
+                app.client,
+                message.content,
+                channel,
+                threadTs
+              );
+              if (uploadedBase64) {
+                console.log('Uploaded base64 screenshot to Slack');
+              }
+              break; // Skip posting the tool_result message
+            }
+
+            // Check if this is a trivial result (skip posting)
+            if (isTrivialToolResult(message.content)) {
+              console.log('[DEBUG] Skipping trivial tool result');
+              break;
+            }
+          }
+
+          // Post tool result message for non-trivial, non-image results
           const blocks = formatToolResult(
             message.toolUseId,
             message.content,
@@ -120,6 +198,32 @@ async function main(): Promise<void> {
             blocks,
             text: message.isError ? 'Tool error' : 'Tool completed',
           });
+
+          // Upload screenshot file if path is provided
+          if (message.screenshotFilename && !message.isError) {
+            const result = await uploadFile(
+              app.client,
+              message.screenshotFilename,
+              channel,
+              threadTs
+            );
+            if (result.ok) {
+              console.log(`Uploaded screenshot to Slack: ${message.screenshotFilename}`);
+            } else {
+              console.error('Failed to upload screenshot:', result.error);
+            }
+          } else if (!message.isError && message.content) {
+            // Try to extract and upload file paths from content
+            const uploadedImages = await processAndUploadImages(
+              app.client,
+              message.content,
+              channel,
+              threadTs
+            );
+            if (uploadedImages.length > 0) {
+              console.log(`Uploaded ${uploadedImages.length} image(s) to Slack`);
+            }
+          }
           break;
         }
 
@@ -298,4 +402,5 @@ export {
   buildPermissionResultBlocks,
   parsePermissionAction,
   actionToPermissionResponse,
+  processAndUploadImages,
 };

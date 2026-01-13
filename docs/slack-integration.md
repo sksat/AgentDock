@@ -168,6 +168,7 @@ CREATE TABLE slack_thread_bindings (
 - `chat:write` - メッセージの送信
 - `channels:history` - チャンネル履歴の読み取り
 - `reactions:write` - リアクションの追加/削除
+- `files:write` - ファイル・画像のアップロード
 
 ### Event Subscriptions
 
@@ -233,6 +234,7 @@ CREATE TABLE slack_thread_bindings (
 | `channels:history` | パブリックチャンネルの履歴を読む |
 | `groups:history` | プライベートチャンネルの履歴を読む |
 | `reactions:write` | リアクションを追加/削除 |
+| `files:write` | ファイル・画像をアップロード |
 
 ### Step 3: Event Subscriptions を設定
 

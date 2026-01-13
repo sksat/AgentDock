@@ -841,6 +841,10 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
           }
+          // Auto-start screencast if a browser session exists
+          if (message.hasBrowserSession) {
+            send({ type: 'start_screencast', sessionId: message.sessionId });
+          }
           break;
         }
 

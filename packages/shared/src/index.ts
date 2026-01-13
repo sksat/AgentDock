@@ -421,6 +421,8 @@ export interface SessionAttachedMessage {
     toolName: string;
     input: unknown;
   };
+  /** Whether a browser session exists for this session */
+  hasBrowserSession?: boolean;
 }
 
 export interface SessionListMessage {
@@ -465,6 +467,8 @@ export interface ToolResultMessage {
   toolUseId: string;
   content: string;
   isError?: boolean;
+  /** Filename of the screenshot if this was a screenshot tool result */
+  screenshotFilename?: string;
 }
 
 export interface ToolOutputMessage {

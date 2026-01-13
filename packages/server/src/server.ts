@@ -94,6 +94,15 @@ function cleanupMcpConfig(sessionId: string): void {
 }
 
 /**
+ * Check if a tool name is a screenshot tool.
+ * Used to track screenshot results and include filename for Slack uploads.
+ */
+export function isScreenshotTool(toolName: string): boolean {
+  const lowerName = toolName.toLowerCase();
+  return lowerName.includes('screenshot') || lowerName.includes('take_screenshot');
+}
+
+/**
  * Check if a tool name is an AgentDock built-in browser tool (should be auto-allowed)
  * Matches:
  *   - mcp__bridge__browser_* (AgentDock MCP bridge browser tools)
@@ -358,6 +367,10 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Accumulator for current turn's text (to save as single history entry)
   const turnAccumulator = new Map<string, { text: string; thinking: string }>();
 
+  // Track screenshot tool calls to include filename in tool_result
+  // Key: toolUseId, Value: filename from the screenshot tool input
+  const pendingScreenshots = new Map<string, string>();
+
   function getOrCreateAccumulator(sessionId: string) {
     if (!turnAccumulator.has(sessionId)) {
       turnAccumulator.set(sessionId, { text: '', thinking: '' });
@@ -455,6 +468,14 @@ export function createServer(options: ServerOptions): BridgeServer {
             toolUseId,
             input,
           });
+          // Track screenshot tool calls to include filename in tool_result
+          if (isScreenshotTool(toolName)) {
+            const screenshotInput = input as { filename?: string } | undefined;
+            if (screenshotInput?.filename) {
+              pendingScreenshots.set(toolUseId, screenshotInput.filename);
+              console.log(`[Server] Tracking screenshot tool: ${toolUseId} -> ${screenshotInput.filename}`);
+            }
+          }
           // Store in history
           sessionManager.addToHistory(sessionId, {
             type: 'tool_use',
@@ -469,12 +490,22 @@ export function createServer(options: ServerOptions): BridgeServer {
         const toolUseId = (eventData as { toolUseId: string }).toolUseId;
         const content = (eventData as { content: string }).content;
         const isError = (eventData as { isError: boolean }).isError;
+
+        // Check if this is a screenshot tool result
+        const screenshotFilename = pendingScreenshots.get(toolUseId);
+        if (screenshotFilename) {
+          pendingScreenshots.delete(toolUseId);
+          console.log(`[Server] Screenshot result: ${toolUseId} -> ${screenshotFilename}`);
+        }
+
         sendToSession(sessionId, {
           type: 'tool_result',
           sessionId,
           toolUseId,
           content,
           isError,
+          // Include screenshot filename if this was a screenshot tool
+          ...(screenshotFilename && { screenshotFilename }),
         });
         // Store in history
         sessionManager.addToHistory(sessionId, {
@@ -662,9 +693,16 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'attach_session': {
         const session = sessionManager.getSession(message.sessionId);
         if (session) {
+          // Store WebSocket for this session so it can receive events
+          sessionWebSockets.set(message.sessionId, ws);
+
           const usage = sessionManager.getUsage(message.sessionId);
           const modelUsage = sessionManager.getModelUsage(message.sessionId);
           const pendingPermission = sessionPendingPermissions.get(message.sessionId);
+
+          // Check if a browser session exists for this session
+          const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
+
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
@@ -672,6 +710,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             usage: usage ?? undefined,
             modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
             pendingPermission: pendingPermission ?? undefined,
+            hasBrowserSession,
           };
         } else {
           response = {
