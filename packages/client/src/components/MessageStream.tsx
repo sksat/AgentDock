@@ -295,16 +295,18 @@ function BashToolMessage({ content }: { content: BashToolContent }) {
 
 // Helper to format browser tool display
 function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string } | null {
-  // Match external MCP Playwright browser tools (not AgentDock's built-in)
-  const mcpMatch = toolName.match(/^mcp__.*__browser_(.+)$/);
-  // Also match AgentDock's direct browser_ prefix
+  // Match AgentDock bridge browser tools (mcp__bridge__browser_*)
+  const bridgeMatch = toolName.match(/^mcp__bridge__browser_(.+)$/);
+  // Match external MCP Playwright browser tools (mcp__plugin_playwright_*__browser_*)
+  const playwrightMatch = toolName.match(/^mcp__plugin_playwright_[^_]+__browser_(.+)$/);
+  // Also match direct browser_ prefix
   const directMatch = toolName.match(/^browser_(.+)$/);
-  const match = mcpMatch || directMatch;
 
+  const match = bridgeMatch || playwrightMatch || directMatch;
   if (!match) return null;
 
-  // External Playwright MCP = "playwright:", AgentDock built-in = "browser:"
-  const isExternalPlaywright = !!mcpMatch;
+  // External Playwright MCP = "playwright:", AgentDock built-in/bridge = "browser:"
+  const isExternalPlaywright = !!playwrightMatch;
   const action = match[1];
   const inp = input as Record<string, unknown>;
 

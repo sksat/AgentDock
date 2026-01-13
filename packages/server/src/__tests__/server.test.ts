@@ -176,8 +176,17 @@ describe('BridgeServer', () => {
 });
 
 describe('isBrowserTool', () => {
-  it('should return true for AgentDock built-in browser tools', () => {
-    // Direct browser_* tools are AgentDock's built-in browser commands
+  it('should return true for AgentDock MCP bridge browser tools', () => {
+    // mcp__bridge__browser_* tools are AgentDock's MCP bridge browser commands
+    expect(isBrowserTool('mcp__bridge__browser_navigate')).toBe(true);
+    expect(isBrowserTool('mcp__bridge__browser_click')).toBe(true);
+    expect(isBrowserTool('mcp__bridge__browser_type')).toBe(true);
+    expect(isBrowserTool('mcp__bridge__browser_snapshot')).toBe(true);
+    expect(isBrowserTool('mcp__bridge__browser_take_screenshot')).toBe(true);
+  });
+
+  it('should return true for direct browser tools', () => {
+    // Direct browser_* tools (if any)
     expect(isBrowserTool('browser_navigate')).toBe(true);
     expect(isBrowserTool('browser_click')).toBe(true);
     expect(isBrowserTool('browser_type')).toBe(true);
