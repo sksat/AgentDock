@@ -243,7 +243,7 @@ describe('/model command', () => {
     expect(screen.getByText(/Switch model/)).toBeInTheDocument();
   });
 
-  it('should show model selector after executing /model command', async () => {
+  it('should show model selector immediately when /model is selected from suggestions', async () => {
     const onModelChange = vi.fn();
     render(
       <InputArea
@@ -255,16 +255,56 @@ describe('/model command', () => {
 
     const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '/model' } });
-    // Press Enter to select the slash command (inserts /model)
-    fireEvent.keyDown(textarea, { key: 'Enter' });
-    // Press Enter again to execute the command
+    // Press Enter to select and immediately execute the /model command
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     // Wait for setTimeout to complete
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    // Model selector should appear
+    // Model selector should appear immediately (no second Enter needed)
     expect(screen.getByRole('listbox')).toBeInTheDocument();
+    // Input should be cleared
+    expect(textarea.value).toBe('');
+  });
+
+  it('should not immediately execute /compact - should insert into input instead', () => {
+    const onCompact = vi.fn();
+    render(
+      <InputArea
+        onSend={() => {}}
+        onCompact={onCompact}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '/compact' } });
+    // Press Enter to select the command from suggestions
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // /compact should be inserted into input (not executed immediately)
+    expect(textarea.value).toBe('/compact ');
+    // onCompact should NOT have been called yet
+    expect(onCompact).not.toHaveBeenCalled();
+  });
+
+  it('should execute /compact when Enter is pressed after insertion', () => {
+    const onCompact = vi.fn();
+    render(
+      <InputArea
+        onSend={() => {}}
+        onCompact={onCompact}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '/compact' } });
+    // Press Enter to select the command from suggestions
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    // Press Enter again to execute the command
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // onCompact should now have been called
+    expect(onCompact).toHaveBeenCalled();
     // Input should be cleared
     expect(textarea.value).toBe('');
   });

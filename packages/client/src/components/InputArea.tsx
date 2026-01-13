@@ -97,13 +97,31 @@ export function InputArea({
     setShowPermissionModeSelector(false);
   }, [onPermissionModeChange]);
 
-  // Handle slash command selection - insert command into input with trailing space
+  // Handle slash command selection - execute command or insert into input
   const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
     setShowSlashCommands(false);
-    // Insert the full command into input with trailing space
-    const fullCommand = command.prefix ? `/${command.prefix}:${command.name} ` : `/${command.name} `;
-    setValue(fullCommand);
-    textareaRef.current?.focus();
+
+    // Commands that should execute immediately on selection (UI pickers)
+    // Note: 'compact' is excluded - user should confirm before compacting
+    const immediateCommands = ['model', 'permission'];
+
+    if (immediateCommands.includes(command.name)) {
+      // Execute the command immediately (show UI picker)
+      setValue('');
+      switch (command.name) {
+        case 'model':
+          setTimeout(() => setShowModelSelector(true), 0);
+          break;
+        case 'permission':
+          setTimeout(() => setShowPermissionModeSelector(true), 0);
+          break;
+      }
+    } else {
+      // For other commands, insert into input with trailing space
+      const fullCommand = command.prefix ? `/${command.prefix}:${command.name} ` : `/${command.name} `;
+      setValue(fullCommand);
+      textareaRef.current?.focus();
+    }
   }, []);
 
   // Execute slash command

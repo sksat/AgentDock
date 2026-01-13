@@ -587,8 +587,42 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'set_model': {
         const session = sessionManager.getSession(message.sessionId);
         if (session) {
+          // Use client-provided oldModel, or fall back to stored model
+          const oldModel = message.oldModel ?? session.model;
           // Store the model for the session
           sessionManager.setModel(message.sessionId, message.model);
+
+          // If model actually changed, save and broadcast system message
+          if (oldModel !== message.model) {
+            const shortName = (model: string | undefined) => {
+              if (!model) return 'unknown';
+              if (model.includes('opus')) return 'opus';
+              if (model.includes('sonnet')) return 'sonnet';
+              if (model.includes('haiku')) return 'haiku';
+              return model.split('-')[0];
+            };
+
+            const systemMessage = {
+              type: 'system' as const,
+              content: {
+                title: 'Model changed',
+                message: `${shortName(oldModel)} → ${shortName(message.model)}`,
+                type: 'info',
+              },
+              timestamp: new Date().toISOString(),
+            };
+
+            // Save to history
+            sessionManager.addMessage(message.sessionId, systemMessage);
+
+            // Send to current client (use ws directly, not sendToSession which requires user_message first)
+            ws.send(JSON.stringify({
+              type: 'system_message',
+              sessionId: message.sessionId,
+              content: systemMessage.content,
+            }));
+          }
+
           // Send back the updated system info
           response = {
             type: 'system_info',

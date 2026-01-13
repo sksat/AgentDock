@@ -53,42 +53,37 @@ export function PermissionModeSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    if (!isOpen) return;
+  // Keyboard navigation handler for the focused element
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        onClose();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : PERMISSION_MODE_OPTIONS.length - 1));
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < PERMISSION_MODE_OPTIONS.length - 1 ? prev + 1 : 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (PERMISSION_MODE_OPTIONS[selectedIndex]) {
+          handleSelect(PERMISSION_MODE_OPTIONS[selectedIndex].id);
+        }
+        break;
+    }
+  }, [onClose, selectedIndex, handleSelect]);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          e.preventDefault();
-          onClose();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : PERMISSION_MODE_OPTIONS.length - 1));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev < PERMISSION_MODE_OPTIONS.length - 1 ? prev + 1 : 0));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          if (PERMISSION_MODE_OPTIONS[selectedIndex]) {
-            handleSelect(PERMISSION_MODE_OPTIONS[selectedIndex].id);
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, selectedIndex, handleSelect]);
-
-  // Reset selected index when opening
+  // Reset selected index and focus when opening
   useEffect(() => {
     if (isOpen) {
       const currentIndex = PERMISSION_MODE_OPTIONS.findIndex((opt) => opt.id === currentMode);
       setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
+      // Focus the popover to capture keyboard events
+      popoverRef.current?.focus();
     }
   }, [isOpen, currentMode]);
 
@@ -100,7 +95,9 @@ export function PermissionModeSelector({
     <div
       ref={popoverRef}
       role="listbox"
-      className="absolute bottom-full left-0 mb-2 bg-bg-secondary border border-border rounded-lg shadow-lg overflow-hidden min-w-[280px] z-50"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      className="absolute bottom-full left-0 mb-2 bg-bg-secondary border border-border rounded-lg shadow-lg overflow-hidden min-w-[280px] z-50 outline-none"
     >
       <div className="px-3 py-2 text-xs text-text-secondary border-b border-border">
         Select permission mode

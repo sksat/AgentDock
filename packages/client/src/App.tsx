@@ -66,7 +66,6 @@ function App() {
     sessions,
     activeSessionId,
     session,
-    sessionsLoaded,
     messages,
     pendingPermission,
     pendingQuestion,
@@ -149,6 +148,11 @@ function App() {
   const handleToggleThinking = useCallback(() => {
     setThinkingEnabled((prev) => !prev);
   }, []);
+
+  // Handle model change (server handles logging)
+  const handleModelChange = useCallback((newModel: string) => {
+    setModel(newModel);
+  }, [setModel]);
 
   // Convert SessionInfo to SidebarSession
   const sidebarSessions: SidebarSession[] = sessions.map((s) => ({
@@ -328,7 +332,7 @@ function App() {
                 permissionMode={systemInfo?.permissionMode ?? 'ask'}
                 onPermissionModeChange={setPermissionMode}
                 model={systemInfo?.model}
-                onModelChange={setModel}
+                onModelChange={handleModelChange}
                 sessionId={session?.claudeSessionId}
                 tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
                 thinkingEnabled={thinkingEnabled}

@@ -518,6 +518,9 @@ export function useSession(): UseSessionReturn {
   }, [activeSessionId, send]);
 
   const setModel = useCallback((model: string) => {
+    // Capture old model before updating local state
+    const oldModel = systemInfo?.model;
+
     // Update local systemInfo immediately for responsive UI
     setSystemInfo((prev) => prev ? { ...prev, model } : { model });
 
@@ -527,9 +530,10 @@ export function useSession(): UseSessionReturn {
         type: 'set_model',
         sessionId: activeSessionId,
         model,
+        oldModel,
       });
     }
-  }, [activeSessionId, send]);
+  }, [activeSessionId, send, systemInfo?.model]);
 
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
@@ -875,6 +879,19 @@ export function useSession(): UseSessionReturn {
             tools: message.tools,
           });
           break;
+
+        case 'system_message': {
+          const sessionId = message.sessionId;
+          updateSessionMessages(sessionId, (prev) => [
+            ...prev,
+            {
+              type: 'system',
+              content: message.content,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+          break;
+        }
 
         case 'usage_info': {
           const sessionId = message.sessionId;

@@ -423,7 +423,7 @@ export function UsageChart({ daily, blocks = [], height = 120 }: UsageChartProps
         x: { time: true },
         y: {
           auto: true,
-          range: (_, min, max) => [0, max * 1.1],
+          range: (_u, _min, max) => [0, max * 1.1],
         },
       },
     };

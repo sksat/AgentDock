@@ -40,7 +40,8 @@ class MockPath2D {
 (window as unknown as { Path2D: typeof MockPath2D }).Path2D = MockPath2D;
 
 // Mock HTMLCanvasElement.getContext for uplot tests
-HTMLCanvasElement.prototype.getContext = function () {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+HTMLCanvasElement.prototype.getContext = function (): any {
   return {
     fillRect: () => {},
     clearRect: () => {},

@@ -1,3 +1,4 @@
+import type { ModelBreakdown } from '@agent-dock/shared';
 import { UsageChart } from './UsageChart';
 import { formatCost, shortModelName, type GlobalUsageData } from './UsageDisplay';
 
@@ -89,8 +90,8 @@ export function UsagePage({ globalUsage }: UsagePageProps) {
                 <h2 className="text-base font-medium text-text-primary mb-4">Cost by Model</h2>
                 <div className="space-y-3">
                   {totals.modelBreakdowns
-                    .sort((a, b) => b.cost - a.cost)
-                    .map((model) => {
+                    .sort((a: ModelBreakdown, b: ModelBreakdown) => b.cost - a.cost)
+                    .map((model: ModelBreakdown) => {
                       const percentage = totals.totalCost > 0
                         ? (model.cost / totals.totalCost) * 100
                         : 0;

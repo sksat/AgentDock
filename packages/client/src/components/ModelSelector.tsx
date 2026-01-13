@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import clsx from 'clsx';
 
 export interface ModelOption {
@@ -46,16 +46,18 @@ export function ModelSelector({
 
   // Build options list: presets + custom model if not in presets
   const matchingOption = findMatchingOption(currentModel);
-  const options: ModelOption[] = [...MODEL_OPTIONS];
-
-  // Add current model as custom if it doesn't match any preset
-  if (!matchingOption && currentModel) {
-    options.push({
-      id: currentModel,
-      name: currentModel,
-      description: 'Custom model',
-    });
-  }
+  const options = useMemo(() => {
+    const opts: ModelOption[] = [...MODEL_OPTIONS];
+    // Add current model as custom if it doesn't match any preset
+    if (!matchingOption && currentModel) {
+      opts.push({
+        id: currentModel,
+        name: currentModel,
+        description: 'Custom model',
+      });
+    }
+    return opts;
+  }, [currentModel, matchingOption]);
 
   const handleSelect = useCallback(
     (modelId: string) => {
@@ -79,38 +81,31 @@ export function ModelSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    if (!isOpen) return;
+  // Keyboard navigation handler for the focused element
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        onClose();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : options.length - 1));
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < options.length - 1 ? prev + 1 : 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (options[selectedIndex]) {
+          handleSelect(options[selectedIndex].id);
+        }
+        break;
+    }
+  }, [onClose, options, selectedIndex, handleSelect]);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          e.preventDefault();
-          onClose();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : options.length - 1));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev < options.length - 1 ? prev + 1 : 0));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          if (options[selectedIndex]) {
-            handleSelect(options[selectedIndex].id);
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, options, selectedIndex, handleSelect]);
-
-  // Reset selected index when opening
+  // Reset selected index and focus when opening
   useEffect(() => {
     if (isOpen) {
       // Find index of current model
@@ -121,6 +116,8 @@ export function ModelSelector({
         return false;
       });
       setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
+      // Focus the popover to capture keyboard events
+      popoverRef.current?.focus();
     }
   }, [isOpen, currentModel, matchingOption, options]);
 
@@ -151,7 +148,9 @@ export function ModelSelector({
     <div
       ref={popoverRef}
       role="listbox"
-      className="absolute bottom-full left-0 mb-2 bg-bg-secondary border border-border rounded-lg shadow-lg overflow-hidden min-w-[320px] z-50"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      className="absolute bottom-full left-0 mb-2 bg-bg-secondary border border-border rounded-lg shadow-lg overflow-hidden min-w-[320px] z-50 outline-none"
     >
       <div className="px-3 py-2 text-xs text-text-secondary border-b border-border">
         Select a model

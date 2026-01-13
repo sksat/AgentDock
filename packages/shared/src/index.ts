@@ -91,6 +91,8 @@ export interface SetModelMessage {
   type: 'set_model';
   sessionId: string;
   model: string;
+  /** Previous model (for logging the change) */
+  oldModel?: string;
 }
 
 export interface PermissionResponseMessage {
@@ -134,6 +136,8 @@ export type ServerMessage =
   | ResultMessage
   // System info
   | SystemInfoMessage
+  // System message (for logging)
+  | SystemMessageMessage
   // Usage info
   | UsageInfoMessage
   // Global usage (from ccusage)
@@ -235,6 +239,16 @@ export interface SystemInfoMessage {
   tools?: string[];
 }
 
+export interface SystemMessageMessage {
+  type: 'system_message';
+  sessionId: string;
+  content: {
+    title: string;
+    message: string;
+    type?: 'info' | 'success' | 'warning' | 'error';
+  };
+}
+
 export interface UsageInfoMessage {
   type: 'usage_info';
   sessionId: string;
@@ -288,7 +302,7 @@ export interface MessageItem {
   timestamp: string;
 }
 
-export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'tool_output' | 'bash_tool' | 'mcp_tool' | 'permission' | 'question';
+export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'tool_output' | 'bash_tool' | 'mcp_tool' | 'permission' | 'question' | 'system';
 
 export interface QuestionItem {
   question: string;
@@ -347,6 +361,7 @@ export interface UsageTotals {
   cacheReadTokens: number;
   totalCost: number;
   totalTokens: number;
+  modelBreakdowns?: ModelBreakdown[];
 }
 
 /** Usage data for a 5-hour block (from ccusage blocks) */
