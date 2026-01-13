@@ -179,44 +179,70 @@ export function BrowserView({
     [isActive]
   );
 
-  // Set up native event listeners for auxiliary button capture
-  // React's synthetic events don't always capture browser navigation gestures
+  // Prevent browser back/forward navigation when browser view is active
+  // Uses History API as fallback since mouse event interception is unreliable
   useEffect(() => {
+    if (!isActive) return;
+
     const container = containerRef.current;
     if (!container) return;
 
-    // Prevent back/forward mouse button navigation
-    const handleMouseDown = (e: MouseEvent) => {
+    // Track if mouse is over the container
+    let isMouseOver = false;
+
+    // Push history state to prevent back navigation
+    const historyState = { browserViewActive: true, timestamp: Date.now() };
+    history.pushState(historyState, '');
+
+    // Handle popstate - if navigation was triggered while mouse is over browser view,
+    // push state again to prevent leaving
+    const handlePopState = () => {
+      if (isMouseOver) {
+        history.pushState(historyState, '');
+      }
+    };
+
+    const handleMouseEnter = () => {
+      isMouseOver = true;
+    };
+
+    const handleMouseLeave = () => {
+      isMouseOver = false;
+    };
+
+    // Prevent back/forward mouse button navigation at window level
+    const preventBackForward = (e: MouseEvent | PointerEvent) => {
       // button 3 = back, 4 = forward
       if (e.button === 3 || e.button === 4) {
         e.preventDefault();
         e.stopPropagation();
+        return false;
       }
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      if (e.button === 3 || e.button === 4) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
+    // Add event listeners
+    window.addEventListener('popstate', handlePopState);
+    container.addEventListener('mouseenter', handleMouseEnter);
+    container.addEventListener('mouseleave', handleMouseLeave);
 
-    // Some browsers use auxclick for navigation
-    const handleAuxClick = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    container.addEventListener('mousedown', handleMouseDown, { capture: true });
-    container.addEventListener('mouseup', handleMouseUp, { capture: true });
-    container.addEventListener('auxclick', handleAuxClick, { capture: true });
+    // Use window-level listeners with capture for best chance of interception
+    window.addEventListener('mousedown', preventBackForward, { capture: true });
+    window.addEventListener('mouseup', preventBackForward, { capture: true });
+    window.addEventListener('pointerdown', preventBackForward, { capture: true });
+    window.addEventListener('pointerup', preventBackForward, { capture: true });
+    window.addEventListener('auxclick', preventBackForward, { capture: true });
 
     return () => {
-      container.removeEventListener('mousedown', handleMouseDown, { capture: true });
-      container.removeEventListener('mouseup', handleMouseUp, { capture: true });
-      container.removeEventListener('auxclick', handleAuxClick, { capture: true });
+      window.removeEventListener('popstate', handlePopState);
+      container.removeEventListener('mouseenter', handleMouseEnter);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('mousedown', preventBackForward, { capture: true });
+      window.removeEventListener('mouseup', preventBackForward, { capture: true });
+      window.removeEventListener('pointerdown', preventBackForward, { capture: true });
+      window.removeEventListener('pointerup', preventBackForward, { capture: true });
+      window.removeEventListener('auxclick', preventBackForward, { capture: true });
     };
-  }, []);
+  }, [isActive]);
 
   // Inactive state - show Start Browser button
   if (!isActive && !frame) {
