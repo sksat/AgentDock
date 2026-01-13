@@ -75,8 +75,6 @@ function generateMcpConfig(
   const config = {
     mcpServers: {
       bridge: serverConfig,
-      // Disable Claude Code's built-in Playwright MCP to avoid conflict with AgentDock's browser
-      playwright: { disabled: true },
     },
   };
 
