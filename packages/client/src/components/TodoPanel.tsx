@@ -179,9 +179,10 @@ export function TodoPanel({
 
   // Expanded state: overlay panel (fixed position, max height above input area)
   // Position: top-28 (112px) = below global header (48px) + session usage bar (~40px) + margin
-  // This ensures the panel doesn't overlap with the session's cost display bar
+  // Max height: 100vh - 18rem = leaves ~176px at bottom for input area
+  // This ensures the panel doesn't overlap with the session's cost display bar or input area
   return (
-    <aside className="fixed right-0 top-28 w-80 z-40 flex flex-col bg-bg-secondary border-l border-border shadow-xl rounded-bl-lg max-h-[calc(100vh-12rem)]">
+    <aside className="fixed right-0 top-28 w-80 z-40 flex flex-col bg-bg-secondary border-l border-border shadow-xl rounded-bl-lg max-h-[calc(100vh-18rem)]">
       {/* Header: [ListIcon] ToDo [count] [history] ... [collapse] */}
       {/* History button is placed next to count for quick access to update history */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
