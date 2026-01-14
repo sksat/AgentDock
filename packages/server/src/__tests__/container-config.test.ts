@@ -1,9 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
 import {
   ContainerConfig,
   buildPodmanArgs,
   expandPath,
+  createDefaultContainerConfig,
 } from '../container-config.js';
+
+// Helper to check if a path exists
+function pathExists(p: string): boolean {
+  try {
+    fs.accessSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe('container-config', () => {
   describe('expandPath', () => {
@@ -130,6 +142,86 @@ describe('container-config', () => {
       // Image should be near the end
       const imageIndex = args.indexOf('claude-container:v1');
       expect(imageIndex).toBeGreaterThan(args.length - 5);
+    });
+  });
+
+  describe('createDefaultContainerConfig', () => {
+    // These tests verify behavior based on actual filesystem state
+    // Using skipDefaultMounts to test the logic without filesystem dependencies
+
+    it('should skip default mounts when skipDefaultMounts is true', () => {
+      const config = createDefaultContainerConfig('test-image:v1', {
+        skipDefaultMounts: true,
+      });
+
+      // No default mounts should be included when skipDefaultMounts is true
+      const gitconfigMount = config.extraMounts.find((m) => m.source.includes('.gitconfig'));
+      const claudeMount = config.extraMounts.find((m) => m.source.includes('.claude'));
+
+      expect(gitconfigMount).toBeUndefined();
+      expect(claudeMount).toBeUndefined();
+      expect(config.extraMounts).toHaveLength(0);
+    });
+
+    it('should include default mounts only for files that exist', () => {
+      const config = createDefaultContainerConfig('test-image:v1');
+
+      // Check that mounts match actual filesystem state
+      const gitconfigMount = config.extraMounts.find((m) => m.source.includes('.gitconfig'));
+      const claudeMount = config.extraMounts.find((m) => m.source.includes('.claude'));
+
+      const gitconfigExists = pathExists(expandPath('~/.gitconfig'));
+      const claudeExists = pathExists(expandPath('~/.claude'));
+
+      // Mounts should only be present if the corresponding file/directory exists
+      if (gitconfigExists) {
+        expect(gitconfigMount).toBeDefined();
+        expect(gitconfigMount?.options).toBe('ro');
+      } else {
+        expect(gitconfigMount).toBeUndefined();
+      }
+
+      if (claudeExists) {
+        expect(claudeMount).toBeDefined();
+        expect(claudeMount?.options).toBe('rw');
+      } else {
+        expect(claudeMount).toBeUndefined();
+      }
+    });
+
+    it('should merge user-provided extraMounts with default mounts', () => {
+      const config = createDefaultContainerConfig('test-image:v1', {
+        extraMounts: [
+          { source: '/custom/path', target: '/container/path', options: 'rw' },
+        ],
+      });
+
+      // User mount should always be present
+      const customMount = config.extraMounts.find((m) => m.source === '/custom/path');
+      expect(customMount).toBeDefined();
+      expect(customMount?.target).toBe('/container/path');
+      expect(customMount?.options).toBe('rw');
+    });
+
+    it('should set correct default values', () => {
+      const config = createDefaultContainerConfig('test-image:v1', {
+        skipDefaultMounts: true,
+      });
+
+      expect(config.enabled).toBe(true);
+      expect(config.runtime).toBe('podman');
+      expect(config.image).toBe('test-image:v1');
+      expect(config.workdirOverlay).toBe(true);
+      expect(config.extraArgs).toEqual([]);
+    });
+
+    it('should preserve user-provided extraArgs', () => {
+      const config = createDefaultContainerConfig('test-image:v1', {
+        skipDefaultMounts: true,
+        extraArgs: ['--cpus=2', '--memory=4g'],
+      });
+
+      expect(config.extraArgs).toEqual(['--cpus=2', '--memory=4g']);
     });
   });
 });

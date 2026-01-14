@@ -268,4 +268,81 @@ describe('PodmanClaudeRunner', () => {
       expect(gitconfigMount).toContain(':ro');
     });
   });
+
+  describe('MCP configuration', () => {
+    it('should mount MCP config directory when mcpConfigPath is provided', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        mcpConfigPath: '/tmp/agent-dock-mcp/mcp-config-test123.json',
+        permissionToolName: 'mcp__bridge__permission_prompt',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      // Find all -v arguments
+      const volumeArgs: string[] = [];
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-v' && args[i + 1]) {
+          volumeArgs.push(args[i + 1]);
+        }
+      }
+
+      // MCP config directory should be mounted
+      const mcpConfigMount = volumeArgs.find((v) => v.includes('/tmp/agent-dock-mcp'));
+      expect(mcpConfigMount).toBeDefined();
+      expect(mcpConfigMount).toContain(':ro');
+    });
+
+    it('should mount project root for MCP server access when mcpConfigPath is provided', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        mcpConfigPath: '/tmp/agent-dock-mcp/mcp-config-test123.json',
+        permissionToolName: 'mcp__bridge__permission_prompt',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      // Find all -v arguments
+      const volumeArgs: string[] = [];
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-v' && args[i + 1]) {
+          volumeArgs.push(args[i + 1]);
+        }
+      }
+
+      // Project root should be mounted (contains packages/mcp-server)
+      // The exact path depends on cwd, but there should be more than just workdir and mcp config
+      expect(volumeArgs.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should add --network=host when mcpConfigPath is provided', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        mcpConfigPath: '/tmp/agent-dock-mcp/mcp-config-test123.json',
+        permissionToolName: 'mcp__bridge__permission_prompt',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      // --network=host should be included for localhost WebSocket access
+      expect(args).toContain('--network=host');
+    });
+
+    it('should NOT add --network=host when mcpConfigPath is not provided', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      // --network=host should NOT be included
+      expect(args).not.toContain('--network=host');
+    });
+  });
 });

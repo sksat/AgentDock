@@ -127,14 +127,55 @@ export class PodmanClaudeRunner extends EventEmitter {
     // Build environment variables to pass to container
     const env: Record<string, string> = {};
 
+    // Pass ANTHROPIC_API_KEY to container
+    if (process.env.ANTHROPIC_API_KEY) {
+      env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    }
+
     if (options.thinkingEnabled) {
       env.MAX_THINKING_TOKENS = '31999';
       console.log('[PodmanClaudeRunner] Extended thinking enabled');
     }
 
+    // Clone container config to add MCP-related mounts if needed
+    const containerConfig = {
+      ...this.options.containerConfig,
+      extraMounts: [...this.options.containerConfig.extraMounts],
+      extraArgs: [...this.options.containerConfig.extraArgs],
+    };
+
+    // Mount MCP config directory and use host network for MCP server communication
+    if (this.options.mcpConfigPath) {
+      const mcpDir = this.options.mcpConfigPath.substring(0, this.options.mcpConfigPath.lastIndexOf('/'));
+      containerConfig.extraMounts.push({
+        source: mcpDir,
+        target: mcpDir, // Use same path inside container for simplicity
+        options: 'ro',
+      });
+
+      // Mount the mcp-server directory (needed because MCP config references host path)
+      // Find mcp-server directory from the config file content
+      const mcpServerDir = process.cwd().includes('packages/server')
+        ? process.cwd().replace('/packages/server', '/packages/mcp-server')
+        : `${process.cwd()}/packages/mcp-server`;
+      const projectRoot = process.cwd().includes('packages/server')
+        ? process.cwd().replace('/packages/server', '')
+        : process.cwd();
+
+      // Mount the entire project so mcp-server paths work
+      containerConfig.extraMounts.push({
+        source: projectRoot,
+        target: projectRoot,
+        options: 'ro',
+      });
+
+      // Use host network so localhost works for WebSocket connection
+      containerConfig.extraArgs.push('--network=host');
+    }
+
     // Build podman run arguments
     const podmanArgs = buildPodmanArgs(
-      this.options.containerConfig,
+      containerConfig,
       this.options.workingDir!,
       env
     );

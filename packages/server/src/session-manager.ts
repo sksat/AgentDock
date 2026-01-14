@@ -17,6 +17,8 @@ export interface CreateSessionOptions {
   name?: string;
   /** Explicit working directory. If not specified, a new directory will be auto-created. */
   workingDir?: string;
+  /** Whether to run in a container */
+  useContainer?: boolean;
 }
 
 interface SessionRow {
@@ -32,6 +34,7 @@ interface SessionRow {
   output_tokens: number | null;
   cache_creation_tokens: number | null;
   cache_read_tokens: number | null;
+  use_container: number | null; // SQLite stores booleans as 0/1
 }
 
 export interface SessionUsage {
@@ -96,8 +99,8 @@ export class SessionManager {
     // Prepare statements
     this.stmts = {
       insertSession: this.db.prepare(`
-        INSERT INTO sessions (id, name, working_dir, created_at, status, claude_session_id, permission_mode, model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, name, working_dir, created_at, status, claude_session_id, permission_mode, model, use_container)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
       getSession: this.db.prepare('SELECT * FROM sessions WHERE id = ?'),
       listSessions: this.db.prepare('SELECT * FROM sessions ORDER BY created_at DESC'),
@@ -181,6 +184,7 @@ export class SessionManager {
       claudeSessionId: row.claude_session_id ?? undefined,
       permissionMode: (row.permission_mode as PermissionMode) ?? undefined,
       model: row.model ?? undefined,
+      useContainer: row.use_container === 1 ? true : undefined,
     };
   }
 
@@ -217,6 +221,7 @@ export class SessionManager {
       workingDir,
       createdAt,
       status,
+      useContainer: options.useContainer,
     };
 
     // If explicit name provided, persist immediately
@@ -258,7 +263,8 @@ export class SessionManager {
       session.status,
       session.claudeSessionId ?? null,
       session.permissionMode ?? null,
-      session.model ?? null
+      session.model ?? null,
+      session.useContainer ? 1 : 0
     );
   }
 

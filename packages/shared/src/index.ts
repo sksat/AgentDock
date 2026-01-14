@@ -689,6 +689,8 @@ export interface SessionInfo {
   model?: string;
   /** Usage data from ccusage (optional, may not be available) */
   usage?: SessionUsageInfo;
+  /** Whether this session runs in a container */
+  useContainer?: boolean;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';

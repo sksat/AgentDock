@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -40,6 +40,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     4: () => migrateToV4(db),
     5: () => migrateToV5(db),
     6: () => migrateToV6(db),
+    7: () => migrateToV7(db),
   };
 
   db.transaction(() => {
@@ -57,7 +58,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
 }
 
 function migrateToV1(db: Database.Database): void {
-  // Sessions table (includes usage columns from v2 for new databases)
+  // Sessions table (includes all columns for new databases)
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -71,7 +72,8 @@ function migrateToV1(db: Database.Database): void {
       input_tokens INTEGER DEFAULT 0,
       output_tokens INTEGER DEFAULT 0,
       cache_creation_tokens INTEGER DEFAULT 0,
-      cache_read_tokens INTEGER DEFAULT 0
+      cache_read_tokens INTEGER DEFAULT 0,
+      use_container INTEGER DEFAULT 0
     )
   `);
 
@@ -217,6 +219,16 @@ function migrateToV6(db: Database.Database): void {
       updated_at TEXT NOT NULL
     )
   `);
+}
+
+function migrateToV7(db: Database.Database): void {
+  // Add use_container column to sessions table
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('use_container')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN use_container INTEGER DEFAULT 0');
+  }
 }
 
 export type { Database };

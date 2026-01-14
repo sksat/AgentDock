@@ -2,6 +2,9 @@
  * Container configuration for running Claude Code in Podman containers.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 export interface ContainerMount {
   /** Host path (supports ~ expansion) */
   source: string;
@@ -87,26 +90,63 @@ export function buildPodmanArgs(
   return args;
 }
 
+export interface CreateContainerConfigOptions extends Partial<ContainerConfig> {
+  /** Skip default mounts (~/.gitconfig, ~/.claude). Useful for testing. */
+  skipDefaultMounts?: boolean;
+}
+
+/**
+ * Check if a path exists (expanding ~ to home directory).
+ */
+function pathExists(p: string): boolean {
+  const expanded = expandPath(p);
+  try {
+    fs.accessSync(expanded);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Create default container configuration.
  */
 export function createDefaultContainerConfig(
   image: string,
-  options?: Partial<ContainerConfig>
+  options?: CreateContainerConfigOptions
 ): ContainerConfig {
+  // Build default mounts, only including files that exist
+  const defaultMounts: ContainerMount[] = [];
+  if (!options?.skipDefaultMounts) {
+    // Git config (optional)
+    if (pathExists('~/.gitconfig')) {
+      defaultMounts.push({
+        source: '~/.gitconfig',
+        target: '/home/node/.gitconfig',
+        options: 'ro',
+      });
+    }
+    // Claude Max/Pro authentication credentials (optional but important)
+    if (pathExists('~/.claude')) {
+      defaultMounts.push({
+        source: '~/.claude',
+        target: '/home/node/.claude',
+        options: 'rw',
+      });
+    }
+  }
+
+  // Merge extraMounts: default mounts + user-provided mounts
+  const extraMounts = options?.extraMounts?.length
+    ? [...defaultMounts, ...options.extraMounts]
+    : defaultMounts;
+
   return {
     enabled: true,
     runtime: 'podman',
     image,
     workdirOverlay: true,
-    extraMounts: [
-      {
-        source: '~/.gitconfig',
-        target: '/home/user/.gitconfig',
-        options: 'ro',
-      },
-    ],
-    extraArgs: [],
-    ...options,
+    extraMounts,
+    extraArgs: options?.extraArgs ?? [],
   };
 }

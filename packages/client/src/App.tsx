@@ -218,6 +218,7 @@ function App() {
     status: s.status,
     createdAt: s.createdAt,
     usage: s.usage,
+    useContainer: s.useContainer,
   }));
 
   // Get page title based on current view and session
@@ -316,7 +317,7 @@ function App() {
           <>
             {/* Session usage bar with view toggle and git status */}
             <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-between gap-4 text-xs text-text-secondary">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <ViewToggle
                   currentView={sessionView}
                   onToggle={setSessionView}
@@ -327,6 +328,17 @@ function App() {
                     isGitRepo={gitStatus.isGitRepo}
                     error={gitStatus.error}
                   />
+                )}
+                {session?.useContainer && (
+                  <span
+                    className="flex items-center gap-1.5 px-2 py-1 bg-accent-primary/10 text-accent-primary rounded-md"
+                    title="Running in container"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="font-medium">Container</span>
+                  </span>
                 )}
               </div>
               {usageInfo && (

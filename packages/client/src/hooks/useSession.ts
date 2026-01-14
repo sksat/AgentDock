@@ -119,7 +119,7 @@ export interface UseSessionReturn {
   renameSession: (sessionId: string, name: string) => void;
 
   // Message handling
-  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean) => void;
+  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, useContainer?: boolean) => void;
   clearMessages: () => void;
   addSystemMessage: (content: SystemMessageContent) => void;
   compactSession: () => void;

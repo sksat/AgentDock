@@ -1011,8 +1011,9 @@ export function createServer(options: ServerOptions): BridgeServer {
         const session = sessionManager.createSession({
           name: message.name,
           workingDir: message.workingDir,
+          useContainer: message.useContainer,
         });
-        // Store container preference if explicitly set
+        // Also store in runtime map for consistent lookups
         if (message.useContainer !== undefined) {
           sessionContainerPrefs.set(session.id, message.useContainer);
         }

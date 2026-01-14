@@ -10,14 +10,15 @@ function parseArgs() {
     host: string;
     useMock: boolean;
     containerEnabled: boolean;
-    containerImage: string | undefined;
+    containerImage: string;
   } = {
     dbPath: process.env.CLAUDE_BRIDGE_DB_PATH || './data.db',
     port: parseInt(process.env.PORT || '3001', 10),
     host: process.env.HOST || '0.0.0.0',
     useMock: process.env.USE_MOCK === 'true' || process.env.USE_MOCK === '1',
-    containerEnabled: process.env.CONTAINER_ENABLED === 'true' || process.env.CONTAINER_ENABLED === '1',
-    containerImage: process.env.CONTAINER_IMAGE,
+    // Container mode is enabled by default; set CONTAINER_DISABLED=true to disable
+    containerEnabled: process.env.CONTAINER_DISABLED !== 'true' && process.env.CONTAINER_DISABLED !== '1',
+    containerImage: process.env.CONTAINER_IMAGE || 'localhost/claude-code:local',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -46,14 +47,8 @@ function parseArgs() {
       case '--mock':
         result.useMock = true;
         break;
-      case '--container':
-        result.containerEnabled = true;
-        break;
-      case '--container-image':
-        if (nextArg) {
-          result.containerImage = nextArg;
-          i++;
-        }
+      case '--no-container':
+        result.containerEnabled = false;
         break;
     }
   }
@@ -77,9 +72,7 @@ server.start().then(() => {
   console.log(`Claude Bridge server running at http://${config.host}:${config.port}`);
   console.log(`WebSocket endpoint: ws://${config.host}:${config.port}/ws`);
   console.log(`Database: ${config.dbPath}`);
-  if (config.containerEnabled) {
-    console.log(`Container mode: enabled (image: ${config.containerImage})`);
-  }
+  console.log(`Container mode: ${config.containerEnabled ? `enabled (image: ${config.containerImage})` : 'disabled'}`);
 });
 
 // Graceful shutdown
