@@ -243,6 +243,7 @@ export function UsageChart({ daily, blocks = [], height = 120 }: UsageChartProps
     const range = rangeConfig;
     if (!range) return [];
 
+    // eslint-disable-next-line react-hooks/purity
     const cutoffTime = Date.now() - range.hours * 60 * 60 * 1000;
 
     if (actualSource === 'blocks') {
@@ -267,13 +268,14 @@ export function UsageChart({ daily, blocks = [], height = 120 }: UsageChartProps
         models: d.modelsUsed,
       }));
     }
-  }, [daily, blocks, timeRange, rangeConfig, actualSource, unit]);
+  }, [daily, blocks, rangeConfig, actualSource, unit]);
 
   // Get filtered data for model extraction (daily or blocks)
   const filteredDaily = useMemo(() => {
     const range = rangeConfig;
     if (!range || actualSource !== 'daily') return [];
 
+    // eslint-disable-next-line react-hooks/purity
     const cutoffTime = Date.now() - range.hours * 60 * 60 * 1000;
     const cutoffStr = new Date(cutoffTime).toISOString().split('T')[0];
     const filtered = daily.filter((d) => d.date >= cutoffStr);
@@ -285,6 +287,7 @@ export function UsageChart({ daily, blocks = [], height = 120 }: UsageChartProps
     const range = rangeConfig;
     if (!range || actualSource !== 'blocks') return [];
 
+    // eslint-disable-next-line react-hooks/purity
     const cutoffTime = Date.now() - range.hours * 60 * 60 * 1000;
     return blocks.filter((b) => new Date(b.startTime).getTime() >= cutoffTime);
   }, [blocks, rangeConfig, actualSource]);

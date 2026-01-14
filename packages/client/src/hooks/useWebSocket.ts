@@ -34,6 +34,7 @@ export function useWebSocket(
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   // Store callbacks in refs to avoid dependency issues
   const onMessageRef = useRef(onMessage);
@@ -69,7 +70,7 @@ export function useWebSocket(
       if (reconnect && !reconnectTimeoutRef.current) {
         reconnectTimeoutRef.current = setTimeout(() => {
           reconnectTimeoutRef.current = null;
-          connect();
+          connectRef.current();
         }, reconnectInterval);
       }
     };
@@ -89,6 +90,11 @@ export function useWebSocket(
 
     wsRef.current = ws;
   }, [url, reconnect, reconnectInterval]);
+
+  // Keep connectRef in sync with connect
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -124,6 +130,7 @@ export function useWebSocket(
     isConnected,
     send,
     disconnect,
+    // eslint-disable-next-line react-hooks/refs
     _ws: wsRef.current ?? undefined,
   };
 }

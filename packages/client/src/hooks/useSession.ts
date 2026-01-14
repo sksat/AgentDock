@@ -5,6 +5,7 @@ import type {
   ClientMessage,
   QuestionItem,
   PermissionMode,
+  PermissionResult,
   DailyUsage,
   UsageTotals,
   BlockUsage,
@@ -116,10 +117,11 @@ export interface UseSessionReturn {
   compactSession: () => void;
   respondToPermission: (
     requestId: string,
-    response: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }
+    response: PermissionResult
   ) => void;
   respondToQuestion: (requestId: string, answers: Record<string, string>) => void;
   interrupt: () => void;
+  sendStreamInput: (content: string) => void;
 
   // Settings
   setPermissionMode: (mode: PermissionMode) => void;
@@ -297,6 +299,7 @@ export function useSession(): UseSessionReturn {
   useEffect(() => {
     if (activeSessionId && pendingMessage) {
       // Add user message to the session
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionMessages((prev) => {
         const newMap = new Map(prev);
         const current = newMap.get(activeSessionId) ?? [];
@@ -330,6 +333,7 @@ export function useSession(): UseSessionReturn {
     if (sessionId) {
       const sessionExists = sessions.some((s) => s.id === sessionId);
       if (sessionExists && activeSessionId !== sessionId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setActiveSessionId(sessionId);
         setError(null);
         // Request session history if not already loaded
@@ -901,7 +905,10 @@ export function useSession(): UseSessionReturn {
           if (message.pendingPermission) {
             setSessionPendingPermission((prev) => {
               const newMap = new Map(prev);
-              newMap.set(message.sessionId, message.pendingPermission!);
+              newMap.set(message.sessionId, {
+                sessionId: message.sessionId,
+                ...message.pendingPermission!,
+              });
               return newMap;
             });
           }

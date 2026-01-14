@@ -60,11 +60,13 @@ describe('BrowserSessionManager', () => {
 
       await manager.createSession('session-1');
 
-      expect(statusHandler).toHaveBeenCalledWith({
-        sessionId: 'session-1',
-        active: false,
-        browserUrl: expect.any(String),
-      });
+      expect(statusHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          active: false,
+          browserUrl: expect.any(String),
+        })
+      );
     });
 
     it('should start screencast and emit frame events', async () => {

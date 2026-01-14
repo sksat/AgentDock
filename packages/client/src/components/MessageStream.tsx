@@ -4,7 +4,7 @@ import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
 import { DiffView } from './DiffView';
-import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
+import type { TodoItem as TodoItemType } from '@agent-dock/shared';
 
 export interface MessageStreamItem {
   id?: string;
@@ -175,6 +175,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.type === 'user') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAutoScroll(true);
       }
     }

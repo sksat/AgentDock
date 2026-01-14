@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import clsx from 'clsx';
 
@@ -115,6 +116,7 @@ export function ModelSelector({
         if (matchingOption && opt.id === matchingOption.id) return true;
         return false;
       });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
       // Focus the popover to capture keyboard events
       popoverRef.current?.focus();

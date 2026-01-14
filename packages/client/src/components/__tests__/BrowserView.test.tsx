@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserView } from '../BrowserView';
 import type { ScreencastMetadata } from '@agent-dock/shared';
 
@@ -39,17 +39,6 @@ const defaultProps = {
 beforeEach(() => {
   vi.clearAllMocks();
 });
-
-// Mock ResizeObserver
-class MockResizeObserver {
-  callback: ResizeObserverCallback;
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
-  }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
 
 // Mock history.pushState
 const originalPushState = history.pushState;

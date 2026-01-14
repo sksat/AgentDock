@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
+import type { TodoItem as TodoItemType } from '@agent-dock/shared';
 import { TodoItem } from './TodoItem';
 
 // Chevron Left icon
@@ -75,12 +75,12 @@ function describeChanges(
       changes.push(`task ${taskNum}: added`);
     } else if (prevTask.status !== task.status) {
       // Status changed
-      const statusLabel = {
+      const statusLabel: Record<TodoItemType['status'], string> = {
         pending: 'pending',
         in_progress: 'started',
         completed: 'completed',
       };
-      changes.push(`task ${taskNum}: ${statusLabel[task.status] || task.status}`);
+      changes.push(`task ${taskNum}: ${statusLabel[task.status]}`);
     }
   }
 

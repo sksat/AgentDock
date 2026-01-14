@@ -8,15 +8,18 @@
     "dev:once": "pnpm --filter client run dev & pnpm --filter server run dev:once",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
-    "typecheck": "pnpm -r run typecheck"
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"
   },
+  "packageManager": "pnpm@10.18.3",
   "engines": {
     "node": ">=24.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "node-pty"
+      "node-pty",
+      "better-sqlite3"
     ]
   }
 }
