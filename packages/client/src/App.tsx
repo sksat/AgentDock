@@ -8,6 +8,7 @@ import { BrowserView } from './components/BrowserView';
 import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
 import type { SidebarSession } from './components';
+import type { ImageAttachment } from './components/MessageStream';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
@@ -108,9 +109,19 @@ function App() {
     sendBrowserRefresh,
     handleServerMessage,
     setSend,
+    globalSettings,
+    getSettings,
+    updateSettings,
   } = useSession();
 
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  // Per-session thinking state (sessionId -> enabled)
+  const [sessionThinking, setSessionThinking] = useState<Map<string, boolean>>(new Map());
+
+  // Get current session's thinking state (defaults to global setting)
+  const defaultThinking = globalSettings?.defaultThinkingEnabled ?? false;
+  const thinkingEnabled = activeSessionId
+    ? sessionThinking.get(activeSessionId) ?? defaultThinking
+    : defaultThinking;
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' } | null>(null);
   const [sessionView, setSessionView] = useState<SessionView>('stream');
@@ -136,12 +147,13 @@ function App() {
     setSend(send);
   }, [send, setSend]);
 
-  // Request session list on connect
+  // Request session list and settings on connect
   useEffect(() => {
     if (isConnected) {
       listSessions();
+      getSettings();
     }
-  }, [isConnected, listSessions]);
+  }, [isConnected, listSessions, getSettings]);
 
   // Show toast when error occurs
   useEffect(() => {
@@ -172,8 +184,22 @@ function App() {
   );
 
   const handleToggleThinking = useCallback(() => {
-    setThinkingEnabled((prev) => !prev);
-  }, []);
+    if (!activeSessionId) return;
+    setSessionThinking((prev) => {
+      const newMap = new Map(prev);
+      const currentValue = prev.get(activeSessionId) ?? defaultThinking;
+      newMap.set(activeSessionId, !currentValue);
+      return newMap;
+    });
+  }, [activeSessionId, defaultThinking]);
+
+  // Wrapper for sendMessage that includes thinkingEnabled
+  const handleSendMessage = useCallback(
+    (content: string, images?: ImageAttachment[], workingDir?: string) => {
+      sendMessage(content, images, workingDir, thinkingEnabled);
+    },
+    [sendMessage, thinkingEnabled]
+  );
 
   // Handle model change (server handles logging)
   const handleModelChange = useCallback((newModel: string) => {
@@ -256,7 +282,12 @@ function App() {
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Settings page */}
-          {currentView === 'settings' && <SettingsPage />}
+          {currentView === 'settings' && (
+            <SettingsPage
+              globalSettings={globalSettings}
+              updateSettings={updateSettings}
+            />
+          )}
 
           {/* Usage page */}
           {currentView === 'usage' && <UsagePage globalUsage={globalUsage} />}
@@ -269,7 +300,7 @@ function App() {
                 sessions={sessions}
                 globalUsage={globalUsage}
                 isConnected={isConnected}
-                onSendMessage={sendMessage}
+                onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
               />
             ) : (
@@ -379,7 +410,7 @@ function App() {
 
               {/* Input area with status bar */}
               <InputArea
-                onSend={sendMessage}
+                onSend={handleSendMessage}
                 onInterrupt={interrupt}
                 disabled={!isConnected}
                 isLoading={isLoading}

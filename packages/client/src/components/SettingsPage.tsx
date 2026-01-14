@@ -1,35 +1,32 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import clsx from 'clsx';
+import type { GlobalSettings } from '@agent-dock/shared';
 
-// Settings stored in localStorage
-const STORAGE_KEY = 'agent-dock:settings';
+// Local settings (theme only, stored in localStorage)
+const LOCAL_STORAGE_KEY = 'agent-dock:local-settings';
 
-interface Settings {
-  defaultModel: string;
-  defaultPermissionMode: string;
+interface LocalSettings {
   theme: 'dark' | 'light';
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  defaultModel: 'claude-opus-4-5-20250514',
-  defaultPermissionMode: 'ask',
+const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   theme: 'dark',
 };
 
-function loadSettings(): Settings {
+function loadLocalSettings(): LocalSettings {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (stored) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      return { ...DEFAULT_LOCAL_SETTINGS, ...JSON.parse(stored) };
     }
   } catch {
     // Ignore parse errors
   }
-  return DEFAULT_SETTINGS;
+  return DEFAULT_LOCAL_SETTINGS;
 }
 
-function saveSettings(settings: Settings): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+function saveLocalSettings(settings: LocalSettings): void {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
 }
 
 // Model options
@@ -105,16 +102,75 @@ function SelectOption({ label, description, selected, onClick }: SelectOptionPro
   );
 }
 
-export function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(loadSettings);
+interface ToggleSwitchProps {
+  enabled: boolean;
+  onToggle: () => void;
+  label: string;
+  description: string;
+}
 
-  const updateSetting = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setSettings((prev) => {
+function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSwitchProps) {
+  return (
+    <button
+      onClick={onToggle}
+      className="w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between bg-bg-tertiary hover:bg-bg-tertiary/80"
+    >
+      <div className="flex flex-col">
+        <span className="font-medium text-text-primary">{label}</span>
+        <span className="text-xs text-text-secondary">{description}</span>
+      </div>
+      <div
+        className={clsx(
+          'w-11 h-6 rounded-full p-0.5 transition-colors',
+          enabled ? 'bg-accent-primary' : 'bg-gray-600'
+        )}
+      >
+        <div
+          className={clsx(
+            'w-5 h-5 rounded-full bg-white shadow-sm transition-transform',
+            enabled ? 'translate-x-5' : 'translate-x-0'
+          )}
+        />
+      </div>
+    </button>
+  );
+}
+
+export interface SettingsPageProps {
+  globalSettings: GlobalSettings | null;
+  updateSettings: (settings: Partial<GlobalSettings>) => void;
+}
+
+export function SettingsPage({ globalSettings, updateSettings }: SettingsPageProps) {
+  const [localSettings, setLocalSettings] = useState<LocalSettings>(loadLocalSettings);
+
+  // Sync local settings with globalSettings when it changes
+  const [displaySettings, setDisplaySettings] = useState<GlobalSettings>({
+    defaultModel: 'claude-opus-4-5-20250514',
+    defaultPermissionMode: 'ask',
+    defaultThinkingEnabled: false,
+  });
+
+  useEffect(() => {
+    if (globalSettings) {
+      setDisplaySettings(globalSettings);
+    }
+  }, [globalSettings]);
+
+  const updateLocalSetting = useCallback(<K extends keyof LocalSettings>(key: K, value: LocalSettings[K]) => {
+    setLocalSettings((prev) => {
       const next = { ...prev, [key]: value };
-      saveSettings(next);
+      saveLocalSettings(next);
       return next;
     });
   }, []);
+
+  const updateGlobalSetting = useCallback(<K extends keyof GlobalSettings>(key: K, value: GlobalSettings[K]) => {
+    // Optimistically update UI
+    setDisplaySettings((prev) => ({ ...prev, [key]: value }));
+    // Send to server
+    updateSettings({ [key]: value });
+  }, [updateSettings]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -136,8 +192,8 @@ export function SettingsPage() {
                   key={option.id}
                   label={option.name}
                   description={option.description}
-                  selected={settings.defaultModel === option.id}
-                  onClick={() => updateSetting('defaultModel', option.id)}
+                  selected={displaySettings.defaultModel === option.id}
+                  onClick={() => updateGlobalSetting('defaultModel', option.id)}
                 />
               ))}
             </div>
@@ -154,8 +210,8 @@ export function SettingsPage() {
                   key={option.id}
                   label={option.name}
                   description={option.description}
-                  selected={settings.defaultPermissionMode === option.id}
-                  onClick={() => updateSetting('defaultPermissionMode', option.id)}
+                  selected={displaySettings.defaultPermissionMode === option.id}
+                  onClick={() => updateGlobalSetting('defaultPermissionMode', option.id)}
                 />
               ))}
             </div>
@@ -170,16 +226,29 @@ export function SettingsPage() {
               <SelectOption
                 label="Dark"
                 description="Dark background with light text"
-                selected={settings.theme === 'dark'}
-                onClick={() => updateSetting('theme', 'dark')}
+                selected={localSettings.theme === 'dark'}
+                onClick={() => updateLocalSetting('theme', 'dark')}
               />
               <SelectOption
                 label="Light"
                 description="Light background with dark text (coming soon)"
-                selected={settings.theme === 'light'}
-                onClick={() => updateSetting('theme', 'light')}
+                selected={localSettings.theme === 'light'}
+                onClick={() => updateLocalSetting('theme', 'light')}
               />
             </div>
+          </SettingCard>
+
+          {/* Extended Thinking */}
+          <SettingCard
+            title="Extended Thinking"
+            description="Default thinking mode for new sessions"
+          >
+            <ToggleSwitch
+              enabled={displaySettings.defaultThinkingEnabled}
+              onToggle={() => updateGlobalSetting('defaultThinkingEnabled', !displaySettings.defaultThinkingEnabled)}
+              label="Enable by default"
+              description="Claude will show its reasoning process (uses more tokens)"
+            />
           </SettingCard>
 
           {/* About */}

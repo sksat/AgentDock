@@ -101,12 +101,12 @@ export function InputArea({
   const handleSlashCommandSelect = useCallback((command: SlashCommand) => {
     setShowSlashCommands(false);
 
-    // Commands that should execute immediately on selection (UI pickers)
+    // Commands that should execute immediately on selection (UI pickers or toggles)
     // Note: 'compact' is excluded - user should confirm before compacting
-    const immediateCommands = ['model', 'permission'];
+    const immediateCommands = ['model', 'permission', 'thinking'];
 
     if (immediateCommands.includes(command.name)) {
-      // Execute the command immediately (show UI picker)
+      // Execute the command immediately (show UI picker or toggle)
       setValue('');
       switch (command.name) {
         case 'model':
@@ -115,6 +115,9 @@ export function InputArea({
         case 'permission':
           setTimeout(() => setShowPermissionModeSelector(true), 0);
           break;
+        case 'thinking':
+          onToggleThinking?.();
+          break;
       }
     } else {
       // For other commands, insert into input with trailing space
@@ -122,7 +125,7 @@ export function InputArea({
       setValue(fullCommand);
       textareaRef.current?.focus();
     }
-  }, []);
+  }, [onToggleThinking]);
 
   // Execute slash command
   const executeSlashCommand = useCallback((commandText: string) => {
@@ -168,10 +171,14 @@ export function InputArea({
         setValue('');
         onShowHelp?.();
         return true;
+      case 'thinking':
+        setValue('');
+        onToggleThinking?.();
+        return true;
       default:
         return false;
     }
-  }, [onNewSession, onClearMessages, onCompact, onShowContext, onShowCost, onShowConfig, onShowHelp]);
+  }, [onNewSession, onClearMessages, onCompact, onShowContext, onShowCost, onShowConfig, onShowHelp, onToggleThinking]);
 
   // Handle input change - detect slash commands
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -335,13 +342,8 @@ export function InputArea({
         e.preventDefault();
         cyclePermissionMode();
       }
-      // Tab (without Shift) to toggle thinking mode
-      if (e.key === 'Tab' && !e.shiftKey && onToggleThinking && !showSlashCommands) {
-        e.preventDefault();
-        onToggleThinking();
-      }
     },
-    [handleSend, executeSlashCommand, onToggleThinking, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
+    [handleSend, executeSlashCommand, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
   );
 
   // Auto-resize textarea
@@ -463,9 +465,11 @@ export function InputArea({
           query={value}
           currentModel={model}
           permissionMode={permissionMode}
+          thinkingEnabled={thinkingEnabled}
           selectedIndex={slashCommandIndex}
           onSelect={handleSlashCommandSelect}
           onClose={() => setShowSlashCommands(false)}
+          onToggleThinking={onToggleThinking}
           isOpen={showSlashCommands}
         />
 

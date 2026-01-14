@@ -28,6 +28,7 @@ const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 
   // Settings
   { name: 'permission', label: 'Permission mode...', description: 'Change permission mode', category: 'settings' },
+  { name: 'thinking', label: 'Toggle thinking', description: 'Enable/disable extended thinking mode', category: 'settings' },
   { name: 'config', label: 'Configuration', description: 'View and edit settings', category: 'settings' },
   { name: 'help', label: 'Help', description: 'Show all available commands', category: 'settings' },
 ];
@@ -36,9 +37,11 @@ export interface SlashCommandSuggestionsProps {
   query: string;
   currentModel?: string;
   permissionMode?: string;
+  thinkingEnabled?: boolean;
   selectedIndex: number;
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
+  onToggleThinking?: () => void;
   isOpen: boolean;
   customCommands?: SlashCommand[]; // Custom commands from project or user
 }
@@ -47,9 +50,11 @@ export function SlashCommandSuggestions({
   query,
   currentModel,
   permissionMode,
+  thinkingEnabled,
   selectedIndex,
   onSelect,
   onClose,
+  onToggleThinking,
   isOpen,
   customCommands = [],
 }: SlashCommandSuggestionsProps) {
@@ -142,11 +147,18 @@ export function SlashCommandSuggestions({
                 key={command.prefix ? `${command.prefix}:${command.name}` : command.name}
                 role="option"
                 aria-selected={isSelected}
-                onClick={() => handleSelect(command)}
+                onClick={() => {
+                  // Thinking toggle: apply immediately without closing
+                  if (command.name === 'thinking' && onToggleThinking) {
+                    onToggleThinking();
+                    return;
+                  }
+                  handleSelect(command);
+                }}
                 className={clsx(
                   'w-full px-3 py-2 text-left transition-colors flex items-center justify-between gap-2',
                   isSelected
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary/60 text-white'
                     : 'hover:bg-bg-tertiary text-text-primary'
                 )}
               >
@@ -169,7 +181,23 @@ export function SlashCommandSuggestions({
                     {command.description}
                   </span>
                 </div>
-                {command.value && (
+                {command.name === 'thinking' ? (
+                  <div
+                    className={clsx(
+                      'w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0 border',
+                      thinkingEnabled
+                        ? 'bg-green-500 border-green-500'
+                        : (isSelected ? 'bg-white/20 border-white/40' : 'bg-gray-700 border-gray-500')
+                    )}
+                  >
+                    <div
+                      className={clsx(
+                        'w-4 h-4 rounded-full bg-white shadow-sm transition-transform',
+                        thinkingEnabled ? 'translate-x-4' : 'translate-x-0'
+                      )}
+                    />
+                  </div>
+                ) : command.value && (
                   <span className={clsx(
                     'text-xs flex-shrink-0',
                     isSelected ? 'text-white/70' : 'text-text-secondary'

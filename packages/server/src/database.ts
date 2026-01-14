@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -39,6 +39,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     3: () => migrateToV3(db),
     4: () => migrateToV4(db),
     5: () => migrateToV5(db),
+    6: () => migrateToV6(db),
   };
 
   db.transaction(() => {
@@ -204,6 +205,17 @@ function migrateToV5(db: Database.Database): void {
       ON slack_thread_bindings(session_id);
     CREATE INDEX IF NOT EXISTS idx_slack_thread_bindings_thread
       ON slack_thread_bindings(slack_team_id, slack_channel_id, slack_thread_ts);
+  `);
+}
+
+function migrateToV6(db: Database.Database): void {
+  // Add settings table for global application settings
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
   `);
 }
 

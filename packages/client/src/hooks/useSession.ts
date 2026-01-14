@@ -10,6 +10,7 @@ import type {
   BlockUsage,
   ScreencastMetadata,
   TodoItem,
+  GlobalSettings,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -109,7 +110,7 @@ export interface UseSessionReturn {
   renameSession: (sessionId: string, name: string) => void;
 
   // Message handling
-  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string) => void;
+  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean) => void;
   clearMessages: () => void;
   addSystemMessage: (content: SystemMessageContent) => void;
   compactSession: () => void;
@@ -139,6 +140,11 @@ export interface UseSessionReturn {
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
   setSend: (send: (message: ClientMessage) => void) => void;
+
+  // Global settings
+  globalSettings: GlobalSettings | null;
+  getSettings: () => void;
+  updateSettings: (settings: Partial<GlobalSettings>) => void;
 }
 
 // Store messages per session
@@ -307,6 +313,7 @@ export function useSession(): UseSessionReturn {
   const [error, setError] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [globalUsage, setGlobalUsage] = useState<GlobalUsage | null>(null);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
 
   // Pending message to send after session creation
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -482,7 +489,7 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string) => {
+    (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
@@ -515,6 +522,7 @@ export function useSession(): UseSessionReturn {
         sessionId: activeSessionId,
         content,
         images: images && images.length > 0 ? images : undefined,
+        thinkingEnabled,
       });
     },
     [activeSessionId, send, updateSessionMessages]
@@ -696,6 +704,15 @@ export function useSession(): UseSessionReturn {
       });
     }
   }, [activeSessionId, send, systemInfo?.model]);
+
+  // Global settings
+  const getSettings = useCallback(() => {
+    send({ type: 'get_settings' });
+  }, [send]);
+
+  const updateSettings = useCallback((settings: Partial<GlobalSettings>) => {
+    send({ type: 'update_settings', settings });
+  }, [send]);
 
   const startScreencast = useCallback(() => {
     if (activeSessionId) {
@@ -954,19 +971,36 @@ export function useSession(): UseSessionReturn {
 
         case 'thinking_output': {
           const sessionId = message.sessionId;
+          // Debug: uncomment for thinking streaming investigation
+          // console.log('[useSession] thinking_output received:', { sessionId, length: message.thinking.length });
           updateSessionMessages(sessionId, (prev) => {
-            // If last message is thinking, append to it
-            const lastMessage = prev[prev.length - 1];
-            if (lastMessage?.type === 'thinking' && typeof lastMessage.content === 'string') {
-              return [
-                ...prev.slice(0, -1),
-                {
-                  ...lastMessage,
-                  content: lastMessage.content + message.thinking,
-                },
-              ];
+            // Find the last thinking message (may not be the very last message
+            // because text_output can interleave with thinking_output)
+            const lastThinkingIndex = prev.findLastIndex((m) => m.type === 'thinking');
+            // Debug: uncomment for thinking streaming investigation
+            // console.log('[useSession] Last thinking index:', lastThinkingIndex, 'total:', prev.length);
+
+            if (lastThinkingIndex >= 0) {
+              // Check if there's a user message after the last thinking (new turn)
+              const hasUserAfter = prev.slice(lastThinkingIndex + 1).some((m) => m.type === 'user');
+              if (!hasUserAfter) {
+                // Append to existing thinking message
+                const thinkingMessage = prev[lastThinkingIndex];
+                if (typeof thinkingMessage.content === 'string') {
+                  const newContent = thinkingMessage.content + message.thinking;
+                  // Debug: uncomment for thinking streaming investigation
+                  // console.log('[useSession] Appending to thinking at index', lastThinkingIndex, 'new length:', newContent.length);
+                  return [
+                    ...prev.slice(0, lastThinkingIndex),
+                    { ...thinkingMessage, content: newContent },
+                    ...prev.slice(lastThinkingIndex + 1),
+                  ];
+                }
+              }
             }
-            // Otherwise create new thinking message
+            // Create new thinking message
+            // Debug: uncomment for thinking streaming investigation
+            // console.log('[useSession] Creating new thinking message');
             return [
               ...prev,
               {
@@ -1243,6 +1277,10 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'settings':
+          setGlobalSettings(message.settings);
+          break;
+
         case 'error':
           setError(message.message);
           setIsLoading(false);
@@ -1361,5 +1399,8 @@ export function useSession(): UseSessionReturn {
     sendBrowserRefresh,
     handleServerMessage,
     setSend,
+    globalSettings,
+    getSettings,
+    updateSettings,
   };
 }

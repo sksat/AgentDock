@@ -15,6 +15,8 @@ export interface StartSessionOptions {
   permissionToolName?: string;
   claudeSessionId?: string;
   images?: ImageContent[];
+  /** Enable extended thinking mode */
+  thinkingEnabled?: boolean;
   onEvent: RunnerEventHandler;
 }
 
@@ -80,6 +82,7 @@ export class RunnerManager {
     runner.start(prompt, {
       sessionId: options.claudeSessionId,
       images: options.images,
+      thinkingEnabled: options.thinkingEnabled,
     });
   }
 
