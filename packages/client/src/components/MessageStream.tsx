@@ -100,6 +100,55 @@ function formatFilePath(filePath: string, workingDir?: string): string {
   return filePath;
 }
 
+// Base64 prefixes for common image formats
+const BASE64_PNG_PREFIX = 'iVBORw0KGgo';
+const BASE64_JPEG_PREFIX = '/9j/';
+const BASE64_GIF_PREFIX = 'R0lGOD';
+
+/**
+ * Extract base64 image data from tool output.
+ * Handles both raw base64 and JSON format: [{"type":"text","text":"base64data..."}]
+ */
+function extractBase64Image(output: string): { data: string; mimeType: string } | null {
+  if (!output) return null;
+
+  // Try to parse as JSON first
+  try {
+    const parsed = JSON.parse(output);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      for (const item of parsed) {
+        if (item.type === 'text' && typeof item.text === 'string') {
+          const text = item.text;
+          if (text.startsWith(BASE64_PNG_PREFIX)) {
+            return { data: text, mimeType: 'image/png' };
+          }
+          if (text.startsWith(BASE64_JPEG_PREFIX)) {
+            return { data: text, mimeType: 'image/jpeg' };
+          }
+          if (text.startsWith(BASE64_GIF_PREFIX)) {
+            return { data: text, mimeType: 'image/gif' };
+          }
+        }
+      }
+    }
+  } catch {
+    // Not valid JSON, try raw base64
+  }
+
+  // Try raw base64
+  if (output.startsWith(BASE64_PNG_PREFIX)) {
+    return { data: output, mimeType: 'image/png' };
+  }
+  if (output.startsWith(BASE64_JPEG_PREFIX)) {
+    return { data: output, mimeType: 'image/jpeg' };
+  }
+  if (output.startsWith(BASE64_GIF_PREFIX)) {
+    return { data: output, mimeType: 'image/gif' };
+  }
+
+  return null;
+}
+
 /** Handle for imperative actions on MessageStream */
 export interface MessageStreamHandle {
   /** Scroll to a specific todo update by its toolUseId */
@@ -446,6 +495,23 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       );
     }
 
+    // Screenshot tool - show image
+    if (content.toolName.includes('take_screenshot') || content.toolName.includes('browser_take_screenshot')) {
+      const imageData = extractBase64Image(content.output);
+      if (imageData) {
+        return (
+          <div className="mt-1 ml-4 rounded-lg border border-border overflow-hidden">
+            <img
+              src={`data:${imageData.mimeType};base64,${imageData.data}`}
+              alt="Screenshot"
+              className="max-w-full h-auto"
+            />
+          </div>
+        );
+      }
+      // Fall through to default if no image data
+    }
+
     // Default: show input and output
     return (
       <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
@@ -470,6 +536,39 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       </div>
     );
   };
+
+  // Check if this is a screenshot tool with image data - render without expand/collapse
+  const isScreenshotTool = content.toolName.includes('take_screenshot') || content.toolName.includes('browser_take_screenshot');
+  const screenshotImageData = isScreenshotTool ? extractBase64Image(content.output) : null;
+
+  if (isScreenshotTool && screenshotImageData) {
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <span className={clsx(
+              'w-2 h-2 rounded-full flex-shrink-0',
+              content.isComplete
+                ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
+                : 'bg-accent-warning animate-pulse'
+            )}></span>
+            <span className="text-base">{toolInfo.icon}</span>
+            <span className="text-text-primary font-medium">{content.toolName}</span>
+            <span className="text-text-secondary text-sm truncate max-w-[400px]">
+              {toolInfo.description}
+            </span>
+          </div>
+          <div className="mt-1 ml-4 rounded-lg border border-border overflow-hidden">
+            <img
+              src={`data:${screenshotImageData.mimeType};base64,${screenshotImageData.data}`}
+              alt="Screenshot"
+              className="max-w-full h-auto"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="message-item" className="flex justify-start">
