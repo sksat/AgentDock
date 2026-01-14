@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { createServer, isBrowserTool, type BridgeServer } from '../server.js';
+import { createServer, isBrowserTool, isAutoAllowedTool, type BridgeServer } from '../server.js';
 
 describe('BridgeServer', () => {
   let server: BridgeServer;
@@ -450,5 +450,24 @@ describe('isBrowserTool', () => {
     expect(isBrowserTool('Read')).toBe(false);
     expect(isBrowserTool('mcp__bridge__permission_prompt')).toBe(false);
     expect(isBrowserTool('mcp__some_other_tool')).toBe(false);
+  });
+});
+
+describe('isAutoAllowedTool', () => {
+  it('should return true for AskUserQuestion', () => {
+    expect(isAutoAllowedTool('AskUserQuestion')).toBe(true);
+  });
+
+  it('should return true for browser tools', () => {
+    expect(isAutoAllowedTool('mcp__bridge__browser_navigate')).toBe(true);
+    expect(isAutoAllowedTool('mcp__bridge__browser_click')).toBe(true);
+    expect(isAutoAllowedTool('browser_navigate')).toBe(true);
+  });
+
+  it('should return false for other tools', () => {
+    expect(isAutoAllowedTool('Bash')).toBe(false);
+    expect(isAutoAllowedTool('Write')).toBe(false);
+    expect(isAutoAllowedTool('Edit')).toBe(false);
+    expect(isAutoAllowedTool('Read')).toBe(false);
   });
 });
