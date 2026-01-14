@@ -41,7 +41,10 @@ export type ClientMessage =
   | UserBrowserRefreshMessage
   // Thread binding management (for Slack persistence)
   | SaveThreadBindingMessage
-  | LoadThreadBindingsMessage;
+  | LoadThreadBindingsMessage
+  // Global settings
+  | GetSettingsMessage
+  | UpdateSettingsMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -402,6 +405,8 @@ export type ServerMessage =
   // Thread binding responses (for Slack persistence)
   | ThreadBindingsListMessage
   | ThreadBindingSavedMessage
+  // Global settings
+  | SettingsMessage
   // Error
   | ErrorMessage;
 
@@ -766,6 +771,32 @@ export interface SaveThreadBindingMessage {
 /** Client -> Server: Request to load all thread bindings */
 export interface LoadThreadBindingsMessage {
   type: 'load_thread_bindings';
+}
+
+// ==================== Global Settings Messages ====================
+
+/** Global application settings */
+export interface GlobalSettings {
+  defaultThinkingEnabled: boolean;
+  defaultModel: string;
+  defaultPermissionMode: string;
+}
+
+/** Client -> Server: Request to get current settings */
+export interface GetSettingsMessage {
+  type: 'get_settings';
+}
+
+/** Client -> Server: Request to update settings */
+export interface UpdateSettingsMessage {
+  type: 'update_settings';
+  settings: Partial<GlobalSettings>;
+}
+
+/** Server -> Client: Current settings */
+export interface SettingsMessage {
+  type: 'settings';
+  settings: GlobalSettings;
 }
 
 /** Server -> Client: Response with all thread bindings */

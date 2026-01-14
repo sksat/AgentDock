@@ -10,6 +10,7 @@ import type {
   BlockUsage,
   ScreencastMetadata,
   TodoItem,
+  GlobalSettings,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -139,6 +140,11 @@ export interface UseSessionReturn {
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
   setSend: (send: (message: ClientMessage) => void) => void;
+
+  // Global settings
+  globalSettings: GlobalSettings | null;
+  getSettings: () => void;
+  updateSettings: (settings: Partial<GlobalSettings>) => void;
 }
 
 // Store messages per session
@@ -307,6 +313,7 @@ export function useSession(): UseSessionReturn {
   const [error, setError] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [globalUsage, setGlobalUsage] = useState<GlobalUsage | null>(null);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
 
   // Pending message to send after session creation
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -697,6 +704,15 @@ export function useSession(): UseSessionReturn {
       });
     }
   }, [activeSessionId, send, systemInfo?.model]);
+
+  // Global settings
+  const getSettings = useCallback(() => {
+    send({ type: 'get_settings' });
+  }, [send]);
+
+  const updateSettings = useCallback((settings: Partial<GlobalSettings>) => {
+    send({ type: 'update_settings', settings });
+  }, [send]);
 
   const startScreencast = useCallback(() => {
     if (activeSessionId) {
@@ -1261,6 +1277,10 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'settings':
+          setGlobalSettings(message.settings);
+          break;
+
         case 'error':
           setError(message.message);
           setIsLoading(false);
@@ -1379,5 +1399,8 @@ export function useSession(): UseSessionReturn {
     sendBrowserRefresh,
     handleServerMessage,
     setSend,
+    globalSettings,
+    getSettings,
+    updateSettings,
   };
 }

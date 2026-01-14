@@ -18,6 +18,7 @@ import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } f
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
+import { SettingsManager } from './settings-manager.js';
 
 export interface ServerOptions {
   port: number;
@@ -243,6 +244,7 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   const app = new Hono();
   const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
+  const settingsManager = new SettingsManager(sessionManager.getDb());
 
   // Create usage monitor (if not disabled)
   const usageMonitor = disableUsageMonitor
@@ -324,6 +326,16 @@ export function createServer(options: ServerOptions): BridgeServer {
       type: 'session_created',
       session,
     };
+    const messageStr = JSON.stringify(message);
+    for (const ws of allClients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Broadcast any message to all connected clients
+  function broadcastToAll(message: ServerMessage): void {
     const messageStr = JSON.stringify(message);
     for (const ws of allClients) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -842,6 +854,29 @@ export function createServer(options: ServerOptions): BridgeServer {
         break;
       }
 
+      case 'get_settings': {
+        const settings = settingsManager.getAll();
+        response = {
+          type: 'settings',
+          settings,
+        };
+        break;
+      }
+
+      case 'update_settings': {
+        const settings = settingsManager.updateAll(message.settings);
+        response = {
+          type: 'settings',
+          settings,
+        };
+        // Broadcast settings update to all connected clients
+        broadcastToAll({
+          type: 'settings',
+          settings,
+        });
+        break;
+      }
+
       case 'rename_session': {
         const renamed = sessionManager.renameSession(message.sessionId, message.name);
         if (renamed) {
@@ -1008,13 +1043,16 @@ export function createServer(options: ServerOptions): BridgeServer {
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
 
+          // Use message's thinkingEnabled if specified, otherwise use global default
+          const thinkingEnabled = message.thinkingEnabled ?? settingsManager.get('defaultThinkingEnabled');
+
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
             images,
-            thinkingEnabled: message.thinkingEnabled,
+            thinkingEnabled,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
