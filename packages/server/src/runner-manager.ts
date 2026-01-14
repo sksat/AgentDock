@@ -22,6 +22,8 @@ export interface StartSessionOptions {
   thinkingEnabled?: boolean;
   /** Permission mode to use for the session */
   permissionMode?: ClaudePermissionMode;
+  /** Whether to run Claude Code inside a container */
+  useContainer?: boolean;
   onEvent: RunnerEventHandler;
 }
 
@@ -52,6 +54,7 @@ export class RunnerManager {
   private runners: Map<string, IClaudeRunner> = new Map();
   private eventHandlers: Map<string, RunnerEventHandler> = new Map();
   private runnerFactory: RunnerFactory;
+  private containerRunnerFactory: RunnerFactory | null = null;
 
   constructor(runnerFactory: RunnerFactory = defaultRunnerFactory) {
     this.runnerFactory = runnerFactory;
@@ -62,6 +65,13 @@ export class RunnerManager {
    */
   setRunnerFactory(factory: RunnerFactory): void {
     this.runnerFactory = factory;
+  }
+
+  /**
+   * Set the container runner factory (used when useContainer is true)
+   */
+  setContainerRunnerFactory(factory: RunnerFactory): void {
+    this.containerRunnerFactory = factory;
   }
 
   startSession(sessionId: string, prompt: string, options: StartSessionOptions): void {
@@ -78,7 +88,11 @@ export class RunnerManager {
       permissionToolName: options.permissionToolName,
     };
 
-    const runner = this.runnerFactory(runnerOptions);
+    // Use container factory if requested and available
+    const factory = (options.useContainer && this.containerRunnerFactory)
+      ? this.containerRunnerFactory
+      : this.runnerFactory;
+    const runner = factory(runnerOptions);
     this.runners.set(sessionId, runner);
     this.eventHandlers.set(sessionId, options.onEvent);
 

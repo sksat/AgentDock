@@ -51,6 +51,8 @@ export interface CreateSessionMessage {
   type: 'create_session';
   name?: string;
   workingDir?: string;
+  /** Whether to run Claude Code inside a container (requires server container mode) */
+  useContainer?: boolean;
 }
 
 export interface AttachSessionMessage {
@@ -826,6 +828,8 @@ export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
+  /** Whether to run Claude Code inside a container by default */
+  defaultUseContainer: boolean;
 }
 
 /** Client -> Server: Request to get current settings */

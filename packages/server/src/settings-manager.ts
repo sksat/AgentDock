@@ -4,12 +4,14 @@ export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
+  defaultUseContainer: boolean;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   defaultThinkingEnabled: false,
   defaultModel: 'claude-opus-4-5-20250514',
   defaultPermissionMode: 'plan',
+  defaultUseContainer: false,
 };
 
 export class SettingsManager {
