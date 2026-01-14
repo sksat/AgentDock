@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isImagePath, extractImagePaths } from '../file-uploader.js';
+import { isImagePath, extractImagePaths, uploadTextSnippet, extractBase64Image } from '../file-uploader.js';
 import * as fs from 'fs';
+import type { WebClient } from '@slack/web-api';
 
 // Mock fs module
 vi.mock('fs', () => ({
@@ -106,6 +107,151 @@ describe('file-uploader', () => {
       const paths = extractImagePaths(content);
 
       expect(paths).toHaveLength(0);
+    });
+  });
+
+  describe('extractBase64Image', () => {
+    it('should extract PNG base64 data', () => {
+      const content = JSON.stringify([{ type: 'text', text: 'iVBORw0KGgoAAAANSUhEUgAAAAEA...' }]);
+      const result = extractBase64Image(content);
+      expect(result).not.toBeNull();
+      expect(result?.extension).toBe('png');
+      expect(result?.data).toContain('iVBORw0KGgo');
+    });
+
+    it('should extract JPEG base64 data', () => {
+      const content = JSON.stringify([{ type: 'text', text: '/9j/4AAQSkZJRgABAQAAAQABAAD...' }]);
+      const result = extractBase64Image(content);
+      expect(result).not.toBeNull();
+      expect(result?.extension).toBe('jpg');
+    });
+
+    it('should extract GIF base64 data', () => {
+      const content = JSON.stringify([{ type: 'text', text: 'R0lGODlhAQABAIAAAAAAAP///...' }]);
+      const result = extractBase64Image(content);
+      expect(result).not.toBeNull();
+      expect(result?.extension).toBe('gif');
+    });
+
+    it('should return null for non-JSON content', () => {
+      const content = 'plain text content';
+      const result = extractBase64Image(content);
+      expect(result).toBeNull();
+    });
+
+    it('should return null for non-image base64 data', () => {
+      const content = JSON.stringify([{ type: 'text', text: 'regular text content' }]);
+      const result = extractBase64Image(content);
+      expect(result).toBeNull();
+    });
+
+    it('should return null for empty array', () => {
+      const content = JSON.stringify([]);
+      const result = extractBase64Image(content);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('uploadTextSnippet', () => {
+    const createMockClient = () => {
+      return {
+        files: {
+          uploadV2: vi.fn(),
+        },
+      } as unknown as WebClient;
+    };
+
+    it('should upload text content as snippet', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockResolvedValue({
+        ok: true,
+        file: { permalink: 'https://slack.com/files/123' },
+      } as any);
+
+      const result = await uploadTextSnippet(
+        mockClient,
+        'Hello world content',
+        'C123',
+        '1234567890.123456'
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.permalink).toBe('https://slack.com/files/123');
+      expect(mockClient.files.uploadV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel_id: 'C123',
+          thread_ts: '1234567890.123456',
+          content: 'Hello world content',
+        })
+      );
+    });
+
+    it('should use custom filename when provided', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockResolvedValue({ ok: true } as any);
+
+      await uploadTextSnippet(mockClient, 'content', 'C123', 'ts', {
+        filename: 'custom.md',
+      });
+
+      expect(mockClient.files.uploadV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filename: 'custom.md',
+        })
+      );
+    });
+
+    it('should use custom title when provided', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockResolvedValue({ ok: true } as any);
+
+      await uploadTextSnippet(mockClient, 'content', 'C123', 'ts', {
+        title: 'My Snippet Title',
+      });
+
+      expect(mockClient.files.uploadV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'My Snippet Title',
+        })
+      );
+    });
+
+    it('should use custom filetype when provided', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockResolvedValue({ ok: true } as any);
+
+      await uploadTextSnippet(mockClient, 'content', 'C123', 'ts', {
+        filetype: 'markdown',
+      });
+
+      expect(mockClient.files.uploadV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snippet_type: 'markdown',
+        })
+      );
+    });
+
+    it('should handle upload errors', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockRejectedValue(new Error('Upload failed'));
+
+      const result = await uploadTextSnippet(mockClient, 'content', 'C123', 'ts');
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('Upload failed');
+    });
+
+    it('should generate default filename with timestamp', async () => {
+      const mockClient = createMockClient();
+      vi.mocked(mockClient.files.uploadV2).mockResolvedValue({ ok: true } as any);
+
+      await uploadTextSnippet(mockClient, 'content', 'C123', 'ts');
+
+      expect(mockClient.files.uploadV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filename: expect.stringMatching(/^snapshot-\d{4}-\d{2}-\d{2}T.*\.txt$/),
+        })
+      );
     });
   });
 });
