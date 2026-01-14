@@ -94,6 +94,182 @@ export function formatTextOutput(text: string): KnownBlock[] {
 }
 
 /**
+ * Check if tool name is a browser tool (MCP bridge or direct).
+ */
+function isBrowserToolName(toolName: string): boolean {
+  // MCP bridge browser tools: mcp__bridge__browser_*
+  // Direct browser tools: browser_*
+  // External Playwright MCP tools: mcp__plugin_playwright_playwright__browser_*
+  return (
+    toolName.startsWith('mcp__bridge__browser_') ||
+    toolName.startsWith('browser_') ||
+    toolName.startsWith('mcp__plugin_playwright_playwright__browser_')
+  );
+}
+
+/**
+ * Get the action part of a browser tool name.
+ * e.g., "mcp__bridge__browser_navigate" -> "navigate"
+ */
+function getBrowserToolAction(toolName: string): string {
+  if (toolName.startsWith('mcp__bridge__browser_')) {
+    return toolName.replace('mcp__bridge__browser_', '');
+  }
+  if (toolName.startsWith('browser_')) {
+    return toolName.replace('browser_', '');
+  }
+  if (toolName.startsWith('mcp__plugin_playwright_playwright__browser_')) {
+    return toolName.replace('mcp__plugin_playwright_playwright__browser_', '');
+  }
+  return toolName;
+}
+
+/**
+ * Format browser tool usage with friendly display.
+ */
+function formatBrowserToolInput(toolName: string, input: unknown): { header: string; detail?: string } {
+  const action = getBrowserToolAction(toolName);
+  const inp = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {};
+
+  switch (action) {
+    case 'navigate': {
+      const url = inp.url as string | undefined;
+      if (url) {
+        try {
+          const urlObj = new URL(url);
+          return { header: `:globe_with_meridians: Navigate: \`${urlObj.hostname}${urlObj.pathname}\`` };
+        } catch {
+          return { header: `:globe_with_meridians: Navigate: \`${truncateText(url, 50)}\`` };
+        }
+      }
+      return { header: ':globe_with_meridians: Navigate' };
+    }
+
+    case 'click': {
+      const element = inp.element as string | undefined;
+      const ref = inp.ref as string | undefined;
+      if (element) {
+        return { header: `:computer_mouse: Click: "${truncateText(element, 40)}"` };
+      }
+      if (ref) {
+        return { header: `:computer_mouse: Click: \`${ref}\`` };
+      }
+      return { header: ':computer_mouse: Click' };
+    }
+
+    case 'type': {
+      const text = inp.text as string | undefined;
+      const element = inp.element as string | undefined;
+      if (text && element) {
+        return { header: `:keyboard: Type in "${truncateText(element, 30)}": "${truncateText(text, 30)}"` };
+      }
+      if (text) {
+        return { header: `:keyboard: Type: "${truncateText(text, 50)}"` };
+      }
+      return { header: ':keyboard: Type' };
+    }
+
+    case 'snapshot': {
+      return { header: ':camera: Browser snapshot' };
+    }
+
+    case 'take_screenshot': {
+      const filename = inp.filename as string | undefined;
+      if (filename) {
+        return { header: `:frame_with_picture: Screenshot: \`${filename}\`` };
+      }
+      return { header: ':frame_with_picture: Screenshot' };
+    }
+
+    case 'hover': {
+      const element = inp.element as string | undefined;
+      if (element) {
+        return { header: `:point_up_2: Hover: "${truncateText(element, 40)}"` };
+      }
+      return { header: ':point_up_2: Hover' };
+    }
+
+    case 'scroll': {
+      const direction = inp.direction as string | undefined;
+      if (direction) {
+        return { header: `:scroll: Scroll ${direction}` };
+      }
+      return { header: ':scroll: Scroll' };
+    }
+
+    case 'fill_form': {
+      const fields = inp.fields as Array<{ name: string }> | undefined;
+      if (fields && Array.isArray(fields)) {
+        return { header: `:pencil: Fill form (${fields.length} fields)` };
+      }
+      return { header: ':pencil: Fill form' };
+    }
+
+    case 'select_option': {
+      const element = inp.element as string | undefined;
+      const values = inp.values as string[] | undefined;
+      if (element && values) {
+        return { header: `:ballot_box_with_check: Select: "${values.join(', ')}" in "${truncateText(element, 30)}"` };
+      }
+      return { header: ':ballot_box_with_check: Select option' };
+    }
+
+    case 'press_key': {
+      const key = inp.key as string | undefined;
+      if (key) {
+        return { header: `:keyboard: Press key: \`${key}\`` };
+      }
+      return { header: ':keyboard: Press key' };
+    }
+
+    case 'wait_for': {
+      const text = inp.text as string | undefined;
+      const time = inp.time as number | undefined;
+      if (text) {
+        return { header: `:hourglass_flowing_sand: Wait for text: "${truncateText(text, 40)}"` };
+      }
+      if (time) {
+        return { header: `:hourglass_flowing_sand: Wait ${time}s` };
+      }
+      return { header: ':hourglass_flowing_sand: Wait' };
+    }
+
+    case 'close': {
+      return { header: ':x: Close browser' };
+    }
+
+    case 'resize': {
+      const width = inp.width as number | undefined;
+      const height = inp.height as number | undefined;
+      if (width && height) {
+        return { header: `:arrows_counterclockwise: Resize: ${width}x${height}` };
+      }
+      return { header: ':arrows_counterclockwise: Resize browser' };
+    }
+
+    case 'navigate_back': {
+      return { header: ':arrow_left: Navigate back' };
+    }
+
+    case 'evaluate': {
+      return { header: ':desktop_computer: Evaluate JavaScript' };
+    }
+
+    case 'tabs': {
+      const tabAction = inp.action as string | undefined;
+      if (tabAction) {
+        return { header: `:card_index_dividers: Tabs: ${tabAction}` };
+      }
+      return { header: ':card_index_dividers: Browser tabs' };
+    }
+
+    default:
+      // Unknown browser action, show action name
+      return { header: `:globe_with_meridians: Browser: ${action}` };
+  }
+}
+
+/**
  * Format tool usage as Slack blocks.
  */
 export function formatToolUse(
@@ -102,6 +278,32 @@ export function formatToolUse(
   input: unknown
 ): KnownBlock[] {
   const blocks: KnownBlock[] = [];
+
+  // Check if it's a browser tool
+  if (isBrowserToolName(toolName)) {
+    const { header, detail } = formatBrowserToolInput(toolName, input);
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: header,
+      },
+    } as SectionBlock);
+
+    if (detail) {
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: detail,
+          },
+        ],
+      } as ContextBlock);
+    }
+
+    return blocks;
+  }
 
   // Header with tool name
   blocks.push({

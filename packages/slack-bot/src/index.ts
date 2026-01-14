@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { MessageBridge } from './message-bridge.js';
 import { SlackSessionManager } from './slack-session-manager.js';
 import { createSlackApp, setupMessageForwarding } from './slack-app.js';
+import { ProgressIndicator } from './progress-indicator.js';
 import {
   formatTextOutput,
   formatToolUse,
