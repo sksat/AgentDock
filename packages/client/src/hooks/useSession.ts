@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type {
   ServerMessage,
   SessionInfo,
@@ -366,17 +366,42 @@ export function useSession(): UseSessionReturn {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [sessions, getSessionIdFromUrl, sessionMessages]);
 
-  // Computed values
-  const session = sessions.find((s) => s.id === activeSessionId) ?? null;
-  const messages = activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : [];
-  const usageInfo = activeSessionId ? (sessionUsageInfo.get(activeSessionId) ?? null) : null;
-  const modelUsage = activeSessionId ? (sessionModelUsage.get(activeSessionId) ?? null) : null;
-  const pendingPermission = activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null;
-  const pendingQuestion = activeSessionId ? (sessionPendingQuestion.get(activeSessionId) ?? null) : null;
-  const screencast = activeSessionId ? (sessionScreencast.get(activeSessionId) ?? null) : null;
-  const todoState = activeSessionId
-    ? (sessionTodoState.get(activeSessionId) ?? { current: [], history: [] })
-    : { current: [], history: [] };
+  // Computed values - memoized to prevent unnecessary re-renders
+  const session = useMemo(
+    () => sessions.find((s) => s.id === activeSessionId) ?? null,
+    [sessions, activeSessionId]
+  );
+  const messages = useMemo(
+    () => (activeSessionId ? (sessionMessages.get(activeSessionId) ?? []) : []),
+    [activeSessionId, sessionMessages]
+  );
+  const usageInfo = useMemo(
+    () => (activeSessionId ? (sessionUsageInfo.get(activeSessionId) ?? null) : null),
+    [activeSessionId, sessionUsageInfo]
+  );
+  const modelUsage = useMemo(
+    () => (activeSessionId ? (sessionModelUsage.get(activeSessionId) ?? null) : null),
+    [activeSessionId, sessionModelUsage]
+  );
+  const pendingPermission = useMemo(
+    () => (activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null),
+    [activeSessionId, sessionPendingPermission]
+  );
+  const pendingQuestion = useMemo(
+    () => (activeSessionId ? (sessionPendingQuestion.get(activeSessionId) ?? null) : null),
+    [activeSessionId, sessionPendingQuestion]
+  );
+  const screencast = useMemo(
+    () => (activeSessionId ? (sessionScreencast.get(activeSessionId) ?? null) : null),
+    [activeSessionId, sessionScreencast]
+  );
+  const todoState = useMemo(
+    () =>
+      activeSessionId
+        ? (sessionTodoState.get(activeSessionId) ?? { current: [], history: [] })
+        : { current: [], history: [] },
+    [activeSessionId, sessionTodoState]
+  );
 
   // Helper to update messages for a specific session
   const updateSessionMessages = useCallback(
