@@ -12,7 +12,7 @@ import type {
   TodoItem,
   GlobalSettings,
 } from '@agent-dock/shared';
-import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
+import type { MessageStreamItem, ToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
 export interface PendingPermission {
   sessionId: string;
@@ -189,7 +189,7 @@ interface ToolResultContent {
 
 /**
  * Convert server-side history to client display format
- * Merges tool_use + tool_result into bash_tool/mcp_tool for better display
+ * Merges all tool_use + tool_result into unified 'tool' type
  */
 function convertHistoryForDisplay(history: ServerMessageItem[]): MessageStreamItem[] {
   // Collect tool_result by toolUseId
@@ -210,54 +210,26 @@ function convertHistoryForDisplay(history: ServerMessageItem[]): MessageStreamIt
       const content = item.content as ToolUseContent;
       const toolResult = toolResults.get(content.toolUseId);
 
-      if (content.toolName === 'Bash') {
-        // Convert to bash_tool and merge with result
-        processedToolUseIds.add(content.toolUseId);
-        const bashInput = content.input as { command: string; description?: string };
-        result.push({
-          type: 'bash_tool',
-          content: {
-            toolUseId: content.toolUseId,
-            command: bashInput.command,
-            description: bashInput.description,
-            output: toolResult?.content ?? '',
-            isComplete: !!toolResult,
-            isError: toolResult?.isError ?? false,
-          } as BashToolContent,
-          timestamp: item.timestamp,
-        });
-      } else if (content.toolName.startsWith('mcp__')) {
-        // Convert to mcp_tool and merge with result
-        processedToolUseIds.add(content.toolUseId);
-        result.push({
-          type: 'mcp_tool',
-          content: {
-            toolUseId: content.toolUseId,
-            toolName: content.toolName,
-            input: content.input,
-            output: toolResult?.content ?? '',
-            isComplete: !!toolResult,
-            isError: toolResult?.isError ?? false,
-          } as McpToolContent,
-          timestamp: item.timestamp,
-        });
-      } else {
-        // Other tools stay as tool_use (don't merge with result)
-        result.push({
-          type: 'tool_use',
-          content: item.content,
-          timestamp: item.timestamp,
-        });
-      }
+      // All tools are merged into unified 'tool' type
+      processedToolUseIds.add(content.toolUseId);
+      result.push({
+        type: 'tool',
+        content: {
+          toolUseId: content.toolUseId,
+          toolName: content.toolName,
+          input: content.input,
+          output: toolResult?.content ?? '',
+          isComplete: !!toolResult,
+          isError: toolResult?.isError ?? false,
+        } as ToolContent,
+        timestamp: item.timestamp,
+      });
     } else if (item.type === 'tool_result') {
+      // Skip - already merged into 'tool'
       const content = item.content as ToolResultContent;
-      // Skip if already merged into bash_tool/mcp_tool
       if (!processedToolUseIds.has(content.toolUseId)) {
-        result.push({
-          type: 'tool_result',
-          content: item.content,
-          timestamp: item.timestamp,
-        });
+        // Orphan tool_result without corresponding tool_use - shouldn't happen but handle gracefully
+        processedToolUseIds.add(content.toolUseId);
       }
     } else {
       // Pass through other message types
@@ -1048,54 +1020,21 @@ export function useSession(): UseSessionReturn {
           const sessionId = message.sessionId;
           const { toolName, toolUseId, input } = message;
 
-          if (toolName === 'Bash') {
-            // Create combined Bash tool message
-            const bashInput = input as { command: string; description?: string };
-            updateSessionMessages(sessionId, (prev) => [
-              ...prev,
-              {
-                type: 'bash_tool',
-                content: {
-                  toolUseId,
-                  command: bashInput.command,
-                  description: bashInput.description,
-                  output: '',
-                  isComplete: false,
-                } as BashToolContent,
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          } else if (toolName.startsWith('mcp__')) {
-            // Create combined MCP tool message
-            updateSessionMessages(sessionId, (prev) => [
-              ...prev,
-              {
-                type: 'mcp_tool',
-                content: {
-                  toolUseId,
-                  toolName,
-                  input,
-                  output: '',
-                  isComplete: false,
-                } as McpToolContent,
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          } else {
-            // Other tools use existing display
-            updateSessionMessages(sessionId, (prev) => [
-              ...prev,
-              {
-                type: 'tool_use',
-                content: {
-                  toolName,
-                  toolUseId,
-                  input,
-                },
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          }
+          // All tools use unified 'tool' type
+          updateSessionMessages(sessionId, (prev) => [
+            ...prev,
+            {
+              type: 'tool',
+              content: {
+                toolUseId,
+                toolName,
+                input,
+                output: '',
+                isComplete: false,
+              } as ToolContent,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
           break;
         }
 
@@ -1104,17 +1043,9 @@ export function useSession(): UseSessionReturn {
           const { toolUseId, output } = message;
           updateSessionMessages(sessionId, (prev) =>
             prev.map((m) => {
-              if (m.type === 'bash_tool' &&
-                  (m.content as BashToolContent).toolUseId === toolUseId) {
-                const content = m.content as BashToolContent;
-                return {
-                  ...m,
-                  content: { ...content, output: content.output + output },
-                };
-              }
-              if (m.type === 'mcp_tool' &&
-                  (m.content as McpToolContent).toolUseId === toolUseId) {
-                const content = m.content as McpToolContent;
+              if (m.type === 'tool' &&
+                  (m.content as ToolContent).toolUseId === toolUseId) {
+                const content = m.content as ToolContent;
                 return {
                   ...m,
                   content: { ...content, output: content.output + output },
@@ -1131,22 +1062,22 @@ export function useSession(): UseSessionReturn {
           const { toolUseId, content, isError } = message;
 
           updateSessionMessages(sessionId, (prev) => {
-            // Check if this is for a Bash tool
-            const bashIndex = prev.findIndex(
-              (m) => m.type === 'bash_tool' &&
-                     (m.content as BashToolContent).toolUseId === toolUseId
+            // Find the tool message to update
+            const toolIndex = prev.findIndex(
+              (m) => m.type === 'tool' &&
+                     (m.content as ToolContent).toolUseId === toolUseId
             );
 
-            if (bashIndex !== -1) {
-              // Update existing Bash tool message to complete state
+            if (toolIndex !== -1) {
+              // Update existing tool message to complete state
               return prev.map((m, i) => {
-                if (i === bashIndex) {
-                  const bashContent = m.content as BashToolContent;
+                if (i === toolIndex) {
+                  const toolContent = m.content as ToolContent;
                   return {
                     ...m,
                     content: {
-                      ...bashContent,
-                      output: bashContent.output || content, // Use content if no streaming output
+                      ...toolContent,
+                      output: toolContent.output || content, // Use content if no streaming output
                       isComplete: true,
                       isError: isError ?? false,
                     },
@@ -1156,44 +1087,8 @@ export function useSession(): UseSessionReturn {
               });
             }
 
-            // Check if this is for an MCP tool
-            const mcpIndex = prev.findIndex(
-              (m) => m.type === 'mcp_tool' &&
-                     (m.content as McpToolContent).toolUseId === toolUseId
-            );
-
-            if (mcpIndex !== -1) {
-              // Update existing MCP tool message to complete state
-              return prev.map((m, i) => {
-                if (i === mcpIndex) {
-                  const mcpContent = m.content as McpToolContent;
-                  return {
-                    ...m,
-                    content: {
-                      ...mcpContent,
-                      output: mcpContent.output || content, // Use content if no streaming output
-                      isComplete: true,
-                      isError: isError ?? false,
-                    },
-                  };
-                }
-                return m;
-              });
-            }
-
-            // Not a Bash or MCP tool, add as separate tool_result message
-            return [
-              ...prev,
-              {
-                type: 'tool_result',
-                content: {
-                  toolUseId,
-                  content,
-                  isError: isError ?? false,
-                },
-                timestamp: new Date().toISOString(),
-              },
-            ];
+            // Tool not found - shouldn't happen but return unchanged
+            return prev;
           });
           break;
         }

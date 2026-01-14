@@ -744,16 +744,17 @@ describe('useSession', () => {
         });
       });
 
-      // Should have converted to bash_tool with merged result
+      // Should have converted to unified 'tool' type with merged result
       expect(result.current.messages).toHaveLength(1);
-      expect(result.current.messages[0].type).toBe('bash_tool');
-      const content = result.current.messages[0].content as { command: string; output: string; isComplete: boolean };
-      expect(content.command).toBe('ls -la');
+      expect(result.current.messages[0].type).toBe('tool');
+      const content = result.current.messages[0].content as { toolName: string; input: unknown; output: string; isComplete: boolean };
+      expect(content.toolName).toBe('Bash');
+      expect((content.input as { command: string }).command).toBe('ls -la');
       expect(content.output).toBe('file1.txt\nfile2.txt');
       expect(content.isComplete).toBe(true);
     });
 
-    it('should convert MCP tool_use to mcp_tool with merged result', () => {
+    it('should convert MCP tool_use to unified tool type with merged result', () => {
       const { result } = renderHook(() => useSession());
 
       // Setup: Create session
@@ -791,16 +792,16 @@ describe('useSession', () => {
         });
       });
 
-      // Should have converted to mcp_tool with merged result
+      // Should have converted to unified 'tool' type with merged result
       expect(result.current.messages).toHaveLength(1);
-      expect(result.current.messages[0].type).toBe('mcp_tool');
+      expect(result.current.messages[0].type).toBe('tool');
       const content = result.current.messages[0].content as { toolName: string; output: string; isComplete: boolean };
       expect(content.toolName).toBe('mcp__bridge__browser_navigate');
       expect(content.output).toBe('Navigated successfully');
       expect(content.isComplete).toBe(true);
     });
 
-    it('should keep other tool_use as tool_use type', () => {
+    it('should convert file tool_use to unified tool type with merged result', () => {
       const { result } = renderHook(() => useSession());
 
       // Setup: Create session
@@ -838,10 +839,13 @@ describe('useSession', () => {
         });
       });
 
-      // Read tool should stay as tool_use, and tool_result should be separate
-      expect(result.current.messages).toHaveLength(2);
-      expect(result.current.messages[0].type).toBe('tool_use');
-      expect(result.current.messages[1].type).toBe('tool_result');
+      // Read tool should be converted to unified 'tool' type with merged result
+      expect(result.current.messages).toHaveLength(1);
+      expect(result.current.messages[0].type).toBe('tool');
+      const content = result.current.messages[0].content as { toolName: string; output: string; isComplete: boolean };
+      expect(content.toolName).toBe('Read');
+      expect(content.output).toBe('file content');
+      expect(content.isComplete).toBe(true);
     });
   });
 
