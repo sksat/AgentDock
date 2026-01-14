@@ -1,0 +1,26 @@
+# Dockerfile for Claude Code container
+# Build: podman build -t claude-container:v1 -f Dockerfile.claude .
+# Run: podman run -it --rm --userns=keep-id -v ./workspace:/workspace:O claude-container:v1
+
+FROM node:22-slim
+
+# Install dependencies for Claude Code
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create non-root user for rootless compatibility
+# Using UID 1000 to match common host user UID
+RUN useradd -m -s /bin/bash -u 1000 claude
+
+# Set up home directory
+USER claude
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]
