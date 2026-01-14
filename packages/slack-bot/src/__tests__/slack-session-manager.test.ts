@@ -204,6 +204,146 @@ describe('SlackSessionManager', () => {
     });
   });
 
+  describe('race condition handling', () => {
+    it('should handle concurrent findOrCreateSession calls for the same thread', async () => {
+      // Add artificial delay to createSession to simulate network latency
+      let resolveFirst: (value: SessionInfo) => void;
+      const firstCallPromise = new Promise<SessionInfo>((resolve) => {
+        resolveFirst = resolve;
+      });
+
+      let callCount = 0;
+      mockBridge.createSession = vi.fn().mockImplementation(async (name: string, workingDir: string) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call waits for manual resolution
+          return firstCallPromise;
+        }
+        // Subsequent calls resolve immediately (shouldn't be called)
+        return {
+          id: `session-${callCount}`,
+          name,
+          workingDir,
+          createdAt: new Date().toISOString(),
+          status: 'idle',
+        } as SessionInfo;
+      });
+
+      // Start two concurrent requests for the same thread
+      const promise1 = manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+      const promise2 = manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+
+      // Both should be waiting for the same creation
+      expect(mockBridge.createSession).toHaveBeenCalledTimes(1);
+
+      // Resolve the first call
+      resolveFirst!({
+        id: 'session-1',
+        name: 'Test Session',
+        workingDir: '/default/working/dir',
+        createdAt: new Date().toISOString(),
+        status: 'idle',
+      });
+
+      // Wait for both promises to resolve
+      const [binding1, binding2] = await Promise.all([promise1, promise2]);
+
+      // Both should return the same session
+      expect(binding1.agentDockSessionId).toBe('session-1');
+      expect(binding2.agentDockSessionId).toBe('session-1');
+
+      // createSession should only have been called once
+      expect(mockBridge.createSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle hasThread with includePending during session creation', async () => {
+      // Add artificial delay to createSession
+      let resolveCreation: (value: SessionInfo) => void;
+      mockBridge.createSession = vi.fn().mockImplementation(async () => {
+        return new Promise<SessionInfo>((resolve) => {
+          resolveCreation = resolve;
+        });
+      });
+
+      // Start session creation (won't complete yet)
+      const creationPromise = manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+
+      // Without includePending, hasThread returns false
+      expect(manager.hasThread('T123', 'C456', '1234567890.123456', false)).toBe(false);
+
+      // With includePending, hasThread returns true
+      expect(manager.hasThread('T123', 'C456', '1234567890.123456', true)).toBe(true);
+
+      // hasPendingCreation should also return true
+      expect(manager.hasPendingCreation('T123', 'C456', '1234567890.123456')).toBe(true);
+
+      // Complete the creation
+      resolveCreation!({
+        id: 'session-1',
+        name: 'Test Session',
+        workingDir: '/default/working/dir',
+        createdAt: new Date().toISOString(),
+        status: 'idle',
+      });
+
+      await creationPromise;
+
+      // After completion, hasThread should return true even without includePending
+      expect(manager.hasThread('T123', 'C456', '1234567890.123456', false)).toBe(true);
+
+      // hasPendingCreation should return false
+      expect(manager.hasPendingCreation('T123', 'C456', '1234567890.123456')).toBe(false);
+    });
+
+    it('should handle multiple concurrent requests for different threads independently', async () => {
+      let resolveFirst: (value: SessionInfo) => void;
+      let resolveSecond: (value: SessionInfo) => void;
+      let callCount = 0;
+
+      mockBridge.createSession = vi.fn().mockImplementation(async (name: string, workingDir: string) => {
+        callCount++;
+        if (callCount === 1) {
+          return new Promise<SessionInfo>((resolve) => {
+            resolveFirst = resolve;
+          });
+        }
+        return new Promise<SessionInfo>((resolve) => {
+          resolveSecond = resolve;
+        });
+      });
+
+      // Start two concurrent requests for DIFFERENT threads
+      const promise1 = manager.findOrCreateSession('T123', 'C456', '1234567890.111111');
+      const promise2 = manager.findOrCreateSession('T123', 'C456', '1234567890.222222');
+
+      // Both should have started their own creation
+      expect(mockBridge.createSession).toHaveBeenCalledTimes(2);
+
+      // Resolve them in reverse order
+      resolveSecond!({
+        id: 'session-2',
+        name: 'Test Session 2',
+        workingDir: '/default/working/dir',
+        createdAt: new Date().toISOString(),
+        status: 'idle',
+      });
+
+      resolveFirst!({
+        id: 'session-1',
+        name: 'Test Session 1',
+        workingDir: '/default/working/dir',
+        createdAt: new Date().toISOString(),
+        status: 'idle',
+      });
+
+      const [binding1, binding2] = await Promise.all([promise1, promise2]);
+
+      // Each should have its own session
+      expect(binding1.agentDockSessionId).toBe('session-1');
+      expect(binding2.agentDockSessionId).toBe('session-2');
+    });
+  });
+
   describe('persistence', () => {
     it('should save binding to server when creating new session', async () => {
       await manager.findOrCreateSession('T123', 'C456', '1234567890.123456');

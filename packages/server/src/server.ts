@@ -288,6 +288,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to pending permission request (for restoring on reload)
   const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
 
+  // Map session ID to queued input (to be sent after current execution completes)
+  const sessionInputQueue = new Map<string, string[]>();
+
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
     const message: GlobalUsageMessage = {
@@ -473,6 +476,63 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
+  // Process queued input after current execution completes
+  function processQueuedInput(sessionId: string, content: string): void {
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      console.log(`[Server] processQueuedInput: session ${sessionId} not found`);
+      return;
+    }
+
+    // Update status to running
+    updateAndBroadcastStatus(sessionId, 'running');
+
+    // Start Claude CLI with MCP permission handling
+    try {
+      // Generate MCP config for this session (unless using mock)
+      let mcpConfigPath: string | undefined;
+      let permissionToolName: string | undefined;
+      if (!useMock) {
+        mcpConfigPath = generateMcpConfig(
+          sessionId,
+          wsUrl,
+          mcpServerCommand,
+          mcpServerArgs,
+          mcpServerCwd
+        );
+        permissionToolName = 'mcp__bridge__permission_prompt';
+      }
+
+      // Use global default for thinking
+      const thinkingEnabled = settingsManager.get('defaultThinkingEnabled');
+
+      runnerManager.startSession(sessionId, content, {
+        workingDir: session.workingDir,
+        claudeSessionId: session.claudeSessionId,
+        mcpConfigPath,
+        permissionToolName,
+        thinkingEnabled,
+        onEvent: (sid, eventType, data) => {
+          handleRunnerEvent(sid, eventType, data);
+          // Clean up MCP config on exit
+          if (eventType === 'exit') {
+            if (mcpConfigPath) {
+              cleanupMcpConfig(sessionId);
+            }
+          }
+        },
+      });
+    } catch (error) {
+      console.error(`[Server] processQueuedInput error:`, error);
+      updateAndBroadcastStatus(sessionId, 'idle');
+      sendToSession(sessionId, {
+        type: 'error',
+        sessionId,
+        message: error instanceof Error ? error.message : 'Failed to start Claude',
+      });
+    }
+  }
+
   // Handle runner events and forward to WebSocket
   function handleRunnerEvent(sessionId: string, eventType: RunnerEventType, data: unknown): void {
     const eventData = data as Record<string, unknown>;
@@ -620,7 +680,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionId,
           result: resultData.result,
         });
-        updateAndBroadcastStatus(sessionId, 'idle');
+        // Note: Don't set idle here - wait for exit event to process queue
         break;
       }
 
@@ -636,7 +696,6 @@ export function createServer(options: ServerOptions): BridgeServer {
         const exitData = eventData as { code: number | null; signal: string | null };
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
-        updateAndBroadcastStatus(sessionId, 'idle');
 
         // If process exited with error and no result was sent, notify client
         const acc = turnAccumulator.get(sessionId);
@@ -648,6 +707,20 @@ export function createServer(options: ServerOptions): BridgeServer {
             sessionId,
             message: `Claude process exited unexpectedly (code: ${exitData.code})`,
           });
+        }
+
+        // Check if there's queued input to send (only on successful exit)
+        const queue = sessionInputQueue.get(sessionId);
+        if (exitData.code === 0 && queue && queue.length > 0) {
+          const nextInput = queue.shift()!;
+          if (queue.length === 0) {
+            sessionInputQueue.delete(sessionId);
+          }
+          console.log(`[Server] Processing queued input for session ${sessionId}: ${nextInput}`);
+          // Start new turn with queued input (use setTimeout to ensure runner is cleaned up)
+          setTimeout(() => processQueuedInput(sessionId, nextInput), 0);
+        } else {
+          updateAndBroadcastStatus(sessionId, 'idle');
         }
         break;
       }
@@ -805,6 +878,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
             pendingPermission: pendingPermission ?? undefined,
             hasBrowserSession,
+            isRunning: runnerManager.hasRunningSession(message.sessionId),
           };
         } else {
           response = {
@@ -985,14 +1059,34 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Store WebSocket for this session
         addWebSocketToSession(message.sessionId, ws);
 
-        // Check if already running
+        // Check if already running - auto-queue the input instead of returning error
         if (runnerManager.hasRunningSession(message.sessionId)) {
-          response = {
-            type: 'error',
+          // Queue the input (same as stream_input)
+          let queue = sessionInputQueue.get(message.sessionId);
+          if (!queue) {
+            queue = [];
+            sessionInputQueue.set(message.sessionId, queue);
+          }
+          queue.push(message.content);
+          console.log(`[Server] Session ${message.sessionId} is running, queued input (queue size: ${queue.length})`);
+
+          // Add to history and broadcast (same as stream_input)
+          const queuedTimestamp = new Date().toISOString();
+          sessionManager.addToHistory(message.sessionId, {
+            type: 'user',
+            content: message.content,
+            timestamp: queuedTimestamp,
+          });
+
+          sendToSession(message.sessionId, {
+            type: 'user_input',
             sessionId: message.sessionId,
-            message: 'Session is already running',
-          };
-          break;
+            content: message.content,
+            source: message.source || 'web',
+            slackContext: message.slackContext,
+            timestamp: queuedTimestamp,
+          });
+          return;
         }
 
         // Add user message to history (including images if present)
@@ -1095,6 +1189,57 @@ export function createServer(options: ServerOptions): BridgeServer {
           result: 'Interrupted',
         };
         break;
+      }
+
+      case 'stream_input': {
+        // Queue input for after current execution completes
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        // Check if session is running
+        if (!runnerManager.hasRunningSession(message.sessionId)) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session is not running',
+          };
+          break;
+        }
+
+        // Add to queue
+        let queue = sessionInputQueue.get(message.sessionId);
+        if (!queue) {
+          queue = [];
+          sessionInputQueue.set(message.sessionId, queue);
+        }
+        queue.push(message.content);
+        console.log(`[Server] stream_input queued: sessionId=${message.sessionId}, content=${message.content}, queueSize=${queue.length}`);
+
+        // Add to history and broadcast to all clients (including sender)
+        const timestamp = new Date().toISOString();
+        sessionManager.addToHistory(message.sessionId, {
+          type: 'user',
+          content: { text: message.content },
+          timestamp,
+        });
+
+        // Broadcast to all clients attached to this session
+        sendToSession(message.sessionId, {
+          type: 'user_input',
+          sessionId: message.sessionId,
+          content: message.content,
+          source: 'web',
+          timestamp,
+        });
+
+        return;
       }
 
       case 'permission_response': {

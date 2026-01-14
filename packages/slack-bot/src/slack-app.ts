@@ -155,9 +155,9 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
 
     const { text, channel, thread_ts, user, team } = messageEvent;
 
-    // Check if we have a session for this thread
+    // Check if we have a session for this thread (including pending creations)
     const teamId = team || 'unknown';
-    if (!sessionManager.hasThread(teamId, channel, thread_ts)) {
+    if (!sessionManager.hasThread(teamId, channel, thread_ts, true)) {
       // Not a tracked thread, ignore
       return;
     }
@@ -173,7 +173,11 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
     }
 
     try {
-      const binding = sessionManager.getSessionByThread(teamId, channel, thread_ts);
+      // Wait for pending session creation if any (handles race condition)
+      // This will either return existing binding or wait for pending creation to complete
+      const binding = sessionManager.hasPendingCreation(teamId, channel, thread_ts)
+        ? await sessionManager.findOrCreateSession(teamId, channel, thread_ts)
+        : sessionManager.getSessionByThread(teamId, channel, thread_ts);
       if (!binding) {
         return;
       }

@@ -25,6 +25,10 @@ export class SlackSessionManager {
   // Session ID -> Binding (for reverse lookup)
   private sessionBindings: Map<string, SlackThreadBinding> = new Map();
 
+  // Track pending session creations to prevent race conditions
+  // Thread key -> Promise that resolves when session is created
+  private pendingCreations: Map<string, Promise<SlackThreadBinding>> = new Map();
+
   // Counter for generating unique session names
   private sessionCounter = 0;
 
@@ -68,6 +72,10 @@ export class SlackSessionManager {
   /**
    * Find an existing session for a thread, or create a new one.
    * Also attaches to the session to receive messages.
+   *
+   * This method handles concurrent requests for the same thread by tracking
+   * pending creations. If a session is being created for a thread, subsequent
+   * requests will wait for the same creation to complete.
    */
   async findOrCreateSession(
     teamId: string,
@@ -84,6 +92,34 @@ export class SlackSessionManager {
       return existing;
     }
 
+    // Check if a session creation is already in progress for this thread
+    const pending = this.pendingCreations.get(key);
+    if (pending) {
+      // Wait for the existing creation to complete
+      return pending;
+    }
+
+    // Create a promise for this session creation
+    const creationPromise = this.doCreateSession(teamId, channelId, threadTs, key);
+    this.pendingCreations.set(key, creationPromise);
+
+    try {
+      return await creationPromise;
+    } finally {
+      // Clean up the pending creation
+      this.pendingCreations.delete(key);
+    }
+  }
+
+  /**
+   * Internal method that performs the actual session creation.
+   */
+  private async doCreateSession(
+    teamId: string,
+    channelId: string,
+    threadTs: string,
+    key: string
+  ): Promise<SlackThreadBinding> {
     // Create a new session in AgentDock
     const sessionName = this.generateSessionName();
     const session = await this.bridge.createSession(sessionName, this.defaultWorkingDir);
@@ -132,11 +168,26 @@ export class SlackSessionManager {
   }
 
   /**
-   * Check if a thread has an associated session.
+   * Check if a thread has an associated session (or a pending creation).
+   * Use includePending=true to also check for sessions currently being created.
    */
-  hasThread(teamId: string, channelId: string, threadTs: string): boolean {
+  hasThread(teamId: string, channelId: string, threadTs: string, includePending = false): boolean {
     const key = makeThreadKey(teamId, channelId, threadTs);
-    return this.threadBindings.has(key);
+    if (this.threadBindings.has(key)) {
+      return true;
+    }
+    if (includePending && this.pendingCreations.has(key)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if a session creation is in progress for a thread.
+   */
+  hasPendingCreation(teamId: string, channelId: string, threadTs: string): boolean {
+    const key = makeThreadKey(teamId, channelId, threadTs);
+    return this.pendingCreations.has(key);
   }
 
   /**
