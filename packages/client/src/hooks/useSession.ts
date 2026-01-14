@@ -875,6 +875,13 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
           }
+          // Restore permission mode if available
+          if (message.permissionMode) {
+            setSystemInfo((prev) => ({
+              ...prev,
+              permissionMode: message.permissionMode,
+            }));
+          }
           // Auto-start screencast if a browser session exists
           if (message.hasBrowserSession) {
             send({ type: 'start_screencast', sessionId: message.sessionId });

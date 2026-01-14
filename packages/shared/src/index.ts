@@ -450,6 +450,8 @@ export interface SessionAttachedMessage {
   hasBrowserSession?: boolean;
   /** Whether the session is currently running (Claude CLI is executing) */
   isRunning?: boolean;
+  /** Current permission mode for the session */
+  permissionMode?: PermissionMode;
 }
 
 export interface SessionListMessage {

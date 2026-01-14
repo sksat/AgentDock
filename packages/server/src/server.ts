@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
@@ -949,24 +949,21 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Check if a browser session exists for this session
           const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
 
-          // Get current permission mode from runner (if running) for sync
+          // Get current permission mode for sync
+          // Priority: runner's current mode > session's stored mode
           const runner = runnerManager.getRunner(message.sessionId);
+          let currentMode: PermissionMode | undefined;
           if (runner) {
-            // Map ClaudePermissionMode to PermissionMode and send system_info
-            const reverseMap: Record<ClaudePermissionMode, string> = {
+            // Map ClaudePermissionMode to PermissionMode
+            const reverseMap: Record<ClaudePermissionMode, PermissionMode> = {
               'default': 'ask',
               'acceptEdits': 'auto-edit',
               'plan': 'plan',
             };
-            const currentMode = reverseMap[runner.permissionMode];
-            // Send system_info with current permission mode after attach response
-            setTimeout(() => {
-              sendToSession(message.sessionId, {
-                type: 'system_info',
-                sessionId: message.sessionId,
-                permissionMode: currentMode,
-              });
-            }, 0);
+            currentMode = reverseMap[runner.permissionMode];
+          } else if (session.permissionMode) {
+            // Use stored session permission mode
+            currentMode = session.permissionMode;
           }
 
           response = {
@@ -978,6 +975,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             pendingPermission: pendingPermission ?? undefined,
             hasBrowserSession,
             isRunning: runnerManager.hasRunningSession(message.sessionId),
+            permissionMode: currentMode,
           };
         } else {
           response = {
@@ -1389,6 +1387,17 @@ export function createServer(options: ServerOptions): BridgeServer {
           }
           allowedTools.add(message.response.toolName);
           console.log(`[Session ${message.sessionId}] Tool "${message.response.toolName}" allowed for session`);
+
+          // Auto-switch to 'auto-edit' mode when Edit tool is allowed for session
+          if (message.response.toolName === 'Edit') {
+            sessionManager.setPermissionMode(message.sessionId, 'auto-edit');
+            sendToSession(message.sessionId, {
+              type: 'system_info',
+              sessionId: message.sessionId,
+              permissionMode: 'auto-edit',
+            });
+            console.log(`[Session ${message.sessionId}] Auto-switched to 'auto-edit' mode`);
+          }
         }
 
         // Clear the stored pending permission (no longer pending)
