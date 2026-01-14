@@ -403,6 +403,10 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Track TodoWrite tool calls to skip their tool_result messages
   const pendingTodoWrites = new Set<string>();
 
+  // Track EnterPlanMode/ExitPlanMode tool calls to sync permission mode on result
+  // Key: toolUseId, Value: 'enter' | 'exit'
+  const pendingPlanModeTools = new Map<string, 'enter' | 'exit'>();
+
   function getOrCreateAccumulator(sessionId: string) {
     if (!turnAccumulator.has(sessionId)) {
       turnAccumulator.set(sessionId, { text: '', thinking: '' });
@@ -611,6 +615,24 @@ export function createServer(options: ServerOptions): BridgeServer {
           });
           // Track this tool_use ID to skip its tool_result
           pendingTodoWrites.add(toolUseId);
+        } else if (toolName === 'EnterPlanMode') {
+          // Track for permission mode sync on tool_result (after approval)
+          pendingPlanModeTools.set(toolUseId, 'enter');
+          // Store in history
+          sessionManager.addToHistory(sessionId, {
+            type: 'tool_use',
+            content: { toolName, toolUseId, input },
+            timestamp,
+          });
+        } else if (toolName === 'ExitPlanMode') {
+          // Track for permission mode sync on tool_result (after approval)
+          pendingPlanModeTools.set(toolUseId, 'exit');
+          // Store in history
+          sessionManager.addToHistory(sessionId, {
+            type: 'tool_use',
+            content: { toolName, toolUseId, input },
+            timestamp,
+          });
         } else {
           sendToSession(sessionId, {
             type: 'tool_use',
@@ -656,6 +678,24 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (screenshotFilename) {
           pendingScreenshots.delete(toolUseId);
           console.log(`[Server] Screenshot result: ${toolUseId} -> ${screenshotFilename}`);
+        }
+
+        // Check if this is a plan mode tool result (EnterPlanMode/ExitPlanMode)
+        const planModeAction = pendingPlanModeTools.get(toolUseId);
+        if (planModeAction && !isError) {
+          pendingPlanModeTools.delete(toolUseId);
+          const newMode = planModeAction === 'enter' ? 'plan' : 'ask';
+          sessionManager.setPermissionMode(sessionId, newMode);
+          sendToSession(sessionId, {
+            type: 'system_info',
+            sessionId,
+            permissionMode: newMode,
+          });
+          console.log(`[Server] ${planModeAction === 'enter' ? 'EnterPlanMode' : 'ExitPlanMode'} completed - syncing to ${newMode} mode`);
+        } else if (planModeAction && isError) {
+          // Tool failed, don't change mode
+          pendingPlanModeTools.delete(toolUseId);
+          console.log(`[Server] Plan mode tool failed, not changing permission mode`);
         }
 
         sendToSession(sessionId, {
