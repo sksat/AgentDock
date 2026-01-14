@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
+import { DiffView } from './DiffView';
 import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
 
 export interface MessageStreamItem {
@@ -593,44 +594,18 @@ function FileContentView({ toolName, input }: {
     );
   }
 
-  // Edit tool
+  // Edit tool - use DiffView for better visualization
   const oldString = inp.old_string as string || '';
   const newString = inp.new_string as string || '';
-  const oldPreview = getContentPreview(oldString, 4);
-  const newPreview = getContentPreview(newString, 4);
-  const totalLines = Math.max(oldPreview.totalLines, newPreview.totalLines);
-  const isLong = oldPreview.isLong || newPreview.isLong;
 
   return (
-    <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
-      <div className="px-3 py-1.5 bg-bg-tertiary border-b border-border flex items-center justify-between">
-        <span className="font-mono text-xs text-text-secondary truncate">{filePath}</span>
-        <span className="text-xs text-text-secondary">{totalLines} lines</span>
-      </div>
-      <div className="p-3 bg-bg-secondary text-sm overflow-x-auto space-y-2">
-        <div>
-          <span className="text-accent-danger text-xs font-medium">- old</span>
-          <pre className="mt-1 text-accent-danger/80 whitespace-pre-wrap">
-            {showFull ? oldString : oldPreview.preview}
-            {oldPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
-          </pre>
-        </div>
-        <div>
-          <span className="text-accent-success text-xs font-medium">+ new</span>
-          <pre className="mt-1 text-accent-success/80 whitespace-pre-wrap">
-            {showFull ? newString : newPreview.preview}
-            {newPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
-          </pre>
-        </div>
-      </div>
-      {isLong && (
-        <button
-          onClick={() => setShowFull(!showFull)}
-          className="w-full px-3 py-1.5 bg-bg-tertiary border-t border-border text-xs text-text-secondary hover:text-text-primary transition-colors"
-        >
-          {showFull ? '▲ Show less' : '▼ Show full content'}
-        </button>
-      )}
+    <div className="mt-1 ml-4 max-w-[90%]">
+      <DiffView
+        toolName="Edit"
+        filePath={filePath}
+        oldContent={oldString}
+        newContent={newString}
+      />
     </div>
   );
 }
