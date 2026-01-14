@@ -6,7 +6,7 @@ describe('BridgeServer', () => {
   const TEST_PORT = 3099;
 
   beforeAll(async () => {
-    server = createServer({ port: TEST_PORT, disableUsageMonitor: true });
+    server = createServer({ port: TEST_PORT, disableUsageMonitor: true, dbPath: ':memory:' });
     await server.start();
   });
 

@@ -108,8 +108,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Create session manager
+  // Create session manager and load existing bindings
   const sessionManager = new SlackSessionManager(bridge, SLACK_DEFAULT_WORKING_DIR);
+  await sessionManager.initialize();
+  console.log('Session manager initialized with existing bindings');
 
   // Create Slack app and progress indicator
   const { app, progressIndicator } = createSlackApp({

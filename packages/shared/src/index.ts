@@ -38,7 +38,10 @@ export type ClientMessage =
   | UserBrowserNavigateMessage
   | UserBrowserBackMessage
   | UserBrowserForwardMessage
-  | UserBrowserRefreshMessage;
+  | UserBrowserRefreshMessage
+  // Thread binding management (for Slack persistence)
+  | SaveThreadBindingMessage
+  | LoadThreadBindingsMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -392,6 +395,9 @@ export type ServerMessage =
   | ScreencastCursorMessage
   // Browser command result
   | BrowserCommandResultMessage
+  // Thread binding responses (for Slack persistence)
+  | ThreadBindingsListMessage
+  | ThreadBindingSavedMessage
   // Error
   | ErrorMessage;
 
@@ -726,4 +732,29 @@ export interface SlackThreadBinding {
   slackThreadTs: string;
   agentDockSessionId: string;
   createdAt: string;
+}
+
+// ==================== Thread Binding Messages (for Slack persistence) ====================
+
+/** Client -> Server: Request to save a thread binding */
+export interface SaveThreadBindingMessage {
+  type: 'save_thread_binding';
+  binding: SlackThreadBinding;
+}
+
+/** Client -> Server: Request to load all thread bindings */
+export interface LoadThreadBindingsMessage {
+  type: 'load_thread_bindings';
+}
+
+/** Server -> Client: Response with all thread bindings */
+export interface ThreadBindingsListMessage {
+  type: 'thread_bindings_list';
+  bindings: SlackThreadBinding[];
+}
+
+/** Server -> Client: Confirmation of saved binding */
+export interface ThreadBindingSavedMessage {
+  type: 'thread_binding_saved';
+  binding: SlackThreadBinding;
 }
