@@ -673,7 +673,60 @@ interface ToolResultContent {
   isError: boolean;
 }
 
+// Base64 prefixes for common image formats
+const BASE64_PNG_PREFIX = 'iVBORw0KGgo';
+const BASE64_JPEG_PREFIX = '/9j/';
+const BASE64_GIF_PREFIX = 'R0lGOD';
+
+/**
+ * Extract base64 image data from tool_result content.
+ * Content format: [{"type":"text","text":"base64data..."}]
+ */
+function extractBase64Image(content: string): { data: string; mimeType: string } | null {
+  try {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return null;
+    }
+
+    for (const item of parsed) {
+      if (item.type === 'text' && typeof item.text === 'string') {
+        const text = item.text;
+        if (text.startsWith(BASE64_PNG_PREFIX)) {
+          return { data: text, mimeType: 'image/png' };
+        }
+        if (text.startsWith(BASE64_JPEG_PREFIX)) {
+          return { data: text, mimeType: 'image/jpeg' };
+        }
+        if (text.startsWith(BASE64_GIF_PREFIX)) {
+          return { data: text, mimeType: 'image/gif' };
+        }
+      }
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null;
+}
+
 function ToolResultMessage({ content }: { content: ToolResultContent }) {
+  // Check if content is a base64 image
+  const imageData = content.content ? extractBase64Image(content.content) : null;
+
+  if (imageData) {
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
+          <img
+            src={`data:${imageData.mimeType};base64,${imageData.data}`}
+            alt="Screenshot"
+            className="max-w-full h-auto"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="message-item" className="flex justify-start">
       <div

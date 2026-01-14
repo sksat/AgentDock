@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -38,6 +38,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     2: () => migrateToV2(db),
     3: () => migrateToV3(db),
     4: () => migrateToV4(db),
+    5: () => migrateToV5(db),
   };
 
   db.transaction(() => {
@@ -179,6 +180,30 @@ function migrateToV4(db: Database.Database): void {
       models_used TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
+  `);
+}
+
+function migrateToV5(db: Database.Database): void {
+  // Add slack_thread_bindings table for Slack integration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slack_thread_bindings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      slack_team_id TEXT NOT NULL,
+      slack_channel_id TEXT NOT NULL,
+      slack_thread_ts TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      UNIQUE(slack_team_id, slack_channel_id, slack_thread_ts)
+    )
+  `);
+
+  // Add indexes for efficient lookups
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_slack_thread_bindings_session
+      ON slack_thread_bindings(session_id);
+    CREATE INDEX IF NOT EXISTS idx_slack_thread_bindings_thread
+      ON slack_thread_bindings(slack_team_id, slack_channel_id, slack_thread_ts);
   `);
 }
 

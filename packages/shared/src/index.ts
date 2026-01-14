@@ -83,11 +83,23 @@ export interface ImageAttachment {
   name?: string;
 }
 
+export type InputSource = 'web' | 'slack';
+
+export interface SlackContext {
+  channelId: string;
+  threadTs: string;
+  userId: string;
+}
+
 export interface UserMessageMessage {
   type: 'user_message';
   sessionId: string;
   content: string;
   images?: ImageAttachment[];
+  /** Source of the input (web UI or Slack) */
+  source?: InputSource;
+  /** Slack context when source is 'slack' */
+  slackContext?: SlackContext;
 }
 
 export interface InterruptMessage {
@@ -353,6 +365,8 @@ export type ServerMessage =
   | SessionListMessage
   | SessionDeletedMessage
   | SessionStatusChangedMessage
+  // User input (broadcast to other clients)
+  | UserInputMessage
   // Agent output
   | TextOutputMessage
   | ThinkingOutputMessage
@@ -409,6 +423,8 @@ export interface SessionAttachedMessage {
     toolName: string;
     input: unknown;
   };
+  /** Whether a browser session exists for this session */
+  hasBrowserSession?: boolean;
 }
 
 export interface SessionListMessage {
@@ -425,6 +441,19 @@ export interface SessionStatusChangedMessage {
   type: 'session_status_changed';
   sessionId: string;
   status: SessionStatus;
+}
+
+/** User input broadcast to all clients attached to a session */
+export interface UserInputMessage {
+  type: 'user_input';
+  sessionId: string;
+  content: string;
+  /** Source of the input (web UI or Slack) */
+  source: InputSource;
+  /** Slack context when source is 'slack' */
+  slackContext?: SlackContext;
+  /** Timestamp when the input was received */
+  timestamp: string;
 }
 
 export interface TextOutputMessage {
@@ -453,6 +482,8 @@ export interface ToolResultMessage {
   toolUseId: string;
   content: string;
   isError?: boolean;
+  /** Filename of the screenshot if this was a screenshot tool result */
+  screenshotFilename?: string;
 }
 
 export interface ToolOutputMessage {
@@ -684,4 +715,15 @@ export interface SessionUsageInfo {
   /** Last activity timestamp (ISO 8601 or date string), optional for internal data */
   lastActivity?: string;
   modelsUsed: string[];
+}
+
+// ==================== Slack Integration Types ====================
+
+/** Binding between a Slack thread and an AgentDock session */
+export interface SlackThreadBinding {
+  slackTeamId: string;
+  slackChannelId: string;
+  slackThreadTs: string;
+  agentDockSessionId: string;
+  createdAt: string;
 }

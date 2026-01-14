@@ -292,6 +292,9 @@ export function useSession(): UseSessionReturn {
   // Pending message to send after session creation
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
+  // Track if we're waiting for a session we created (to auto-select it)
+  const [pendingSessionCreate, setPendingSessionCreate] = useState(false);
+
   // Send pending message when session is created
   useEffect(() => {
     if (activeSessionId && pendingMessage) {
@@ -395,6 +398,7 @@ export function useSession(): UseSessionReturn {
 
   const createSession = useCallback(
     (name?: string, workingDir?: string) => {
+      setPendingSessionCreate(true);
       send({ type: 'create_session', name, workingDir });
     },
     [send]
@@ -409,13 +413,12 @@ export function useSession(): UseSessionReturn {
         // Update URL
         window.history.pushState({ sessionId }, '', `/session/${sessionId}`);
         // Note: pendingPermission and pendingQuestion are per-session, no need to clear
-        // Request session history if not already loaded
-        if (!sessionMessages.has(sessionId)) {
-          send({ type: 'attach_session', sessionId });
-        }
+        // Always attach to session to receive real-time updates
+        // (Server handles duplicate attaches gracefully by using a Set)
+        send({ type: 'attach_session', sessionId });
       }
     },
-    [sessions, sessionMessages, send]
+    [sessions, send]
   );
 
   const deselectSession = useCallback(() => {
@@ -462,6 +465,7 @@ export function useSession(): UseSessionReturn {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
         setPendingMessage(content);
+        setPendingSessionCreate(true);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
         send({ type: 'create_session', name: sessionName, workingDir });
@@ -787,19 +791,22 @@ export function useSession(): UseSessionReturn {
             }
             return [newSession, ...prev];
           });
-          // Automatically select the new session
-          setActiveSessionId(newSession.id);
-          // Update URL
-          window.history.pushState({ sessionId: newSession.id }, '', `/session/${newSession.id}`);
-          // Initialize empty messages for new session
-          setSessionMessages((prev) => {
-            const newMap = new Map(prev);
-            if (!newMap.has(newSession.id)) {
-              newMap.set(newSession.id, []);
-            }
-            return newMap;
-          });
-          setError(null);
+          // Only auto-select if we created this session (not from another client like Slack)
+          if (pendingSessionCreate) {
+            setPendingSessionCreate(false);
+            setActiveSessionId(newSession.id);
+            // Update URL
+            window.history.pushState({ sessionId: newSession.id }, '', `/session/${newSession.id}`);
+            // Initialize empty messages for new session
+            setSessionMessages((prev) => {
+              const newMap = new Map(prev);
+              if (!newMap.has(newSession.id)) {
+                newMap.set(newSession.id, []);
+              }
+              return newMap;
+            });
+            setError(null);
+          }
           break;
         }
 
@@ -840,6 +847,10 @@ export function useSession(): UseSessionReturn {
               newMap.set(message.sessionId, message.pendingPermission!);
               return newMap;
             });
+          }
+          // Auto-start screencast if a browser session exists
+          if (message.hasBrowserSession) {
+            send({ type: 'start_screencast', sessionId: message.sessionId });
           }
           break;
         }
@@ -1210,9 +1221,26 @@ export function useSession(): UseSessionReturn {
           });
           break;
         }
+
+        case 'user_input': {
+          // Add user input from another client (e.g., Slack) to messages
+          const sessionId = message.sessionId;
+          updateSessionMessages(sessionId, (prev) => [
+            ...prev,
+            {
+              type: 'user',
+              content: {
+                text: message.content,
+                source: message.source,
+              },
+              timestamp: message.timestamp,
+            },
+          ]);
+          break;
+        }
       }
     },
-    [activeSessionId, updateSessionMessages]
+    [activeSessionId, updateSessionMessages, send, pendingSessionCreate]
   );
 
   return {

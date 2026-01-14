@@ -173,6 +173,248 @@ describe('BridgeServer', () => {
       ws2.close();
     });
   });
+
+  describe('Real-time state sharing', () => {
+    it('should broadcast session_created to all clients', async () => {
+      // Create two WebSocket clients
+      const ws1 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+      const ws2 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+      // Wait for both to connect
+      await Promise.all([
+        new Promise<void>((resolve, reject) => {
+          ws1.onopen = () => resolve();
+          ws1.onerror = reject;
+        }),
+        new Promise<void>((resolve, reject) => {
+          ws2.onopen = () => resolve();
+          ws2.onerror = reject;
+        }),
+      ]);
+
+      // Set up listener on ws2 to receive session_created broadcast
+      const broadcastPromise = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for broadcast')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_created') {
+            clearTimeout(timeout);
+            ws2.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws2.addEventListener('message', handler);
+      });
+
+      // Create session via ws1
+      ws1.send(JSON.stringify({ type: 'create_session', name: 'Broadcast Test' }));
+
+      // ws2 should receive the broadcast
+      const broadcast = await broadcastPromise;
+      expect(broadcast.type).toBe('session_created');
+      expect(broadcast.session.name).toBe('Broadcast Test');
+
+      ws1.close();
+      ws2.close();
+    });
+
+    it('should broadcast user_input to other attached clients but not sender', async () => {
+      // Create two WebSocket clients
+      const ws1 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+      const ws2 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+      // Wait for both to connect
+      await Promise.all([
+        new Promise<void>((resolve, reject) => {
+          ws1.onopen = () => resolve();
+          ws1.onerror = reject;
+        }),
+        new Promise<void>((resolve, reject) => {
+          ws2.onopen = () => resolve();
+          ws2.onerror = reject;
+        }),
+      ]);
+
+      // Create a session via ws1
+      const createResponse = await new Promise<any>((resolve) => {
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_created') {
+            ws1.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws1.addEventListener('message', handler);
+        ws1.send(JSON.stringify({ type: 'create_session', name: 'User Input Test' }));
+      });
+
+      const sessionId = createResponse.session.id;
+
+      // Attach ws2 to the session
+      ws2.send(JSON.stringify({ type: 'attach_session', sessionId }));
+
+      // Wait for attach response
+      await new Promise<void>((resolve) => {
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_attached') {
+            ws2.removeEventListener('message', handler);
+            resolve();
+          }
+        };
+        ws2.addEventListener('message', handler);
+      });
+
+      // Set up listener on ws2 for user_input
+      const userInputPromise = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for user_input')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'user_input') {
+            clearTimeout(timeout);
+            ws2.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws2.addEventListener('message', handler);
+      });
+
+      // Track if ws1 receives user_input (it shouldn't)
+      let ws1ReceivedUserInput = false;
+      const ws1Handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'user_input') {
+          ws1ReceivedUserInput = true;
+        }
+      };
+      ws1.addEventListener('message', ws1Handler);
+
+      // Send user_message from ws1
+      ws1.send(JSON.stringify({
+        type: 'user_message',
+        sessionId,
+        content: 'Hello from ws1',
+        source: 'web',
+      }));
+
+      // ws2 should receive user_input
+      const userInput = await userInputPromise;
+      expect(userInput.type).toBe('user_input');
+      expect(userInput.content).toBe('Hello from ws1');
+      expect(userInput.source).toBe('web');
+      expect(userInput.sessionId).toBe(sessionId);
+
+      // Wait a bit to ensure ws1 doesn't receive it
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(ws1ReceivedUserInput).toBe(false);
+
+      ws1.removeEventListener('message', ws1Handler);
+      ws1.close();
+      ws2.close();
+    });
+
+    it('should support multiple clients attached to same session', async () => {
+      // Create three WebSocket clients
+      const ws1 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+      const ws2 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+      const ws3 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+      // Wait for all to connect
+      await Promise.all([
+        new Promise<void>((resolve, reject) => {
+          ws1.onopen = () => resolve();
+          ws1.onerror = reject;
+        }),
+        new Promise<void>((resolve, reject) => {
+          ws2.onopen = () => resolve();
+          ws2.onerror = reject;
+        }),
+        new Promise<void>((resolve, reject) => {
+          ws3.onopen = () => resolve();
+          ws3.onerror = reject;
+        }),
+      ]);
+
+      // Create a session via ws1
+      const createResponse = await new Promise<any>((resolve) => {
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'session_created') {
+            ws1.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws1.addEventListener('message', handler);
+        ws1.send(JSON.stringify({ type: 'create_session', name: 'Multi Client Test' }));
+      });
+
+      const sessionId = createResponse.session.id;
+
+      // Attach ws2 and ws3 to the session
+      const attachPromises = [ws2, ws3].map((ws) => {
+        return new Promise<void>((resolve) => {
+          const handler = (event: MessageEvent) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'session_attached') {
+              ws.removeEventListener('message', handler);
+              resolve();
+            }
+          };
+          ws.addEventListener('message', handler);
+          ws.send(JSON.stringify({ type: 'attach_session', sessionId }));
+        });
+      });
+
+      await Promise.all(attachPromises);
+
+      // Set up listeners on ws2 and ws3 for user_input
+      const userInputPromise2 = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout on ws2')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'user_input') {
+            clearTimeout(timeout);
+            ws2.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws2.addEventListener('message', handler);
+      });
+
+      const userInputPromise3 = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout on ws3')), 5000);
+        const handler = (event: MessageEvent) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'user_input') {
+            clearTimeout(timeout);
+            ws3.removeEventListener('message', handler);
+            resolve(data);
+          }
+        };
+        ws3.addEventListener('message', handler);
+      });
+
+      // Send user_message from ws1
+      ws1.send(JSON.stringify({
+        type: 'user_message',
+        sessionId,
+        content: 'Message to all',
+        source: 'slack',
+      }));
+
+      // Both ws2 and ws3 should receive user_input
+      const [input2, input3] = await Promise.all([userInputPromise2, userInputPromise3]);
+
+      expect(input2.content).toBe('Message to all');
+      expect(input2.source).toBe('slack');
+      expect(input3.content).toBe('Message to all');
+      expect(input3.source).toBe('slack');
+
+      ws1.close();
+      ws2.close();
+      ws3.close();
+    });
+  });
 });
 
 describe('isBrowserTool', () => {

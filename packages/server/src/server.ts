@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, BrowserCommand } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
@@ -91,6 +91,15 @@ function cleanupMcpConfig(sessionId: string): void {
   if (existsSync(configPath)) {
     rmSync(configPath);
   }
+}
+
+/**
+ * Check if a tool name is a screenshot tool.
+ * Used to track screenshot results and include filename for Slack uploads.
+ */
+export function isScreenshotTool(toolName: string): boolean {
+  const lowerName = toolName.toLowerCase();
+  return lowerName.includes('screenshot') || lowerName.includes('take_screenshot');
 }
 
 /**
@@ -262,8 +271,8 @@ export function createServer(options: ServerOptions): BridgeServer {
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
 
-  // Map session ID to WebSocket for sending events
-  const sessionWebSockets = new Map<string, WebSocket>();
+  // Map session ID to Set of WebSockets for sending events (supports multiple clients)
+  const sessionWebSockets = new Map<string, Set<WebSocket>>();
 
   // All connected WebSocket clients (for broadcasting usage)
   const allClients = new Set<WebSocket>();
@@ -300,6 +309,20 @@ export function createServer(options: ServerOptions): BridgeServer {
       type: 'session_status_changed',
       sessionId,
       status,
+    };
+    const messageStr = JSON.stringify(message);
+    for (const ws of allClients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Broadcast session created to all clients (for real-time session list updates)
+  function broadcastSessionCreated(session: SessionInfo): void {
+    const message: ServerMessage = {
+      type: 'session_created',
+      session,
     };
     const messageStr = JSON.stringify(message);
     for (const ws of allClients) {
@@ -358,6 +381,10 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Accumulator for current turn's text (to save as single history entry)
   const turnAccumulator = new Map<string, { text: string; thinking: string }>();
 
+  // Track screenshot tool calls to include filename in tool_result
+  // Key: toolUseId, Value: filename from the screenshot tool input
+  const pendingScreenshots = new Map<string, string>();
+
   function getOrCreateAccumulator(sessionId: string) {
     if (!turnAccumulator.has(sessionId)) {
       turnAccumulator.set(sessionId, { text: '', thinking: '' });
@@ -387,11 +414,47 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
-  // Send message to session's WebSocket
+  // Send message to all WebSockets attached to a session
   function sendToSession(sessionId: string, message: ServerMessage): void {
-    const ws = sessionWebSockets.get(sessionId);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+    const clients = sessionWebSockets.get(sessionId);
+    if (!clients) return;
+    const messageStr = JSON.stringify(message);
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Send message to all WebSockets attached to a session, except the specified one
+  function sendToSessionExcept(sessionId: string, message: ServerMessage, exceptWs: WebSocket): void {
+    const clients = sessionWebSockets.get(sessionId);
+    if (!clients) return;
+    const messageStr = JSON.stringify(message);
+    for (const ws of clients) {
+      if (ws !== exceptWs && ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    }
+  }
+
+  // Add WebSocket to session's client set
+  function addWebSocketToSession(sessionId: string, ws: WebSocket): void {
+    let clients = sessionWebSockets.get(sessionId);
+    if (!clients) {
+      clients = new Set();
+      sessionWebSockets.set(sessionId, clients);
+    }
+    clients.add(ws);
+  }
+
+  // Remove WebSocket from all sessions
+  function removeWebSocketFromSessions(ws: WebSocket): void {
+    for (const [sessionId, clients] of sessionWebSockets) {
+      clients.delete(ws);
+      if (clients.size === 0) {
+        sessionWebSockets.delete(sessionId);
+      }
     }
   }
 
@@ -455,6 +518,14 @@ export function createServer(options: ServerOptions): BridgeServer {
             toolUseId,
             input,
           });
+          // Track screenshot tool calls to include filename in tool_result
+          if (isScreenshotTool(toolName)) {
+            const screenshotInput = input as { filename?: string } | undefined;
+            if (screenshotInput?.filename) {
+              pendingScreenshots.set(toolUseId, screenshotInput.filename);
+              console.log(`[Server] Tracking screenshot tool: ${toolUseId} -> ${screenshotInput.filename}`);
+            }
+          }
           // Store in history
           sessionManager.addToHistory(sessionId, {
             type: 'tool_use',
@@ -469,12 +540,22 @@ export function createServer(options: ServerOptions): BridgeServer {
         const toolUseId = (eventData as { toolUseId: string }).toolUseId;
         const content = (eventData as { content: string }).content;
         const isError = (eventData as { isError: boolean }).isError;
+
+        // Check if this is a screenshot tool result
+        const screenshotFilename = pendingScreenshots.get(toolUseId);
+        if (screenshotFilename) {
+          pendingScreenshots.delete(toolUseId);
+          console.log(`[Server] Screenshot result: ${toolUseId} -> ${screenshotFilename}`);
+        }
+
         sendToSession(sessionId, {
           type: 'tool_result',
           sessionId,
           toolUseId,
           content,
           isError,
+          // Include screenshot filename if this was a screenshot tool
+          ...(screenshotFilename && { screenshotFilename }),
         });
         // Store in history
         sessionManager.addToHistory(sessionId, {
@@ -652,6 +733,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           name: message.name,
           workingDir: message.workingDir,
         });
+        // Broadcast to all clients for real-time session list updates
+        broadcastSessionCreated(session);
+        // Also send response to the creating client (will be deduplicated on client side)
         response = {
           type: 'session_created',
           session,
@@ -662,9 +746,16 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'attach_session': {
         const session = sessionManager.getSession(message.sessionId);
         if (session) {
+          // Store WebSocket for this session so it can receive events
+          addWebSocketToSession(message.sessionId, ws);
+
           const usage = sessionManager.getUsage(message.sessionId);
           const modelUsage = sessionManager.getModelUsage(message.sessionId);
           const pendingPermission = sessionPendingPermissions.get(message.sessionId);
+
+          // Check if a browser session exists for this session
+          const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
+
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
@@ -672,6 +763,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             usage: usage ?? undefined,
             modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
             pendingPermission: pendingPermission ?? undefined,
+            hasBrowserSession,
           };
         } else {
           response = {
@@ -808,7 +900,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         }
 
         // Store WebSocket for this session
-        sessionWebSockets.set(message.sessionId, ws);
+        addWebSocketToSession(message.sessionId, ws);
 
         // Check if already running
         if (runnerManager.hasRunningSession(message.sessionId)) {
@@ -821,11 +913,22 @@ export function createServer(options: ServerOptions): BridgeServer {
         }
 
         // Add user message to history (including images if present)
+        const timestamp = new Date().toISOString();
         sessionManager.addToHistory(message.sessionId, {
           type: 'user',
           content: message.images ? { text: message.content, images: message.images } : message.content,
-          timestamp: new Date().toISOString(),
+          timestamp,
         });
+
+        // Broadcast user input to all clients attached to this session (except sender)
+        sendToSessionExcept(message.sessionId, {
+          type: 'user_input',
+          sessionId: message.sessionId,
+          content: message.content,
+          source: message.source || 'web',
+          slackContext: message.slackContext,
+          timestamp,
+        }, ws);
 
         // Update session status
         updateAndBroadcastStatus(message.sessionId, 'running');
@@ -1081,7 +1184,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         }
 
         // Store WebSocket for this session
-        sessionWebSockets.set(message.sessionId, ws);
+        addWebSocketToSession(message.sessionId, ws);
 
         // Add compact command to history as a user message
         sessionManager.addToHistory(message.sessionId, {
@@ -1152,7 +1255,7 @@ Keep it concise but comprehensive.`;
         }
 
         // Store WebSocket for this session (required for screencast events)
-        sessionWebSockets.set(message.sessionId, ws);
+        addWebSocketToSession(message.sessionId, ws);
 
         // Create browser session if not exists
         if (!browserSessionManager.getController(message.sessionId)) {
@@ -1243,23 +1346,23 @@ Keep it concise but comprehensive.`;
             await page.mouse.move(message.x, message.y);
 
             // Get cursor style at current position and send to client
-            const cursor = await page.evaluate(({ x, y }) => {
-              const el = document.elementFromPoint(x, y);
+            // Note: This function is evaluated in the browser context, not Node.js
+            const cursor = await page.evaluate(({ x, y }: { x: number; y: number }) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const win = globalThis as any;
+              const el = win.document.elementFromPoint(x, y);
               if (el) {
-                return window.getComputedStyle(el).cursor;
+                return win.getComputedStyle(el).cursor;
               }
               return 'default';
             }, { x: message.x, y: message.y });
 
-            // Send cursor update to client
-            const clientWs = sessionWebSockets.get(message.sessionId);
-            if (clientWs && clientWs.readyState === 1) {
-              clientWs.send(JSON.stringify({
-                type: 'screencast_cursor',
-                sessionId: message.sessionId,
-                cursor,
-              }));
-            }
+            // Send cursor update to all clients
+            sendToSession(message.sessionId, {
+              type: 'screencast_cursor',
+              sessionId: message.sessionId,
+              cursor,
+            });
           }
         } catch {
           // Silent fail for mouse move
@@ -1446,6 +1549,7 @@ Keep it concise but comprehensive.`;
 
           ws.on('close', () => {
             allClients.delete(ws);
+            removeWebSocketFromSessions(ws);
           });
         });
 

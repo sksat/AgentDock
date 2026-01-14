@@ -1,0 +1,29 @@
+{
+  "name": "@agent-dock/slack-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@agent-dock/shared": "workspace:*",
+    "@slack/bolt": "^4.3.0",
+    "@slack/types": "^2.19.0",
+    "@slack/web-api": "^7.13.0",
+    "dotenv": "^17.2.3",
+    "nanoid": "^5.1.5",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.2",
+    "typescript": "~5.9.3",
+    "vitest": "^3.0.0"
+  }
+}
