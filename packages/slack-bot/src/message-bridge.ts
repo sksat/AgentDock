@@ -50,7 +50,7 @@ export class MessageBridge {
   }
 
   /**
-   * Connect to AgentDock server.
+   * Connect to AgentDock server with automatic retry on failure.
    */
   async connect(): Promise<void> {
     if (this.isConnected) {
@@ -58,14 +58,38 @@ export class MessageBridge {
     }
 
     this.shouldReconnect = true;
-    return this.doConnect();
+    this.reconnectAttempts = 0;
+
+    while (this.reconnectAttempts < this.maxReconnectAttempts) {
+      try {
+        await this.doConnect();
+        return; // Connection successful
+      } catch (error) {
+        this.reconnectAttempts++;
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          throw new Error(
+            `Failed to connect after ${this.maxReconnectAttempts} attempts: ${(error as Error).message}`
+          );
+        }
+        const delay = Math.min(
+          this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1),
+          30000
+        );
+        console.log(
+          `Connection failed: ${(error as Error).message}. Retrying in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   }
 
   private doConnect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let connected = false;
       this.ws = new WebSocket(this.url);
 
       this.ws.on('open', () => {
+        connected = true;
         console.log('Connected to AgentDock server');
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -73,8 +97,8 @@ export class MessageBridge {
       });
 
       this.ws.on('error', (error) => {
-        // Only reject on initial connection, not reconnects
-        if (this.reconnectAttempts === 0) {
+        // Only reject if not yet connected (initial connection failure)
+        if (!connected) {
           reject(error);
         }
       });
@@ -85,7 +109,11 @@ export class MessageBridge {
 
       this.ws.on('close', () => {
         this.ws = null;
-        this.scheduleReconnect();
+        // Only schedule reconnect if connection was established
+        // Initial connection retries are handled by connect() method
+        if (connected) {
+          this.scheduleReconnect();
+        }
       });
     });
   }
