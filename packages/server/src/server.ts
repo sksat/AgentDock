@@ -1059,14 +1059,34 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Store WebSocket for this session
         addWebSocketToSession(message.sessionId, ws);
 
-        // Check if already running
+        // Check if already running - auto-queue the input instead of returning error
         if (runnerManager.hasRunningSession(message.sessionId)) {
-          response = {
-            type: 'error',
+          // Queue the input (same as stream_input)
+          let queue = sessionInputQueue.get(message.sessionId);
+          if (!queue) {
+            queue = [];
+            sessionInputQueue.set(message.sessionId, queue);
+          }
+          queue.push(message.content);
+          console.log(`[Server] Session ${message.sessionId} is running, queued input (queue size: ${queue.length})`);
+
+          // Add to history and broadcast (same as stream_input)
+          const queuedTimestamp = new Date().toISOString();
+          sessionManager.addToHistory(message.sessionId, {
+            type: 'user',
+            content: message.content,
+            timestamp: queuedTimestamp,
+          });
+
+          sendToSession(message.sessionId, {
+            type: 'user_input',
             sessionId: message.sessionId,
-            message: 'Session is already running',
-          };
-          break;
+            content: message.content,
+            source: message.source || 'web',
+            slackContext: message.slackContext,
+            timestamp: queuedTimestamp,
+          });
+          return;
         }
 
         // Add user message to history (including images if present)
