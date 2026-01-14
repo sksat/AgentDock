@@ -309,3 +309,95 @@ describe('/model command', () => {
     expect(textarea.value).toBe('');
   });
 });
+
+describe('Stream input during loading', () => {
+  it('should call onStreamInput when Enter is pressed during loading', () => {
+    const onSend = vi.fn();
+    const onStreamInput = vi.fn();
+    render(
+      <InputArea
+        onSend={onSend}
+        onStreamInput={onStreamInput}
+        isLoading={true}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/);
+    fireEvent.change(textarea, { target: { value: 'Additional input' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    // onStreamInput should be called, not onSend
+    expect(onStreamInput).toHaveBeenCalledWith('Additional input');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('should clear input after stream input is sent', () => {
+    const onStreamInput = vi.fn();
+    render(
+      <InputArea
+        onSend={() => {}}
+        onStreamInput={onStreamInput}
+        isLoading={true}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'Additional input' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    expect(textarea.value).toBe('');
+  });
+
+  it('should not call onStreamInput if onStreamInput is not provided', () => {
+    const onSend = vi.fn();
+    render(
+      <InputArea
+        onSend={onSend}
+        isLoading={true}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/);
+    fireEvent.change(textarea, { target: { value: 'Test' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    // Neither should be called since isLoading is true and onStreamInput is not provided
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('should not call onStreamInput when input is empty during loading', () => {
+    const onStreamInput = vi.fn();
+    render(
+      <InputArea
+        onSend={() => {}}
+        onStreamInput={onStreamInput}
+        isLoading={true}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/);
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    expect(onStreamInput).not.toHaveBeenCalled();
+  });
+
+  it('should call onSend normally when not loading', () => {
+    const onSend = vi.fn();
+    const onStreamInput = vi.fn();
+    render(
+      <InputArea
+        onSend={onSend}
+        onStreamInput={onStreamInput}
+        isLoading={false}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Type a message/);
+    fireEvent.change(textarea, { target: { value: 'Normal message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    // onSend should be called when not loading
+    expect(onSend).toHaveBeenCalledWith('Normal message', undefined);
+    expect(onStreamInput).not.toHaveBeenCalled();
+  });
+});

@@ -108,6 +108,19 @@ export class RunnerManager {
     return runner?.isRunning ?? false;
   }
 
+  /**
+   * Send input to a running session (stream input during execution)
+   * @returns true if input was sent, false if session is not running
+   */
+  sendInputToSession(sessionId: string, input: string): boolean {
+    const runner = this.runners.get(sessionId);
+    if (!runner?.isRunning) {
+      return false;
+    }
+    runner.sendInput(input);
+    return true;
+  }
+
   getRunningCount(): number {
     let count = 0;
     for (const runner of this.runners.values()) {

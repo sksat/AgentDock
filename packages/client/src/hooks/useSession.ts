@@ -673,6 +673,22 @@ export function useSession(): UseSessionReturn {
     });
   }, [activeSessionId, send]);
 
+  /**
+   * Send additional input to a running session (stream input during execution)
+   */
+  const sendStreamInput = useCallback(
+    (content: string) => {
+      if (!activeSessionId) return;
+
+      send({
+        type: 'stream_input',
+        sessionId: activeSessionId,
+        content,
+      });
+    },
+    [activeSessionId, send]
+  );
+
   const setPermissionMode = useCallback((mode: PermissionMode) => {
     // Update local systemInfo immediately for responsive UI
     setSystemInfo((prev) => prev ? { ...prev, permissionMode: mode } : { permissionMode: mode });
@@ -914,6 +930,12 @@ export function useSession(): UseSessionReturn {
               });
               return newMap;
             });
+          }
+          // Restore isLoading state based on whether session is running
+          if (message.isRunning) {
+            setIsLoading(true);
+          } else {
+            setIsLoading(false);
           }
           break;
         }
@@ -1385,6 +1407,7 @@ export function useSession(): UseSessionReturn {
     respondToPermission,
     respondToQuestion,
     interrupt,
+    sendStreamInput,
     setPermissionMode,
     setModel,
     startScreencast,

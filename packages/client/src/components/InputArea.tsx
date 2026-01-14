@@ -14,6 +14,7 @@ export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
 
 export interface InputAreaProps {
   onSend: (message: string, images?: ImageAttachment[]) => void;
+  onStreamInput?: (content: string) => void;
   onInterrupt?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
@@ -39,6 +40,7 @@ export interface InputAreaProps {
 
 export function InputArea({
   onSend,
+  onStreamInput,
   onInterrupt,
   disabled = false,
   isLoading = false,
@@ -333,6 +335,10 @@ export function InputArea({
         // Check if it's a slash command (no suggestions open = complete command)
         if (value.trim().startsWith('/')) {
           executeSlashCommand(value);
+        } else if (isLoading && onStreamInput && value.trim() && attachedImages.length === 0) {
+          // During streaming, send additional input (only text, no images - PTY mode only)
+          onStreamInput(value.trim());
+          setValue('');
         } else {
           handleSend();
         }
@@ -343,7 +349,7 @@ export function InputArea({
         cyclePermissionMode();
       }
     },
-    [handleSend, executeSlashCommand, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
+    [handleSend, executeSlashCommand, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model, isLoading, onStreamInput, attachedImages]
   );
 
   // Auto-resize textarea

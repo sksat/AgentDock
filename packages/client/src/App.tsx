@@ -95,6 +95,7 @@ function App() {
     respondToPermission,
     respondToQuestion,
     interrupt,
+    sendStreamInput,
     setPermissionMode,
     setModel,
     startScreencast,
@@ -411,6 +412,7 @@ function App() {
               {/* Input area with status bar */}
               <InputArea
                 onSend={handleSendMessage}
+                onStreamInput={sendStreamInput}
                 onInterrupt={interrupt}
                 disabled={!isConnected}
                 isLoading={isLoading}

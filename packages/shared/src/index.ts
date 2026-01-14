@@ -15,6 +15,7 @@ export type ClientMessage =
   | CompactSessionMessage
   // User input
   | UserMessageMessage
+  | StreamInputMessage
   | InterruptMessage
   // Settings
   | SetPermissionModeMessage
@@ -108,6 +109,13 @@ export interface UserMessageMessage {
   slackContext?: SlackContext;
   /** Enable extended thinking mode for this message */
   thinkingEnabled?: boolean;
+}
+
+/** Send additional input to a running session (stream input during execution) */
+export interface StreamInputMessage {
+  type: 'stream_input';
+  sessionId: string;
+  content: string;
 }
 
 export interface InterruptMessage {
@@ -440,6 +448,8 @@ export interface SessionAttachedMessage {
   };
   /** Whether a browser session exists for this session */
   hasBrowserSession?: boolean;
+  /** Whether the session is currently running (Claude CLI is executing) */
+  isRunning?: boolean;
 }
 
 export interface SessionListMessage {

@@ -805,6 +805,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             modelUsage: modelUsage.length > 0 ? modelUsage : undefined,
             pendingPermission: pendingPermission ?? undefined,
             hasBrowserSession,
+            isRunning: runnerManager.hasRunningSession(message.sessionId),
           };
         } else {
           response = {
@@ -1095,6 +1096,31 @@ export function createServer(options: ServerOptions): BridgeServer {
           result: 'Interrupted',
         };
         break;
+      }
+
+      case 'stream_input': {
+        // Send additional input to a running session
+        const session = sessionManager.getSession(message.sessionId);
+        if (!session) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session not found',
+          };
+          break;
+        }
+
+        const sent = runnerManager.sendInputToSession(message.sessionId, message.content);
+        if (!sent) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Session is not running',
+          };
+          break;
+        }
+        // No response on success - input is streamed to Claude
+        return;
       }
 
       case 'permission_response': {
