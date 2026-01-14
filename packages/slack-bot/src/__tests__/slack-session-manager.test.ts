@@ -7,7 +7,10 @@ function createMockBridge(): MessageBridge & {
   mockCreateSession: ReturnType<typeof vi.fn>;
   mockOnMessage: ReturnType<typeof vi.fn>;
   mockAttachSession: ReturnType<typeof vi.fn>;
+  mockSaveThreadBinding: ReturnType<typeof vi.fn>;
+  mockRequestThreadBindings: ReturnType<typeof vi.fn>;
   listeners: Set<(msg: ServerMessage) => void>;
+  simulateServerResponse: (msg: ServerMessage) => void;
 } {
   const listeners = new Set<(msg: ServerMessage) => void>();
   let sessionCounter = 0;
@@ -38,7 +41,16 @@ function createMockBridge(): MessageBridge & {
     mockAttachSession: vi.fn(),
     attachSession: vi.fn(),
     mockOnMessage: vi.fn(),
+    mockSaveThreadBinding: vi.fn(),
+    saveThreadBinding: vi.fn(),
+    mockRequestThreadBindings: vi.fn(),
+    requestThreadBindings: vi.fn(),
     listeners,
+    simulateServerResponse: (msg: ServerMessage) => {
+      for (const listener of listeners) {
+        listener(msg);
+      }
+    },
   } as any;
 }
 
@@ -189,6 +201,97 @@ describe('SlackSessionManager', () => {
       // Names should be different (include timestamp or counter)
       expect(call1[0]).toContain('Slack');
       expect(call2[0]).toContain('Slack');
+    });
+  });
+
+  describe('persistence', () => {
+    it('should save binding to server when creating new session', async () => {
+      await manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+
+      expect(mockBridge.saveThreadBinding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slackTeamId: 'T123',
+          slackChannelId: 'C456',
+          slackThreadTs: '1234567890.123456',
+          agentDockSessionId: 'session-1',
+        })
+      );
+    });
+
+    it('should not save binding when returning existing session', async () => {
+      // First call creates and saves
+      await manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+      expect(mockBridge.saveThreadBinding).toHaveBeenCalledTimes(1);
+
+      // Second call returns existing, should not save again
+      await manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+      expect(mockBridge.saveThreadBinding).toHaveBeenCalledTimes(1);
+    });
+
+    it('should load bindings from server on initialize', async () => {
+      const existingBindings = [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C456',
+          slackThreadTs: '1234567890.111111',
+          agentDockSessionId: 'existing-session-1',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C789',
+          slackThreadTs: '1234567890.222222',
+          agentDockSessionId: 'existing-session-2',
+          createdAt: '2024-01-01T00:00:01Z',
+        },
+      ];
+
+      // Start initialization
+      const initPromise = manager.initialize();
+
+      // Verify requestThreadBindings was called
+      expect(mockBridge.requestThreadBindings).toHaveBeenCalled();
+
+      // Simulate server response
+      mockBridge.simulateServerResponse({
+        type: 'thread_bindings_list',
+        bindings: existingBindings,
+      });
+
+      await initPromise;
+
+      // Verify bindings are loaded
+      const binding1 = manager.getSessionByThread('T123', 'C456', '1234567890.111111');
+      expect(binding1?.agentDockSessionId).toBe('existing-session-1');
+
+      const binding2 = manager.getSessionByThread('T123', 'C789', '1234567890.222222');
+      expect(binding2?.agentDockSessionId).toBe('existing-session-2');
+    });
+
+    it('should attach to existing sessions after initialize', async () => {
+      const existingBindings = [
+        {
+          slackTeamId: 'T123',
+          slackChannelId: 'C456',
+          slackThreadTs: '1234567890.123456',
+          agentDockSessionId: 'existing-session',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+      ];
+
+      const initPromise = manager.initialize();
+      mockBridge.simulateServerResponse({
+        type: 'thread_bindings_list',
+        bindings: existingBindings,
+      });
+      await initPromise;
+
+      // After initialize, finding existing thread should reattach, not create
+      const binding = await manager.findOrCreateSession('T123', 'C456', '1234567890.123456');
+
+      expect(binding.agentDockSessionId).toBe('existing-session');
+      expect(mockBridge.createSession).not.toHaveBeenCalled();
+      expect(mockBridge.attachSession).toHaveBeenCalledWith('existing-session');
     });
   });
 });

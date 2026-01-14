@@ -1,15 +1,8 @@
 import type { MessageBridge } from './message-bridge.js';
+import type { SlackThreadBinding, ServerMessage, ThreadBindingsListMessage } from '@agent-dock/shared';
 
-/**
- * Represents a binding between a Slack thread and an AgentDock session.
- */
-export interface SlackThreadBinding {
-  slackTeamId: string;
-  slackChannelId: string;
-  slackThreadTs: string;
-  agentDockSessionId: string;
-  createdAt: string;
-}
+// Re-export SlackThreadBinding for backwards compatibility
+export type { SlackThreadBinding } from '@agent-dock/shared';
 
 /**
  * Generates a unique key for a Slack thread.
@@ -38,6 +31,38 @@ export class SlackSessionManager {
   constructor(bridge: MessageBridge, defaultWorkingDir: string) {
     this.bridge = bridge;
     this.defaultWorkingDir = defaultWorkingDir;
+  }
+
+  /**
+   * Initialize by loading existing bindings from the server.
+   * Should be called after the bridge is connected.
+   */
+  async initialize(): Promise<void> {
+    return new Promise((resolve) => {
+      const listener = (message: ServerMessage) => {
+        if (message.type === 'thread_bindings_list') {
+          this.handleThreadBindingsList((message as ThreadBindingsListMessage).bindings);
+          this.bridge.offMessage(listener);
+          resolve();
+        }
+      };
+      this.bridge.onMessage(listener);
+      this.bridge.requestThreadBindings();
+    });
+  }
+
+  /**
+   * Handle the thread bindings list response from the server.
+   */
+  private handleThreadBindingsList(bindings: SlackThreadBinding[]): void {
+    console.log(`[SlackSessionManager] Loaded ${bindings.length} thread bindings from server`);
+    for (const binding of bindings) {
+      const key = makeThreadKey(binding.slackTeamId, binding.slackChannelId, binding.slackThreadTs);
+      this.threadBindings.set(key, binding);
+      this.sessionBindings.set(binding.agentDockSessionId, binding);
+    }
+    // Adjust counter based on loaded bindings
+    this.sessionCounter = bindings.length;
   }
 
   /**
@@ -78,6 +103,9 @@ export class SlackSessionManager {
     // Store in both maps
     this.threadBindings.set(key, binding);
     this.sessionBindings.set(session.id, binding);
+
+    // Persist to server
+    this.bridge.saveThreadBinding(binding);
 
     return binding;
   }
