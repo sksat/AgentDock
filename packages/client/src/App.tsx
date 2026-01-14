@@ -356,7 +356,7 @@ function App() {
             <main className="flex-1 flex flex-col overflow-hidden">
               {/* Messages or Browser view based on sessionView */}
               {sessionView === 'stream' ? (
-                <MessageStream ref={messageStreamRef} messages={messages} />
+                <MessageStream ref={messageStreamRef} messages={messages} workingDir={session?.workingDir} />
               ) : (
                 <BrowserView
                   frame={screencast?.frame ?? null}

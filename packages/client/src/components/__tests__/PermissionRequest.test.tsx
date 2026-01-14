@@ -146,4 +146,31 @@ describe('PermissionRequest', () => {
     expect(screen.getByText(/offset: 100/)).toBeInTheDocument();
     expect(screen.getByText(/limit: 50/)).toBeInTheDocument();
   });
+
+  it('should display Bash tool with shell-like command view', () => {
+    const bashInput = {
+      command: 'ls -la',
+    };
+    render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />);
+
+    expect(screen.getByText('Bash')).toBeInTheDocument();
+    // Should show shell prompt
+    expect(screen.getByText('$')).toBeInTheDocument();
+    // Should show command
+    expect(screen.getByText('ls -la')).toBeInTheDocument();
+  });
+
+  it('should display Bash tool with description as title', () => {
+    const bashInput = {
+      command: 'git status',
+      description: 'Check repository status',
+    };
+    render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />);
+
+    // Should show description as title
+    expect(screen.getByText('Check repository status')).toBeInTheDocument();
+    // Should show shell prompt and command
+    expect(screen.getByText('$')).toBeInTheDocument();
+    expect(screen.getByText('git status')).toBeInTheDocument();
+  });
 });

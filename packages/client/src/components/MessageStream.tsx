@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
+import { DiffView } from './DiffView';
 import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system' | 'question' | 'todo_update';
+  type: 'user' | 'assistant' | 'thinking' | 'tool' | 'system' | 'question' | 'todo_update';
   content: unknown;
   timestamp: string;
 }
@@ -16,16 +17,8 @@ export interface SystemMessageContent {
   type?: 'info' | 'success' | 'warning' | 'error';
 }
 
-export interface BashToolContent {
-  toolUseId: string;
-  command: string;
-  description?: string;
-  output: string;
-  isComplete: boolean;
-  isError?: boolean;
-}
-
-export interface McpToolContent {
+// Unified tool content - all tools use this structure
+export interface ToolContent {
   toolUseId: string;
   toolName: string;
   input: unknown;
@@ -62,6 +55,98 @@ export interface TodoUpdateContent {
 
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
+  workingDir?: string;
+}
+
+/**
+ * Format file path for display:
+ * - If inside workingDir, show relative path
+ * - If inside HOME, show ~/...
+ * - Otherwise show absolute path
+ */
+function formatFilePath(filePath: string, workingDir?: string): string {
+  if (!filePath) return filePath;
+
+  // Try to extract home directory from workingDir (e.g., /home/user/... or /Users/user/...)
+  let homeDir: string | null = null;
+  if (workingDir) {
+    const homeMatch = workingDir.match(/^(\/home\/[^/]+|\/Users\/[^/]+)/);
+    if (homeMatch) {
+      homeDir = homeMatch[1];
+    }
+  }
+
+  // If inside workingDir, show relative path
+  if (workingDir && filePath.startsWith(workingDir + '/')) {
+    return filePath.slice(workingDir.length + 1);
+  }
+
+  // If exactly the workingDir
+  if (workingDir && filePath === workingDir) {
+    return '.';
+  }
+
+  // If inside HOME, show ~/...
+  if (homeDir && filePath.startsWith(homeDir + '/')) {
+    return '~' + filePath.slice(homeDir.length);
+  }
+
+  // If exactly the home directory
+  if (homeDir && filePath === homeDir) {
+    return '~';
+  }
+
+  // Otherwise show absolute path
+  return filePath;
+}
+
+// Base64 prefixes for common image formats
+const BASE64_PNG_PREFIX = 'iVBORw0KGgo';
+const BASE64_JPEG_PREFIX = '/9j/';
+const BASE64_GIF_PREFIX = 'R0lGOD';
+
+/**
+ * Extract base64 image data from tool output.
+ * Handles both raw base64 and JSON format: [{"type":"text","text":"base64data..."}]
+ */
+function extractBase64Image(output: string): { data: string; mimeType: string } | null {
+  if (!output) return null;
+
+  // Try to parse as JSON first
+  try {
+    const parsed = JSON.parse(output);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      for (const item of parsed) {
+        if (item.type === 'text' && typeof item.text === 'string') {
+          const text = item.text;
+          if (text.startsWith(BASE64_PNG_PREFIX)) {
+            return { data: text, mimeType: 'image/png' };
+          }
+          if (text.startsWith(BASE64_JPEG_PREFIX)) {
+            return { data: text, mimeType: 'image/jpeg' };
+          }
+          if (text.startsWith(BASE64_GIF_PREFIX)) {
+            return { data: text, mimeType: 'image/gif' };
+          }
+        }
+      }
+    }
+  } catch {
+    // Not valid JSON, try raw base64
+  }
+
+  // Try raw base64
+  if (output.startsWith(BASE64_PNG_PREFIX)) {
+    return { data: output, mimeType: 'image/png' };
+  }
+  if (output.startsWith(BASE64_JPEG_PREFIX)) {
+    return { data: output, mimeType: 'image/jpeg' };
+  }
+  if (output.startsWith(BASE64_GIF_PREFIX)) {
+    return { data: output, mimeType: 'image/gif' };
+  }
+
+  return null;
 }
 
 /** Handle for imperative actions on MessageStream */
@@ -70,7 +155,7 @@ export interface MessageStreamHandle {
   scrollToTodoUpdate: (toolUseId: string) => void;
 }
 
-export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages }, ref) {
+export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -142,6 +227,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           message={message}
           thinkingExpanded={thinkingExpanded}
           onToggleThinking={toggleThinkingExpanded}
+          workingDir={workingDir}
         />
       ))}
     </div>
@@ -152,9 +238,10 @@ interface MessageItemProps {
   message: MessageStreamItem;
   thinkingExpanded: boolean;
   onToggleThinking: () => void;
+  workingDir?: string;
 }
 
-function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageItemProps) {
+function MessageItem({ message, thinkingExpanded, onToggleThinking, workingDir }: MessageItemProps) {
   switch (message.type) {
     case 'user':
       // Support both old string format and new object format with images
@@ -166,14 +253,8 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
       return <AssistantMessage content={message.content as string} />;
     case 'thinking':
       return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
-    case 'bash_tool':
-      return <BashToolMessage content={message.content as BashToolContent} />;
-    case 'mcp_tool':
-      return <McpToolMessage content={message.content as McpToolContent} />;
-    case 'tool_use':
-      return <ToolUseMessage content={message.content as ToolUseContent} />;
-    case 'tool_result':
-      return <ToolResultMessage content={message.content as ToolResultContent} />;
+    case 'tool':
+      return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
     case 'system':
       return <SystemMessage content={message.content as SystemMessageContent} />;
     case 'question':
@@ -238,7 +319,7 @@ interface ThinkingMessageProps {
 function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps) {
   return (
     <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[90%] rounded-lg border border-border/50 overflow-hidden">
+      <div className=" rounded-lg border border-border/50 overflow-hidden">
         <button
           onClick={onToggle}
           className="w-full px-4 py-2 bg-bg-secondary/50 border-b border-border/50 text-sm
@@ -262,16 +343,236 @@ function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps
   );
 }
 
-function BashToolMessage({ content }: { content: BashToolContent }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+// Unified ToolMessage component for all tools
+function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir?: string }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const inp = content.input as Record<string, unknown>;
 
-  // Generate compact description from command
-  const compactDescription = content.description || content.command.split('\n')[0].slice(0, 60) + (content.command.length > 60 ? '...' : '');
+  // Helper to format file paths
+  const fmtPath = (path: string) => formatFilePath(path, workingDir);
+
+  // Get tool display info based on toolName
+  const getToolInfo = (): { icon: string; description: string } => {
+    switch (content.toolName) {
+      case 'Bash': {
+        const command = inp.command as string || '';
+        const description = inp.description as string || command.split('\n')[0].slice(0, 60) + (command.length > 60 ? '...' : '');
+        return { icon: '💻', description };
+      }
+      case 'Read': {
+        return { icon: '📖', description: fmtPath(inp.file_path as string || '') };
+      }
+      case 'Write': {
+        return { icon: '✏️', description: fmtPath(inp.file_path as string || '') };
+      }
+      case 'Edit': {
+        return { icon: '🔧', description: fmtPath(inp.file_path as string || '') };
+      }
+      case 'Glob': {
+        const pattern = inp.pattern as string || '';
+        const path = inp.path as string || '';
+        return { icon: '🔍', description: pattern + (path ? ` in ${fmtPath(path)}` : '') };
+      }
+      case 'Grep': {
+        const pattern = inp.pattern as string || '';
+        const path = inp.path as string || '';
+        return { icon: '🔎', description: `"${pattern}"` + (path ? ` in ${fmtPath(path)}` : '') };
+      }
+      case 'Task': {
+        const taskDescription = inp.description as string || inp.prompt as string || '';
+        return { icon: '🤖', description: taskDescription.slice(0, 60) + (taskDescription.length > 60 ? '...' : '') };
+      }
+      case 'WebFetch': {
+        return { icon: '🌐', description: inp.url as string || '' };
+      }
+      case 'WebSearch': {
+        return { icon: '🔍', description: inp.query as string || '' };
+      }
+      case 'TodoWrite': {
+        return { icon: '📝', description: 'Update todo list' };
+      }
+      default: {
+        // For MCP tools, extract a nicer name
+        if (content.toolName.startsWith('mcp__')) {
+          const browserInfo = formatBrowserTool(content.toolName, content.input);
+          if (browserInfo) {
+            return { icon: '🌐', description: `${browserInfo.prefix}:${browserInfo.shortName} ${browserInfo.description}` };
+          }
+          // Generic MCP tool
+          const shortName = content.toolName.replace(/^mcp__[^_]+__/, '');
+          return { icon: '🔌', description: shortName };
+        }
+        return { icon: '🔧', description: content.toolName };
+      }
+    }
+  };
+
+  const toolInfo = getToolInfo();
+
+  // Render expanded content based on tool type
+  const renderExpandedContent = () => {
+    // Bash tool - show command and output
+    if (content.toolName === 'Bash') {
+      const command = inp.command as string || '';
+      return (
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+          <div className="border-b border-border">
+            <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
+              Command
+            </div>
+            <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto">
+              {command}
+            </pre>
+          </div>
+          <div>
+            <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+              Output
+              {!content.isComplete && <span className="text-accent-warning">...</span>}
+            </div>
+            <pre className={clsx(
+              'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+              content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+            )}>
+              {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+            </pre>
+          </div>
+        </div>
+      );
+    }
+
+    // Edit tool - show diff (error message only if failed)
+    if (content.toolName === 'Edit') {
+      const oldString = inp.old_string as string || '';
+      const newString = inp.new_string as string || '';
+      const filePath = inp.file_path as string || '';
+      return (
+        <div className="mt-1 ml-4 ">
+          <DiffView toolName="Edit" filePath={fmtPath(filePath)} oldContent={oldString} newContent={newString} />
+          {content.isError && content.output && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-accent-danger/10 text-accent-danger text-sm font-mono">
+              {content.output}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Write tool - show new file content
+    if (content.toolName === 'Write') {
+      const fileContent = inp.content as string || '';
+      const filePath = inp.file_path as string || '';
+      return (
+        <div className="mt-1 ml-4 ">
+          <DiffView toolName="Write" filePath={fmtPath(filePath)} newContent={fileContent} />
+          {content.output && (
+            <div className="mt-2 border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Result</div>
+              <pre className={clsx(
+                'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto',
+                content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+              )}>{content.output}</pre>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Read tool - show output only (input info is already in header)
+    if (content.toolName === 'Read') {
+      return (
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+          <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+            Output
+            {!content.isComplete && <span className="text-accent-warning">...</span>}
+          </div>
+          <pre className={clsx(
+            'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+          )}>
+            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+          </pre>
+        </div>
+      );
+    }
+
+    // Screenshot tool - show image
+    if (content.toolName.includes('take_screenshot') || content.toolName.includes('browser_take_screenshot')) {
+      const imageData = extractBase64Image(content.output);
+      if (imageData) {
+        return (
+          <div className="mt-1 ml-4 rounded-lg border border-border overflow-hidden">
+            <img
+              src={`data:${imageData.mimeType};base64,${imageData.data}`}
+              alt="Screenshot"
+              className="max-w-full h-auto"
+            />
+          </div>
+        );
+      }
+      // Fall through to default if no image data
+    }
+
+    // Default: show input and output
+    return (
+      <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+        <div className="border-b border-border">
+          <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Input</div>
+          <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto max-h-48 overflow-y-auto">
+            {JSON.stringify(content.input, null, 2)}
+          </pre>
+        </div>
+        <div>
+          <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+            Output
+            {!content.isComplete && <span className="text-accent-warning">...</span>}
+          </div>
+          <pre className={clsx(
+            'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+          )}>
+            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+          </pre>
+        </div>
+      </div>
+    );
+  };
+
+  // Check if this is a screenshot tool with image data - render without expand/collapse
+  const isScreenshotTool = content.toolName.includes('take_screenshot') || content.toolName.includes('browser_take_screenshot');
+  const screenshotImageData = isScreenshotTool ? extractBase64Image(content.output) : null;
+
+  if (isScreenshotTool && screenshotImageData) {
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <span className={clsx(
+              'w-2 h-2 rounded-full flex-shrink-0',
+              content.isComplete
+                ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
+                : 'bg-accent-warning animate-pulse'
+            )}></span>
+            <span className="text-base">{toolInfo.icon}</span>
+            <span className="text-text-primary font-medium">{content.toolName}</span>
+            <span className="text-text-secondary text-sm truncate max-w-[400px]">
+              {toolInfo.description}
+            </span>
+          </div>
+          <div className="mt-1 ml-4 rounded-lg border border-border overflow-hidden">
+            <img
+              src={`data:${screenshotImageData.mimeType};base64,${screenshotImageData.data}`}
+              alt="Screenshot"
+              className="max-w-full h-auto"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="message-item" className="flex justify-start">
       <div className="rounded-lg overflow-hidden">
-        {/* Compact header - always visible */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
@@ -282,44 +583,21 @@ function BashToolMessage({ content }: { content: BashToolContent }) {
               ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
               : 'bg-accent-warning animate-pulse'
           )}></span>
-          <span className="text-text-primary font-medium">Bash</span>
-          <span className="text-text-secondary text-sm">{compactDescription}</span>
+          <span className="text-base">{toolInfo.icon}</span>
+          <span className="text-text-primary font-medium">{content.toolName}</span>
+          <span className="text-text-secondary text-sm truncate max-w-[400px]">
+            {toolInfo.description}
+          </span>
+          <svg
+            className={clsx('w-4 h-4 text-text-secondary transition-transform', isExpanded && 'rotate-180')}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </button>
-
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
-            {/* IN Section: Command */}
-            <div className="border-b border-border">
-              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
-                IN
-              </div>
-              <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto">
-                {content.command}
-              </pre>
-            </div>
-
-            {/* OUT Section: Output */}
-            <div>
-              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
-                OUT
-                {!content.isComplete && (
-                  <span className="text-accent-warning">...</span>
-                )}
-              </div>
-              <pre
-                className={clsx(
-                  'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-                  content.isError
-                    ? 'bg-accent-danger/10 text-accent-danger'
-                    : 'bg-bg-secondary text-text-secondary'
-                )}
-              >
-                {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-              </pre>
-            </div>
-          </div>
-        )}
+        {isExpanded && renderExpandedContent()}
       </div>
     </div>
   );
@@ -418,368 +696,6 @@ function formatBrowserTool(toolName: string, input: unknown): { prefix: string; 
   };
 }
 
-function McpToolMessage({ content }: { content: McpToolContent }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  // Check if this is a browser tool
-  const browserInfo = formatBrowserTool(content.toolName, content.input);
-
-  // Generate compact description from input (fallback for non-browser tools)
-  const inputStr = JSON.stringify(content.input);
-  const compactDescription = inputStr.length > 60 ? inputStr.slice(0, 60) + '...' : inputStr;
-
-  return (
-    <div data-testid="message-item" className="flex justify-start">
-      <div className="rounded-lg overflow-hidden">
-        {/* Compact header - always visible */}
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
-        >
-          <span className={clsx(
-            'w-2 h-2 rounded-full flex-shrink-0',
-            content.isComplete
-              ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
-              : 'bg-accent-warning animate-pulse'
-          )}></span>
-
-          {browserInfo ? (
-            // Browser/Playwright tool: show simplified format
-            <>
-              <span className="text-text-secondary text-sm">{browserInfo.prefix}:</span>
-              <span className="text-text-primary font-medium">{browserInfo.shortName}</span>
-              {browserInfo.description && (
-                <span className="text-text-secondary text-sm truncate max-w-[300px]">{browserInfo.description}</span>
-              )}
-            </>
-          ) : (
-            // Other MCP tools: show original format
-            <>
-              <span className="text-text-primary font-medium">{content.toolName}</span>
-              <span className="text-text-secondary text-sm">{compactDescription}</span>
-            </>
-          )}
-        </button>
-
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
-            {/* IN Section: Input */}
-            <div className="border-b border-border">
-              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
-                IN
-              </div>
-              <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto whitespace-pre-wrap">
-                {JSON.stringify(content.input, null, 2)}
-              </pre>
-            </div>
-
-            {/* OUT Section: Output */}
-            <div>
-              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
-                OUT
-                {!content.isComplete && (
-                  <span className="text-accent-warning">...</span>
-                )}
-              </div>
-              <pre
-                className={clsx(
-                  'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-                  content.isError
-                    ? 'bg-accent-danger/10 text-accent-danger'
-                    : 'bg-bg-secondary text-text-secondary'
-                )}
-              >
-                {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-              </pre>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface ToolUseContent {
-  toolName: string;
-  toolUseId: string;
-  input: unknown;
-}
-
-// Helper to format file tool display
-function formatFileTool(toolName: string, input: unknown): { icon: string; description: string; filePath?: string } | null {
-  const inp = input as Record<string, unknown>;
-
-  switch (toolName) {
-    case 'Read': {
-      const filePath = inp.file_path as string | undefined;
-      const offset = inp.offset as number | undefined;
-      const limit = inp.limit as number | undefined;
-      let desc = filePath || '';
-      if (offset !== undefined || limit !== undefined) {
-        const parts = [];
-        if (offset !== undefined) parts.push(`offset: ${offset}`);
-        if (limit !== undefined) parts.push(`limit: ${limit}`);
-        desc += ` (${parts.join(', ')})`;
-      }
-      return { icon: '📖', description: desc, filePath };
-    }
-    case 'Write': {
-      const filePath = inp.file_path as string | undefined;
-      return { icon: '✏️', description: filePath || '', filePath };
-    }
-    case 'Edit': {
-      const filePath = inp.file_path as string | undefined;
-      return { icon: '🔧', description: filePath || '', filePath };
-    }
-    case 'Glob': {
-      const pattern = inp.pattern as string | undefined;
-      const path = inp.path as string | undefined;
-      return { icon: '🔍', description: pattern ? `${pattern}${path ? ` in ${path}` : ''}` : '' };
-    }
-    case 'Grep': {
-      const pattern = inp.pattern as string | undefined;
-      const path = inp.path as string | undefined;
-      return { icon: '🔎', description: pattern ? `"${pattern}"${path ? ` in ${path}` : ''}` : '' };
-    }
-    default:
-      return null;
-  }
-}
-
-// Helper to get content preview with line count info
-function getContentPreview(content: string, maxLines: number = 5): { preview: string; totalLines: number; isLong: boolean } {
-  const lines = content.split('\n');
-  const totalLines = lines.length;
-  const isLong = totalLines > maxLines;
-  const preview = isLong ? lines.slice(0, maxLines).join('\n') : content;
-  return { preview, totalLines, isLong };
-}
-
-// Component for Write/Edit content display with collapse
-function FileContentView({ toolName, input }: {
-  toolName: 'Write' | 'Edit';
-  input: unknown;
-}) {
-  const [showFull, setShowFull] = useState(false);
-  const inp = input as Record<string, unknown>;
-  const filePath = inp.file_path as string || '';
-
-  if (toolName === 'Write') {
-    const content = inp.content as string || '';
-    const { preview, totalLines, isLong } = getContentPreview(content, 8);
-
-    return (
-      <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
-        <div className="px-3 py-1.5 bg-bg-tertiary border-b border-border flex items-center justify-between">
-          <span className="font-mono text-xs text-text-secondary truncate">{filePath}</span>
-          <span className="text-xs text-text-secondary">{totalLines} lines</span>
-        </div>
-        <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto whitespace-pre-wrap">
-          {showFull ? content : preview}
-          {isLong && !showFull && (
-            <span className="text-text-secondary/50">...</span>
-          )}
-        </pre>
-        {isLong && (
-          <button
-            onClick={() => setShowFull(!showFull)}
-            className="w-full px-3 py-1.5 bg-bg-tertiary border-t border-border text-xs text-text-secondary hover:text-text-primary transition-colors"
-          >
-            {showFull ? '▲ Show less' : `▼ Show all ${totalLines} lines`}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // Edit tool
-  const oldString = inp.old_string as string || '';
-  const newString = inp.new_string as string || '';
-  const oldPreview = getContentPreview(oldString, 4);
-  const newPreview = getContentPreview(newString, 4);
-  const totalLines = Math.max(oldPreview.totalLines, newPreview.totalLines);
-  const isLong = oldPreview.isLong || newPreview.isLong;
-
-  return (
-    <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
-      <div className="px-3 py-1.5 bg-bg-tertiary border-b border-border flex items-center justify-between">
-        <span className="font-mono text-xs text-text-secondary truncate">{filePath}</span>
-        <span className="text-xs text-text-secondary">{totalLines} lines</span>
-      </div>
-      <div className="p-3 bg-bg-secondary text-sm overflow-x-auto space-y-2">
-        <div>
-          <span className="text-accent-danger text-xs font-medium">- old</span>
-          <pre className="mt-1 text-accent-danger/80 whitespace-pre-wrap">
-            {showFull ? oldString : oldPreview.preview}
-            {oldPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
-          </pre>
-        </div>
-        <div>
-          <span className="text-accent-success text-xs font-medium">+ new</span>
-          <pre className="mt-1 text-accent-success/80 whitespace-pre-wrap">
-            {showFull ? newString : newPreview.preview}
-            {newPreview.isLong && !showFull && <span className="text-text-secondary/50">...</span>}
-          </pre>
-        </div>
-      </div>
-      {isLong && (
-        <button
-          onClick={() => setShowFull(!showFull)}
-          className="w-full px-3 py-1.5 bg-bg-tertiary border-t border-border text-xs text-text-secondary hover:text-text-primary transition-colors"
-        >
-          {showFull ? '▲ Show less' : '▼ Show full content'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ToolUseMessage({ content }: { content: ToolUseContent }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const fileInfo = formatFileTool(content.toolName, content.input);
-
-  if (fileInfo) {
-    const isWriteOrEdit = content.toolName === 'Write' || content.toolName === 'Edit';
-
-    // Compact display for file tools
-    return (
-      <div data-testid="message-item" className="flex justify-start">
-        <div className="rounded-lg overflow-hidden">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-tertiary/50 rounded-lg transition-colors"
-          >
-            <span className="text-base">{fileInfo.icon}</span>
-            <span className="text-text-primary font-medium">{content.toolName}</span>
-            <span className="text-text-secondary text-sm truncate max-w-[400px] font-mono">
-              {fileInfo.description}
-            </span>
-            <svg
-              className={clsx('w-4 h-4 text-text-secondary transition-transform', isExpanded && 'rotate-180')}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {isExpanded && (
-            isWriteOrEdit ? (
-              <FileContentView
-                toolName={content.toolName as 'Write' | 'Edit'}
-                input={content.input}
-              />
-            ) : (
-              <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
-                <pre className="p-3 bg-bg-secondary text-text-secondary text-sm overflow-x-auto">
-                  {JSON.stringify(content.input, null, 2)}
-                </pre>
-              </div>
-            )
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Default display for other tools
-  return (
-    <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-2 bg-bg-tertiary border-b border-border font-mono text-sm">
-          {content.toolName}
-        </div>
-        <pre className="p-4 bg-bg-secondary text-text-secondary text-sm overflow-x-auto">
-          {JSON.stringify(content.input, null, 2)}
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-interface ToolResultContent {
-  toolUseId: string;
-  content: string;
-  isError: boolean;
-}
-
-// Base64 prefixes for common image formats
-const BASE64_PNG_PREFIX = 'iVBORw0KGgo';
-const BASE64_JPEG_PREFIX = '/9j/';
-const BASE64_GIF_PREFIX = 'R0lGOD';
-
-/**
- * Extract base64 image data from tool_result content.
- * Content format: [{"type":"text","text":"base64data..."}]
- */
-function extractBase64Image(content: string): { data: string; mimeType: string } | null {
-  try {
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return null;
-    }
-
-    for (const item of parsed) {
-      if (item.type === 'text' && typeof item.text === 'string') {
-        const text = item.text;
-        if (text.startsWith(BASE64_PNG_PREFIX)) {
-          return { data: text, mimeType: 'image/png' };
-        }
-        if (text.startsWith(BASE64_JPEG_PREFIX)) {
-          return { data: text, mimeType: 'image/jpeg' };
-        }
-        if (text.startsWith(BASE64_GIF_PREFIX)) {
-          return { data: text, mimeType: 'image/gif' };
-        }
-      }
-    }
-  } catch {
-    // Not valid JSON
-  }
-  return null;
-}
-
-function ToolResultMessage({ content }: { content: ToolResultContent }) {
-  // Check if content is a base64 image
-  const imageData = content.content ? extractBase64Image(content.content) : null;
-
-  if (imageData) {
-    return (
-      <div data-testid="message-item" className="flex justify-start">
-        <div className="max-w-[90%] rounded-lg border border-border overflow-hidden">
-          <img
-            src={`data:${imageData.mimeType};base64,${imageData.data}`}
-            alt="Screenshot"
-            className="max-w-full h-auto"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div data-testid="message-item" className="flex justify-start">
-      <div
-        data-error={content.isError || undefined}
-        className={clsx(
-          'max-w-[90%] rounded-lg border overflow-hidden',
-          content.isError ? 'border-accent-danger' : 'border-border'
-        )}
-      >
-        <pre
-          className={clsx(
-            'p-4 text-sm overflow-x-auto whitespace-pre-wrap',
-            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-          )}
-        >
-          {content.content}
-        </pre>
-      </div>
-    </div>
-  );
-}
 
 function SystemMessage({ content }: { content: SystemMessageContent }) {
   const [isExpanded, setIsExpanded] = useState(false);
