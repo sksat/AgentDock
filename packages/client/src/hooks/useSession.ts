@@ -292,6 +292,9 @@ export function useSession(): UseSessionReturn {
   // Pending message to send after session creation
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
+  // Track if we're waiting for a session we created (to auto-select it)
+  const [pendingSessionCreate, setPendingSessionCreate] = useState(false);
+
   // Send pending message when session is created
   useEffect(() => {
     if (activeSessionId && pendingMessage) {
@@ -395,6 +398,7 @@ export function useSession(): UseSessionReturn {
 
   const createSession = useCallback(
     (name?: string, workingDir?: string) => {
+      setPendingSessionCreate(true);
       send({ type: 'create_session', name, workingDir });
     },
     [send]
@@ -461,6 +465,7 @@ export function useSession(): UseSessionReturn {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
         setPendingMessage(content);
+        setPendingSessionCreate(true);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
         send({ type: 'create_session', name: sessionName, workingDir });
@@ -786,19 +791,22 @@ export function useSession(): UseSessionReturn {
             }
             return [newSession, ...prev];
           });
-          // Automatically select the new session
-          setActiveSessionId(newSession.id);
-          // Update URL
-          window.history.pushState({ sessionId: newSession.id }, '', `/session/${newSession.id}`);
-          // Initialize empty messages for new session
-          setSessionMessages((prev) => {
-            const newMap = new Map(prev);
-            if (!newMap.has(newSession.id)) {
-              newMap.set(newSession.id, []);
-            }
-            return newMap;
-          });
-          setError(null);
+          // Only auto-select if we created this session (not from another client like Slack)
+          if (pendingSessionCreate) {
+            setPendingSessionCreate(false);
+            setActiveSessionId(newSession.id);
+            // Update URL
+            window.history.pushState({ sessionId: newSession.id }, '', `/session/${newSession.id}`);
+            // Initialize empty messages for new session
+            setSessionMessages((prev) => {
+              const newMap = new Map(prev);
+              if (!newMap.has(newSession.id)) {
+                newMap.set(newSession.id, []);
+              }
+              return newMap;
+            });
+            setError(null);
+          }
           break;
         }
 
@@ -1232,7 +1240,7 @@ export function useSession(): UseSessionReturn {
         }
       }
     },
-    [activeSessionId, updateSessionMessages, send]
+    [activeSessionId, updateSessionMessages, send, pendingSessionCreate]
   );
 
   return {
