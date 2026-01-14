@@ -385,6 +385,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Key: toolUseId, Value: filename from the screenshot tool input
   const pendingScreenshots = new Map<string, string>();
 
+  // Track TodoWrite tool calls to skip their tool_result messages
+  const pendingTodoWrites = new Set<string>();
+
   function getOrCreateAccumulator(sessionId: string) {
     if (!turnAccumulator.has(sessionId)) {
       turnAccumulator.set(sessionId, { text: '', thinking: '' });
@@ -510,6 +513,23 @@ export function createServer(options: ServerOptions): BridgeServer {
             content: { requestId: toolUseId, questions: askInput.questions },
             timestamp,
           });
+        } else if (toolName === 'TodoWrite') {
+          // Handle TodoWrite specially - convert to todo_update message
+          const todoInput = input as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string }> };
+          sendToSession(sessionId, {
+            type: 'todo_update',
+            sessionId,
+            toolUseId,
+            todos: todoInput.todos,
+          });
+          // Store in history as todo_update
+          sessionManager.addToHistory(sessionId, {
+            type: 'todo_update',
+            content: { toolUseId, todos: todoInput.todos },
+            timestamp,
+          });
+          // Track this tool_use ID to skip its tool_result
+          pendingTodoWrites.add(toolUseId);
         } else {
           sendToSession(sessionId, {
             type: 'tool_use',
@@ -540,6 +560,15 @@ export function createServer(options: ServerOptions): BridgeServer {
         const toolUseId = (eventData as { toolUseId: string }).toolUseId;
         const content = (eventData as { content: string }).content;
         const isError = (eventData as { isError: boolean }).isError;
+
+        // Skip TodoWrite tool results unless it's an error
+        if (pendingTodoWrites.has(toolUseId)) {
+          pendingTodoWrites.delete(toolUseId);
+          if (!isError) {
+            break;
+          }
+          // Fall through to show error message
+        }
 
         // Check if this is a screenshot tool result
         const screenshotFilename = pendingScreenshots.get(toolUseId);

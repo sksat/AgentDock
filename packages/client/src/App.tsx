@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { useNavigation } from './hooks/useNavigation';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
+import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
+import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
 import type { SidebarSession } from './components';
 import './App.css';
@@ -79,6 +81,7 @@ function App() {
     modelUsage,
     globalUsage,
     screencast,
+    todoState,
     listSessions,
     createSession,
     selectSession,
@@ -111,6 +114,8 @@ function App() {
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' } | null>(null);
   const [sessionView, setSessionView] = useState<SessionView>('stream');
+  const [todoPanelExpanded, setTodoPanelExpanded] = useState(true);
+  const messageStreamRef = useRef<MessageStreamHandle>(null);
 
   const showToast = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ title, message, type });
@@ -319,7 +324,7 @@ function App() {
             <main className="flex-1 flex flex-col overflow-hidden">
               {/* Messages or Browser view based on sessionView */}
               {sessionView === 'stream' ? (
-                <MessageStream messages={messages} />
+                <MessageStream ref={messageStreamRef} messages={messages} />
               ) : (
                 <BrowserView
                   frame={screencast?.frame ?? null}
@@ -417,8 +422,29 @@ function App() {
                 }}
               />
             </main>
+
           </>
           )
+        )}
+
+        {/* Todo Panel - overlay on right side */}
+        {currentView === 'sessions' && activeSessionId && todoState.current.length > 0 && (
+          <TodoPanel
+            current={todoState.current}
+            history={todoState.history}
+            isExpanded={todoPanelExpanded}
+            onToggleExpanded={() => setTodoPanelExpanded(!todoPanelExpanded)}
+            onScrollToUpdate={(toolUseId) => {
+              // Switch to stream view if not already showing
+              if (sessionView !== 'stream') {
+                setSessionView('stream');
+              }
+              // Scroll to the todo update after a brief delay to ensure view is rendered
+              setTimeout(() => {
+                messageStreamRef.current?.scrollToTodoUpdate(toolUseId);
+              }, 50);
+            }}
+          />
         )}
         </div>
       </div>
