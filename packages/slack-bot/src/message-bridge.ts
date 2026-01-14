@@ -4,6 +4,7 @@ import type {
   ServerMessage,
   SessionInfo,
   PermissionResult,
+  SlackThreadBinding,
 } from '@agent-dock/shared';
 
 export type MessageListener = (message: ServerMessage) => void;
@@ -216,6 +217,29 @@ export class MessageBridge {
     this.send({
       type: 'attach_session',
       sessionId,
+    });
+  }
+
+  // ==================== Thread Binding Operations ====================
+
+  /**
+   * Save a thread binding to the server.
+   * The server will persist it to the database.
+   */
+  saveThreadBinding(binding: SlackThreadBinding): void {
+    this.send({
+      type: 'save_thread_binding',
+      binding,
+    });
+  }
+
+  /**
+   * Request all thread bindings from the server.
+   * The response will come via a 'thread_bindings_list' message to listeners.
+   */
+  requestThreadBindings(): void {
+    this.send({
+      type: 'load_thread_bindings',
     });
   }
 
