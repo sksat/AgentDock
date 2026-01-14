@@ -153,6 +153,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
 
   useEffect(() => {
     if (globalSettings) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplaySettings(globalSettings);
     }
   }, [globalSettings]);

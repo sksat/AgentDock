@@ -51,7 +51,7 @@ describe('useWebSocket', () => {
   beforeEach(() => {
     mockInstances = [];
     originalWebSocket = global.WebSocket;
-    // @ts-ignore
+    // @ts-expect-error - Mock WebSocket for testing
     global.WebSocket = MockWebSocket;
   });
 

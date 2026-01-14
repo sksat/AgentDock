@@ -160,6 +160,7 @@ function App() {
   // Show toast when error occurs
   useEffect(() => {
     if (error) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       showToast('Error', error, 'error');
     }
   }, [error, showToast]);

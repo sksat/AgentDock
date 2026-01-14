@@ -299,6 +299,7 @@ export function useSession(): UseSessionReturn {
   useEffect(() => {
     if (activeSessionId && pendingMessage) {
       // Add user message to the session
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionMessages((prev) => {
         const newMap = new Map(prev);
         const current = newMap.get(activeSessionId) ?? [];
@@ -332,6 +333,7 @@ export function useSession(): UseSessionReturn {
     if (sessionId) {
       const sessionExists = sessions.some((s) => s.id === sessionId);
       if (sessionExists && activeSessionId !== sessionId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setActiveSessionId(sessionId);
         setError(null);
         // Request session history if not already loaded

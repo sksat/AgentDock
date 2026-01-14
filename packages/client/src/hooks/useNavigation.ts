@@ -6,17 +6,17 @@ export type NavView = 'sessions' | 'usage' | 'settings';
  * Hook for managing navigation between main views (Sessions, Usage, Settings).
  * Handles URL-based routing and browser history integration.
  */
+// Extract view from URL pathname
+function getViewFromUrl(): NavView {
+  const path = window.location.pathname;
+  if (path === '/settings') return 'settings';
+  if (path === '/usage') return 'usage';
+  // '/' or '/session/:id' -> sessions view
+  return 'sessions';
+}
+
 export function useNavigation() {
   const [currentView, setCurrentView] = useState<NavView>(() => getViewFromUrl());
-
-  // Extract view from URL pathname
-  function getViewFromUrl(): NavView {
-    const path = window.location.pathname;
-    if (path === '/settings') return 'settings';
-    if (path === '/usage') return 'usage';
-    // '/' or '/session/:id' -> sessions view
-    return 'sessions';
-  }
 
   // Handle browser back/forward navigation
   useEffect(() => {

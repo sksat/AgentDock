@@ -25,6 +25,7 @@ window.ResizeObserver = MockResizeObserver;
 
 // Mock Path2D for uplot tests
 class MockPath2D {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_path?: string | MockPath2D) {}
   addPath() {}
   closePath() {}
