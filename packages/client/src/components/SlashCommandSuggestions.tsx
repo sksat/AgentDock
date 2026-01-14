@@ -158,7 +158,7 @@ export function SlashCommandSuggestions({
                 className={clsx(
                   'w-full px-3 py-2 text-left transition-colors flex items-center justify-between gap-2',
                   isSelected
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary/60 text-white'
                     : 'hover:bg-bg-tertiary text-text-primary'
                 )}
               >
@@ -184,8 +184,10 @@ export function SlashCommandSuggestions({
                 {command.name === 'thinking' ? (
                   <div
                     className={clsx(
-                      'w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0',
-                      thinkingEnabled ? 'bg-accent-primary' : (isSelected ? 'bg-white/30' : 'bg-gray-600')
+                      'w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0 border',
+                      thinkingEnabled
+                        ? 'bg-green-500 border-green-500'
+                        : (isSelected ? 'bg-white/20 border-white/40' : 'bg-gray-700 border-gray-500')
                     )}
                   >
                     <div
