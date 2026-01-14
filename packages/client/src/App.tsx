@@ -203,8 +203,9 @@ function App() {
               navigate('sessions');
               deselectSession();
             }}
-            className="text-base font-semibold text-text-primary hover:text-accent-primary transition-colors"
+            className="flex items-center gap-2 text-base font-semibold text-text-primary hover:text-accent-primary transition-colors"
           >
+            <img src="/agentdock.svg" alt="" className="h-6" />
             AgentDock
           </button>
           <span className="text-text-secondary">/</span>
