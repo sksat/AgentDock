@@ -9,6 +9,10 @@ AgentDock は Claude Code などの AI エージェント CLI をブラウザか
 
 将来的には codex-cli, gemini-cli など他の AI エージェント CLI にも対応予定です。
 
+## Development Workflow
+
+機能開発は基本的にブランチを切って TDD で進める。
+
 ## Architecture
 
 ```
