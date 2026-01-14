@@ -432,6 +432,24 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       );
     }
 
+    // Read tool - show output only (input info is already in header)
+    if (content.toolName === 'Read') {
+      return (
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+          <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
+            Output
+            {!content.isComplete && <span className="text-accent-warning">...</span>}
+          </div>
+          <pre className={clsx(
+            'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+          )}>
+            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+          </pre>
+        </div>
+      );
+    }
+
     // Default: show input and output
     return (
       <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
