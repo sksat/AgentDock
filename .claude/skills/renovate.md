@@ -122,7 +122,7 @@ main を fetch せずに rebase すると、リモートとの差分が解消さ
 ### マージコマンド
 
 ```bash
-gh pr merge <PR番号> --squash --delete-branch
+gh pr merge <PR番号> --delete-branch
 ```
 
 ## 6. monorepo 対応
