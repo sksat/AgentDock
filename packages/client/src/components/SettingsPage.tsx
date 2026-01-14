@@ -149,6 +149,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultModel: 'claude-opus-4-5-20250514',
     defaultPermissionMode: 'ask',
     defaultThinkingEnabled: false,
+    defaultUseContainer: false,
   });
 
   useEffect(() => {
@@ -249,6 +250,19 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
               onToggle={() => updateGlobalSetting('defaultThinkingEnabled', !displaySettings.defaultThinkingEnabled)}
               label="Enable by default"
               description="Claude will show its reasoning process (uses more tokens)"
+            />
+          </SettingCard>
+
+          {/* Container Mode */}
+          <SettingCard
+            title="Container Mode"
+            description="Run Claude Code inside an isolated container"
+          >
+            <ToggleSwitch
+              enabled={displaySettings.defaultUseContainer}
+              onToggle={() => updateGlobalSetting('defaultUseContainer', !displaySettings.defaultUseContainer)}
+              label="Enable by default"
+              description="Sessions run in Podman containers for isolation (requires server setup)"
             />
           </SettingCard>
 

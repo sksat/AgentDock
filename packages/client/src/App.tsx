@@ -200,8 +200,8 @@ function App() {
 
   // Wrapper for sendMessage that includes thinkingEnabled
   const handleSendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string) => {
-      sendMessage(content, images, workingDir, thinkingEnabled);
+    (content: string, images?: ImageAttachment[], workingDir?: string, useContainer?: boolean) => {
+      sendMessage(content, images, workingDir, thinkingEnabled, useContainer);
     },
     [sendMessage, thinkingEnabled]
   );
@@ -266,6 +266,8 @@ function App() {
           isOpen={isNewSessionModalOpen}
           onClose={() => setIsNewSessionModalOpen(false)}
           onCreateSession={createSession}
+          containerModeAvailable={true}
+          defaultUseContainer={globalSettings?.defaultUseContainer ?? false}
         />
 
         {/* Navigation Rail - always visible */}
@@ -307,6 +309,8 @@ function App() {
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
+                containerModeAvailable={true}
+                defaultUseContainer={globalSettings?.defaultUseContainer ?? false}
               />
             ) : (
           <>

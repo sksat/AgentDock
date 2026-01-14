@@ -4,26 +4,35 @@ import clsx from 'clsx';
 export interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSession: (name?: string, workingDir?: string) => void;
+  onCreateSession: (name?: string, workingDir?: string, useContainer?: boolean) => void;
+  /** Whether container mode is available on the server */
+  containerModeAvailable?: boolean;
+  /** Default value for useContainer (from global settings) */
+  defaultUseContainer?: boolean;
 }
 
 export function NewSessionModal({
   isOpen,
   onClose,
   onCreateSession,
+  containerModeAvailable = false,
+  defaultUseContainer = false,
 }: NewSessionModalProps) {
   const [name, setName] = useState('');
   const [workingDir, setWorkingDir] = useState('');
+  const [useContainer, setUseContainer] = useState(defaultUseContainer);
 
   const handleSubmit = useCallback(() => {
     onCreateSession(
       name.trim() || undefined,
-      workingDir.trim() || undefined
+      workingDir.trim() || undefined,
+      containerModeAvailable ? useContainer : undefined
     );
     setName('');
     setWorkingDir('');
+    setUseContainer(defaultUseContainer);
     onClose();
-  }, [name, workingDir, onCreateSession, onClose]);
+  }, [name, workingDir, useContainer, containerModeAvailable, defaultUseContainer, onCreateSession, onClose]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -105,6 +114,35 @@ export function NewSessionModal({
             If not specified, a new directory will be created in ~/.agent-dock/sessions/
           </p>
         </div>
+
+        {/* Container Mode */}
+        {containerModeAvailable && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setUseContainer(!useContainer)}
+              className="w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between bg-bg-tertiary hover:bg-bg-tertiary/80"
+            >
+              <div className="flex flex-col">
+                <span className="font-medium text-text-primary">Run in container</span>
+                <span className="text-xs text-text-secondary">Isolate this session in a Podman container</span>
+              </div>
+              <div
+                className={clsx(
+                  'w-11 h-6 rounded-full p-0.5 transition-colors',
+                  useContainer ? 'bg-accent-primary' : 'bg-gray-600'
+                )}
+              >
+                <div
+                  className={clsx(
+                    'w-5 h-5 rounded-full bg-white shadow-sm transition-transform',
+                    useContainer ? 'translate-x-5' : 'translate-x-0'
+                  )}
+                />
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* Buttons */}
         <div className="flex justify-end gap-3">

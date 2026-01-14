@@ -112,7 +112,7 @@ export interface UseSessionReturn {
 
   // Session management
   listSessions: () => void;
-  createSession: (name?: string, workingDir?: string) => void;
+  createSession: (name?: string, workingDir?: string, useContainer?: boolean) => void;
   selectSession: (sessionId: string) => void;
   deselectSession: () => void;
   deleteSession: (sessionId: string) => void;
@@ -450,9 +450,9 @@ export function useSession(): UseSessionReturn {
   }, [send]);
 
   const createSession = useCallback(
-    (name?: string, workingDir?: string) => {
+    (name?: string, workingDir?: string, useContainer?: boolean) => {
       setPendingSessionCreate(true);
-      send({ type: 'create_session', name, workingDir });
+      send({ type: 'create_session', name, workingDir, useContainer });
     },
     [send]
   );
@@ -513,7 +513,7 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean) => {
+    (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, useContainer?: boolean) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
@@ -521,7 +521,7 @@ export function useSession(): UseSessionReturn {
         setPendingSessionCreate(true);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
-        send({ type: 'create_session', name: sessionName, workingDir });
+        send({ type: 'create_session', name: sessionName, workingDir, useContainer });
         return;
       }
 
