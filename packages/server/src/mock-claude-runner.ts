@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { nanoid } from 'nanoid';
-import type { ClaudeRunnerEvents, StartOptions, UsageData } from './claude-runner.js';
+import type { ClaudeRunnerEvents, StartOptions, UsageData, ClaudePermissionMode } from './claude-runner.js';
 
 export interface TextStep {
   type: 'text';
@@ -115,6 +115,7 @@ export class MockClaudeRunner extends EventEmitter {
   private currentScenario: Scenario = DEFAULT_SCENARIO;
   private sessionId: string = nanoid();
   private _isRunning: boolean = false;
+  private _permissionMode: ClaudePermissionMode = 'default';
   private stepIndex: number = 0;
   private stopped: boolean = false;
   private waitingForInput: boolean = false;
@@ -130,6 +131,22 @@ export class MockClaudeRunner extends EventEmitter {
 
   get isRunning(): boolean {
     return this._isRunning;
+  }
+
+  get permissionMode(): ClaudePermissionMode {
+    return this._permissionMode;
+  }
+
+  /**
+   * Mock implementation - just updates the mode directly and emits event
+   */
+  requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean {
+    if (this._permissionMode === targetMode) {
+      return false;
+    }
+    this._permissionMode = targetMode;
+    this.emit('permission_mode_changed', { permissionMode: targetMode });
+    return true;
   }
 
   setScenario(scenario: Scenario): void {

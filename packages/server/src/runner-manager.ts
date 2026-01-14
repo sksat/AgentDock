@@ -1,5 +1,8 @@
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent } from './claude-runner.js';
+import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent, ClaudePermissionMode } from './claude-runner.js';
 import { EventEmitter } from 'events';
+
+// Re-export ClaudePermissionMode for use in server.ts
+export type { ClaudePermissionMode };
 
 export type RunnerEventType = keyof ClaudeRunnerEvents;
 export type RunnerEventHandler = (
@@ -17,6 +20,8 @@ export interface StartSessionOptions {
   images?: ImageContent[];
   /** Enable extended thinking mode */
   thinkingEnabled?: boolean;
+  /** Permission mode to use for the session */
+  permissionMode?: ClaudePermissionMode;
   onEvent: RunnerEventHandler;
 }
 
@@ -25,9 +30,11 @@ export interface StartSessionOptions {
  */
 export interface IClaudeRunner extends EventEmitter {
   readonly isRunning: boolean;
+  readonly permissionMode: ClaudePermissionMode;
   start(prompt: string, options?: StartOptions): void;
   stop(): void;
   sendInput(input: string): void;
+  requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean;
   on<K extends keyof ClaudeRunnerEvents>(event: K, listener: ClaudeRunnerEvents[K]): this;
 }
 
@@ -83,6 +90,7 @@ export class RunnerManager {
       sessionId: options.claudeSessionId,
       images: options.images,
       thinkingEnabled: options.thinkingEnabled,
+      permissionMode: options.permissionMode,
     });
   }
 
@@ -148,6 +156,7 @@ export class RunnerManager {
       'error',
       'exit',
       'permission_request',
+      'permission_mode_changed',
     ];
 
     for (const eventType of events) {
