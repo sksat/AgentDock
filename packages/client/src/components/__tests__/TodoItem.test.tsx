@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TodoItem } from '../TodoItem';
-import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
+import type { TodoItem as TodoItemType } from '@agent-dock/shared';
 
 describe('TodoItem', () => {
   it('should render pending todo', () => {

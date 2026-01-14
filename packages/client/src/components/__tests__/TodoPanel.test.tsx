@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TodoPanel } from '../TodoPanel';
-import type { TodoItem } from '@anthropic/claude-bridge-shared';
+import type { TodoItem } from '@agent-dock/shared';
 
 const createTodo = (overrides: Partial<TodoItem> = {}): TodoItem => ({
   content: 'Test task',

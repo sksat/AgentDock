@@ -5,6 +5,7 @@ import type {
   ClientMessage,
   QuestionItem,
   PermissionMode,
+  PermissionResult,
   DailyUsage,
   UsageTotals,
   BlockUsage,
@@ -116,10 +117,11 @@ export interface UseSessionReturn {
   compactSession: () => void;
   respondToPermission: (
     requestId: string,
-    response: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }
+    response: PermissionResult
   ) => void;
   respondToQuestion: (requestId: string, answers: Record<string, string>) => void;
   interrupt: () => void;
+  sendStreamInput: (content: string) => void;
 
   // Settings
   setPermissionMode: (mode: PermissionMode) => void;
@@ -901,7 +903,10 @@ export function useSession(): UseSessionReturn {
           if (message.pendingPermission) {
             setSessionPendingPermission((prev) => {
               const newMap = new Map(prev);
-              newMap.set(message.sessionId, message.pendingPermission!);
+              newMap.set(message.sessionId, {
+                sessionId: message.sessionId,
+                ...message.pendingPermission!,
+              });
               return newMap;
             });
           }

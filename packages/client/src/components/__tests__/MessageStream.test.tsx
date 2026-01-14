@@ -683,7 +683,7 @@ describe('AssistantMessage Markdown rendering', () => {
     const messages: MessageStreamItem[] = [
       { type: 'assistant', content: 'This is *italic* text', timestamp: '2024-01-01T00:00:00Z' },
     ];
-    const { container } = render(<MessageStream messages={messages} />);
+    render(<MessageStream messages={messages} />);
 
     // Check that italic text is rendered (Streamdown may use <em> or span with data attribute)
     const italicText = screen.getByText('italic');

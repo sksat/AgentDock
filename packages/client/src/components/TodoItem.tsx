@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react';
 import clsx from 'clsx';
-import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
+import type { TodoItem as TodoItemType } from '@agent-dock/shared';
 
 interface TodoItemProps {
   todo: TodoItemType;
@@ -36,7 +37,7 @@ export function TodoItem({ todo, compact = false, onClick }: TodoItemProps) {
   const displayText =
     status === 'in_progress' && activeForm ? activeForm : content;
 
-  const statusIcon = {
+  const statusIcon: Record<TodoItemType['status'], ReactNode> = {
     pending: <span className="text-text-secondary"><CheckboxEmpty /></span>,
     in_progress: <span className="text-accent-warning"><CheckboxInProgress /></span>,
     completed: <span className="text-accent-success"><CheckboxChecked /></span>,
