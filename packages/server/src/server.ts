@@ -288,6 +288,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to pending permission request (for restoring on reload)
   const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
 
+  // Map session ID to queued input (to be sent after current execution completes)
+  const sessionInputQueue = new Map<string, string[]>();
+
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
     const message: GlobalUsageMessage = {
@@ -473,6 +476,63 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
+  // Process queued input after current execution completes
+  function processQueuedInput(sessionId: string, content: string): void {
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      console.log(`[Server] processQueuedInput: session ${sessionId} not found`);
+      return;
+    }
+
+    // Update status to running
+    updateAndBroadcastStatus(sessionId, 'running');
+
+    // Start Claude CLI with MCP permission handling
+    try {
+      // Generate MCP config for this session (unless using mock)
+      let mcpConfigPath: string | undefined;
+      let permissionToolName: string | undefined;
+      if (!useMock) {
+        mcpConfigPath = generateMcpConfig(
+          sessionId,
+          wsUrl,
+          mcpServerCommand,
+          mcpServerArgs,
+          mcpServerCwd
+        );
+        permissionToolName = 'mcp__bridge__permission_prompt';
+      }
+
+      // Use global default for thinking
+      const thinkingEnabled = settingsManager.get('defaultThinkingEnabled');
+
+      runnerManager.startSession(sessionId, content, {
+        workingDir: session.workingDir,
+        claudeSessionId: session.claudeSessionId,
+        mcpConfigPath,
+        permissionToolName,
+        thinkingEnabled,
+        onEvent: (sid, eventType, data) => {
+          handleRunnerEvent(sid, eventType, data);
+          // Clean up MCP config on exit
+          if (eventType === 'exit') {
+            if (mcpConfigPath) {
+              cleanupMcpConfig(sessionId);
+            }
+          }
+        },
+      });
+    } catch (error) {
+      console.error(`[Server] processQueuedInput error:`, error);
+      updateAndBroadcastStatus(sessionId, 'idle');
+      sendToSession(sessionId, {
+        type: 'error',
+        sessionId,
+        message: error instanceof Error ? error.message : 'Failed to start Claude',
+      });
+    }
+  }
+
   // Handle runner events and forward to WebSocket
   function handleRunnerEvent(sessionId: string, eventType: RunnerEventType, data: unknown): void {
     const eventData = data as Record<string, unknown>;
@@ -620,7 +680,20 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionId,
           result: resultData.result,
         });
-        updateAndBroadcastStatus(sessionId, 'idle');
+
+        // Check if there's queued input to send
+        const queue = sessionInputQueue.get(sessionId);
+        if (queue && queue.length > 0) {
+          const nextInput = queue.shift()!;
+          if (queue.length === 0) {
+            sessionInputQueue.delete(sessionId);
+          }
+          console.log(`[Server] Processing queued input for session ${sessionId}: ${nextInput}`);
+          // Start new turn with queued input
+          processQueuedInput(sessionId, nextInput);
+        } else {
+          updateAndBroadcastStatus(sessionId, 'idle');
+        }
         break;
       }
 
@@ -1099,7 +1172,7 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'stream_input': {
-        // Send additional input to a running session
+        // Queue input for after current execution completes
         const session = sessionManager.getSession(message.sessionId);
         if (!session) {
           response = {
@@ -1110,8 +1183,8 @@ export function createServer(options: ServerOptions): BridgeServer {
           break;
         }
 
-        const sent = runnerManager.sendInputToSession(message.sessionId, message.content);
-        if (!sent) {
+        // Check if session is running
+        if (!runnerManager.hasRunningSession(message.sessionId)) {
           response = {
             type: 'error',
             sessionId: message.sessionId,
@@ -1119,6 +1192,15 @@ export function createServer(options: ServerOptions): BridgeServer {
           };
           break;
         }
+
+        // Add to queue
+        let queue = sessionInputQueue.get(message.sessionId);
+        if (!queue) {
+          queue = [];
+          sessionInputQueue.set(message.sessionId, queue);
+        }
+        queue.push(message.content);
+        console.log(`[Server] stream_input queued: sessionId=${message.sessionId}, content=${message.content}, queueSize=${queue.length}`);
 
         // Add to history and broadcast to all clients (including sender)
         const timestamp = new Date().toISOString();

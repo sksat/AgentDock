@@ -222,7 +222,10 @@ export class ClaudeRunner extends EventEmitter {
 
   sendInput(input: string): void {
     if (this.ptyProcess) {
+      console.log(`[ClaudeRunner] Sending input to PTY: ${input}`);
       this.ptyProcess.write(input + '\n');
+    } else {
+      console.log('[ClaudeRunner] sendInput called but no PTY process (child process mode)');
     }
     // Note: sendInput is not supported for child process mode (image messages)
     // as stdin is closed after sending the image
