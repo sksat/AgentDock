@@ -680,20 +680,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionId,
           result: resultData.result,
         });
-
-        // Check if there's queued input to send
-        const queue = sessionInputQueue.get(sessionId);
-        if (queue && queue.length > 0) {
-          const nextInput = queue.shift()!;
-          if (queue.length === 0) {
-            sessionInputQueue.delete(sessionId);
-          }
-          console.log(`[Server] Processing queued input for session ${sessionId}: ${nextInput}`);
-          // Start new turn with queued input
-          processQueuedInput(sessionId, nextInput);
-        } else {
-          updateAndBroadcastStatus(sessionId, 'idle');
-        }
+        // Note: Don't set idle here - wait for exit event to process queue
         break;
       }
 
@@ -709,7 +696,6 @@ export function createServer(options: ServerOptions): BridgeServer {
         const exitData = eventData as { code: number | null; signal: string | null };
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
-        updateAndBroadcastStatus(sessionId, 'idle');
 
         // If process exited with error and no result was sent, notify client
         const acc = turnAccumulator.get(sessionId);
@@ -721,6 +707,20 @@ export function createServer(options: ServerOptions): BridgeServer {
             sessionId,
             message: `Claude process exited unexpectedly (code: ${exitData.code})`,
           });
+        }
+
+        // Check if there's queued input to send (only on successful exit)
+        const queue = sessionInputQueue.get(sessionId);
+        if (exitData.code === 0 && queue && queue.length > 0) {
+          const nextInput = queue.shift()!;
+          if (queue.length === 0) {
+            sessionInputQueue.delete(sessionId);
+          }
+          console.log(`[Server] Processing queued input for session ${sessionId}: ${nextInput}`);
+          // Start new turn with queued input (use setTimeout to ensure runner is cleaned up)
+          setTimeout(() => processQueuedInput(sessionId, nextInput), 0);
+        } else {
+          updateAndBroadcastStatus(sessionId, 'idle');
         }
         break;
       }
