@@ -7,6 +7,7 @@ import { DiffView } from './DiffView';
 import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
 
 export interface MessageStreamItem {
+  id?: string;
   type: 'user' | 'assistant' | 'thinking' | 'tool' | 'system' | 'question' | 'todo_update';
   content: unknown;
   timestamp: string;
@@ -224,7 +225,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     >
       {messages.map((message, index) => (
         <MessageItem
-          key={index}
+          key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
           message={message}
           thinkingExpanded={thinkingExpanded}
           onToggleThinking={toggleThinkingExpanded}
