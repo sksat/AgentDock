@@ -36,3 +36,7 @@ coverage/
 .playwright-mcp/
 .npmrc
 *.db
+
+# Worktrees
+.worktrees/
+.worktree/
