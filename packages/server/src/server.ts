@@ -516,7 +516,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         'auto-edit': 'acceptEdits',
         'plan': 'plan',
       };
-      const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+      const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
+      const permissionMode = modeMap[sessionMode];
 
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
@@ -950,9 +951,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
 
           // Get current permission mode for sync
-          // Priority: runner's current mode > session's stored mode
+          // Priority: runner's current mode > session's stored mode > global default
           const runner = runnerManager.getRunner(message.sessionId);
-          let currentMode: PermissionMode | undefined;
+          let currentMode: PermissionMode;
           if (runner) {
             // Map ClaudePermissionMode to PermissionMode
             const reverseMap: Record<ClaudePermissionMode, PermissionMode> = {
@@ -964,6 +965,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           } else if (session.permissionMode) {
             // Use stored session permission mode
             currentMode = session.permissionMode;
+          } else {
+            // Fall back to global default
+            currentMode = settingsManager.get('defaultPermissionMode') as PermissionMode;
           }
 
           response = {
@@ -1268,7 +1272,8 @@ export function createServer(options: ServerOptions): BridgeServer {
             'auto-edit': 'acceptEdits',
             'plan': 'plan',
           };
-          const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+          const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
+          const permissionMode = modeMap[sessionMode];
 
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
@@ -1599,7 +1604,8 @@ Keep it concise but comprehensive.`;
             'auto-edit': 'acceptEdits',
             'plan': 'plan',
           };
-          const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+          const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
+          const permissionMode = modeMap[sessionMode];
 
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,

@@ -9,7 +9,7 @@ export interface GlobalSettings {
 const DEFAULT_SETTINGS: GlobalSettings = {
   defaultThinkingEnabled: false,
   defaultModel: 'claude-opus-4-5-20250514',
-  defaultPermissionMode: 'ask',
+  defaultPermissionMode: 'plan',
 };
 
 export class SettingsManager {
