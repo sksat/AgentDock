@@ -8,6 +8,7 @@ import { BrowserView } from './components/BrowserView';
 import { ErrorBanner } from './components/ErrorBanner';
 import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
+import { GitStatusBadge } from './components/GitStatusBadge';
 import type { SidebarSession } from './components';
 import type { ImageAttachment } from './components/MessageStream';
 import './App.css';
@@ -84,6 +85,7 @@ function App() {
     globalUsage,
     screencast,
     todoState,
+    gitStatus,
     listSessions,
     createSession,
     selectSession,
@@ -308,12 +310,21 @@ function App() {
               />
             ) : (
           <>
-            {/* Session usage bar with view toggle */}
+            {/* Session usage bar with view toggle and git status */}
             <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-between gap-4 text-xs text-text-secondary">
-              <ViewToggle
-                currentView={sessionView}
-                onToggle={setSessionView}
-              />
+              <div className="flex items-center gap-4">
+                <ViewToggle
+                  currentView={sessionView}
+                  onToggle={setSessionView}
+                />
+                {gitStatus && (
+                  <GitStatusBadge
+                    status={gitStatus.status}
+                    isGitRepo={gitStatus.isGitRepo}
+                    error={gitStatus.error}
+                  />
+                )}
+              </div>
               {usageInfo && (
               <div className="flex items-center gap-4">
                 <span className="font-medium text-accent-primary" title="Session total cost">

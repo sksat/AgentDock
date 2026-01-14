@@ -392,6 +392,8 @@ export type ServerMessage =
   | ResultMessage
   // System info
   | SystemInfoMessage
+  // Git status
+  | GitStatusMessage
   // System message (for logging)
   | SystemMessageMessage
   // Usage info
@@ -533,6 +535,38 @@ export interface SystemInfoMessage {
   permissionMode?: string;
   cwd?: string;
   tools?: string[];
+}
+
+// ==================== Git Status Messages ====================
+
+/** Git repository status information */
+export interface GitStatus {
+  /** Current branch name (e.g., "main", "feat/setup-ci") */
+  branch: string;
+  /** Short commit hash (7 chars, e.g., "c85e95b") */
+  commitHash: string;
+  /** Number of changed files (staged + unstaged + untracked) */
+  changedFilesCount: number;
+  /** Whether there are uncommitted changes */
+  isDirty: boolean;
+  /** Number of staged files */
+  staged?: number;
+  /** Number of unstaged files */
+  unstaged?: number;
+  /** Number of untracked files */
+  untracked?: number;
+}
+
+/** Git status message sent periodically from server */
+export interface GitStatusMessage {
+  type: 'git_status';
+  sessionId: string;
+  /** Git status data, null if not a git repo or error */
+  status: GitStatus | null;
+  /** Whether the working directory is a git repository */
+  isGitRepo: boolean;
+  /** Error message if git command failed */
+  error?: string;
 }
 
 export interface SystemMessageMessage {
