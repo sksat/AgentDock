@@ -1119,7 +1119,24 @@ export function createServer(options: ServerOptions): BridgeServer {
           };
           break;
         }
-        // No response on success - input is streamed to Claude
+
+        // Add to history and broadcast to all clients (including sender)
+        const timestamp = new Date().toISOString();
+        sessionManager.addToHistory(message.sessionId, {
+          type: 'user',
+          content: { text: message.content },
+          timestamp,
+        });
+
+        // Broadcast to all clients attached to this session
+        sendToSession(message.sessionId, {
+          type: 'user_input',
+          sessionId: message.sessionId,
+          content: message.content,
+          source: 'web',
+          timestamp,
+        });
+
         return;
       }
 
