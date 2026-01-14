@@ -382,9 +382,14 @@ export function useSession(): UseSessionReturn {
   const updateSessionMessages = useCallback(
     (sessionId: string, updater: (prev: MessageStreamItem[]) => MessageStreamItem[]) => {
       setSessionMessages((prev) => {
+        const current = prev.get(sessionId) ?? [];
+        const updated = updater(current);
+
+        // Avoid unnecessary re-renders if no actual change
+        if (updated === current) return prev;
+
         const newMap = new Map(prev);
-        const current = newMap.get(sessionId) ?? [];
-        newMap.set(sessionId, updater(current));
+        newMap.set(sessionId, updated);
         return newMap;
       });
     },
