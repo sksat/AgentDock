@@ -19,20 +19,20 @@ Inspired by Boris Cherny's workflow and Claude Code Desktop features.
 
 When user requests "create a new worktree", "start working on feature-xxx", etc.:
 
-1. Check if `.gitignore` contains `.worktrees/`
+1. Check if `.gitignore` contains `.worktree/`
    - If not, suggest adding it
 2. Confirm branch name (ask if not specified)
 3. Create worktree:
    ```bash
-   git worktree add .worktrees/<branch> -b <branch>
+   git worktree add .worktree/<branch> -b <branch>
    ```
 4. Install dependencies and verify build:
    ```bash
-   cd .worktrees/<branch> && pnpm install && pnpm build
+   cd .worktree/<branch> && pnpm install && pnpm build
    ```
 5. On success, present the command to start a new terminal session:
    ```
-   cd .worktrees/<branch> && claude
+   cd .worktree/<branch> && claude
    ```
 
 ### List Worktrees
@@ -63,7 +63,7 @@ When user requests "finish worktree", "merge this work", etc.:
    ```
 5. Remove worktree:
    ```bash
-   git worktree remove .worktrees/<branch>
+   git worktree remove .worktree/<branch>
    ```
 
 ### Switch Worktree
@@ -97,7 +97,7 @@ When user requests "switch worktree", "move to feature-xxx", etc.:
 
 ```
 project/                  # Main repository (design/review)
-├── .worktrees/
+├── .worktree/
 │   ├── feature-auth/     # Claude session #1
 │   ├── feature-api/      # Claude session #2
 │   └── bugfix-123/       # Claude session #3
@@ -106,4 +106,4 @@ project/                  # Main repository (design/review)
 ## Related Files
 
 - `.worktreeinclude`: Configuration for files to copy to worktrees
-- `.gitignore`: Excludes `.worktrees/`
+- `.gitignore`: Excludes `.worktree/`
