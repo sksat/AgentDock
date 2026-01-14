@@ -58,6 +58,34 @@ describe('MessageStream performance', () => {
     });
   });
 
+  describe('performance thresholds', () => {
+    // These tests ensure performance doesn't regress significantly.
+    // Thresholds are set with margin to account for CI environment variations.
+    // Current optimized values: 100msg ~120ms, 500msg ~350ms
+
+    it('should render 100 messages within threshold', () => {
+      const messages = generateMessages(100);
+
+      const renderTime = measureRenderTime(() => {
+        render(<MessageStream messages={messages} />);
+      });
+
+      // Threshold: 500ms (allows ~4x margin for CI variability)
+      expect(renderTime).toBeLessThan(500);
+    });
+
+    it('should render 500 messages within threshold', () => {
+      const messages = generateMessages(500);
+
+      const renderTime = measureRenderTime(() => {
+        render(<MessageStream messages={messages} />);
+      });
+
+      // Threshold: 500ms (current ~350ms)
+      expect(renderTime).toBeLessThan(500);
+    });
+  });
+
   describe('re-render behavior (current - unoptimized)', () => {
     it('documents current behavior: all messages re-render when props change', () => {
       const messages: MessageStreamItem[] = [
