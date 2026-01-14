@@ -38,7 +38,8 @@ describe('MessageStream', () => {
     render(<MessageStream messages={messages} />);
 
     expect(screen.getByText('Bash')).toBeInTheDocument();
-    expect(screen.getByText(/ls -la/)).toBeInTheDocument();
+    // Command appears in both header and expanded content
+    expect(screen.getAllByText(/ls -la/).length).toBeGreaterThan(0);
   });
 
   it('should render completed tool message with output', () => {
@@ -52,8 +53,7 @@ describe('MessageStream', () => {
     render(<MessageStream messages={messages} />);
 
     expect(screen.getByText('Bash')).toBeInTheDocument();
-    // Click to expand and see output
-    fireEvent.click(screen.getByRole('button'));
+    // Output is visible by default (expanded)
     expect(screen.getByText(/file1.txt/)).toBeInTheDocument();
   });
 
@@ -521,7 +521,7 @@ describe('ToolMessage - Browser tool formatting', () => {
     expect(screen.getByText('mcp__other__some_tool')).toBeInTheDocument();
   });
 
-  it('should show expanded content when clicked', () => {
+  it('should show expanded content by default', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -537,10 +537,7 @@ describe('ToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    // Click to expand
-    fireEvent.click(screen.getByRole('button'));
-
-    // Should show Input/Output sections
+    // Should show Input/Output sections by default (expanded)
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('Output')).toBeInTheDocument();
     expect(screen.getByText('Navigation successful')).toBeInTheDocument();

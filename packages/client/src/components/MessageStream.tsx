@@ -55,6 +55,49 @@ export interface TodoUpdateContent {
 
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
+  workingDir?: string;
+}
+
+/**
+ * Format file path for display:
+ * - If inside workingDir, show relative path
+ * - If inside HOME, show ~/...
+ * - Otherwise show absolute path
+ */
+function formatFilePath(filePath: string, workingDir?: string): string {
+  if (!filePath) return filePath;
+
+  // Try to extract home directory from workingDir (e.g., /home/user/... or /Users/user/...)
+  let homeDir: string | null = null;
+  if (workingDir) {
+    const homeMatch = workingDir.match(/^(\/home\/[^/]+|\/Users\/[^/]+)/);
+    if (homeMatch) {
+      homeDir = homeMatch[1];
+    }
+  }
+
+  // If inside workingDir, show relative path
+  if (workingDir && filePath.startsWith(workingDir + '/')) {
+    return filePath.slice(workingDir.length + 1);
+  }
+
+  // If exactly the workingDir
+  if (workingDir && filePath === workingDir) {
+    return '.';
+  }
+
+  // If inside HOME, show ~/...
+  if (homeDir && filePath.startsWith(homeDir + '/')) {
+    return '~' + filePath.slice(homeDir.length);
+  }
+
+  // If exactly the home directory
+  if (homeDir && filePath === homeDir) {
+    return '~';
+  }
+
+  // Otherwise show absolute path
+  return filePath;
 }
 
 /** Handle for imperative actions on MessageStream */
@@ -63,7 +106,7 @@ export interface MessageStreamHandle {
   scrollToTodoUpdate: (toolUseId: string) => void;
 }
 
-export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages }, ref) {
+export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -135,6 +178,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           message={message}
           thinkingExpanded={thinkingExpanded}
           onToggleThinking={toggleThinkingExpanded}
+          workingDir={workingDir}
         />
       ))}
     </div>
@@ -145,9 +189,10 @@ interface MessageItemProps {
   message: MessageStreamItem;
   thinkingExpanded: boolean;
   onToggleThinking: () => void;
+  workingDir?: string;
 }
 
-function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageItemProps) {
+function MessageItem({ message, thinkingExpanded, onToggleThinking, workingDir }: MessageItemProps) {
   switch (message.type) {
     case 'user':
       // Support both old string format and new object format with images
@@ -160,7 +205,7 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
     case 'thinking':
       return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
     case 'tool':
-      return <ToolMessage content={message.content as ToolContent} />;
+      return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
     case 'system':
       return <SystemMessage content={message.content as SystemMessageContent} />;
     case 'question':
@@ -250,9 +295,12 @@ function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps
 }
 
 // Unified ToolMessage component for all tools
-function ToolMessage({ content }: { content: ToolContent }) {
+function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir?: string }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const inp = content.input as Record<string, unknown>;
+
+  // Helper to format file paths
+  const fmtPath = (path: string) => formatFilePath(path, workingDir);
 
   // Get tool display info based on toolName
   const getToolInfo = (): { icon: string; description: string } => {
@@ -263,23 +311,23 @@ function ToolMessage({ content }: { content: ToolContent }) {
         return { icon: '💻', description };
       }
       case 'Read': {
-        return { icon: '📖', description: inp.file_path as string || '' };
+        return { icon: '📖', description: fmtPath(inp.file_path as string || '') };
       }
       case 'Write': {
-        return { icon: '✏️', description: inp.file_path as string || '' };
+        return { icon: '✏️', description: fmtPath(inp.file_path as string || '') };
       }
       case 'Edit': {
-        return { icon: '🔧', description: inp.file_path as string || '' };
+        return { icon: '🔧', description: fmtPath(inp.file_path as string || '') };
       }
       case 'Glob': {
         const pattern = inp.pattern as string || '';
         const path = inp.path as string || '';
-        return { icon: '🔍', description: pattern + (path ? ` in ${path}` : '') };
+        return { icon: '🔍', description: pattern + (path ? ` in ${fmtPath(path)}` : '') };
       }
       case 'Grep': {
         const pattern = inp.pattern as string || '';
         const path = inp.path as string || '';
-        return { icon: '🔎', description: `"${pattern}"` + (path ? ` in ${path}` : '') };
+        return { icon: '🔎', description: `"${pattern}"` + (path ? ` in ${fmtPath(path)}` : '') };
       }
       case 'Task': {
         const taskDescription = inp.description as string || inp.prompt as string || '';
@@ -350,7 +398,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
       const filePath = inp.file_path as string || '';
       return (
         <div className="mt-1 ml-4 ">
-          <DiffView toolName="Edit" filePath={filePath} oldContent={oldString} newContent={newString} />
+          <DiffView toolName="Edit" filePath={fmtPath(filePath)} oldContent={oldString} newContent={newString} />
           {content.output && (
             <div className="mt-2 border border-border rounded-lg overflow-hidden">
               <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Result</div>
@@ -370,7 +418,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
       const filePath = inp.file_path as string || '';
       return (
         <div className="mt-1 ml-4 ">
-          <DiffView toolName="Write" filePath={filePath} newContent={fileContent} />
+          <DiffView toolName="Write" filePath={fmtPath(filePath)} newContent={fileContent} />
           {content.output && (
             <div className="mt-2 border border-border rounded-lg overflow-hidden">
               <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Result</div>
