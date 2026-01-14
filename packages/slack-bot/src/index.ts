@@ -17,8 +17,9 @@ import {
 import { processAndUploadImages, uploadFile, processAndUploadBase64Image, extractBase64Image } from './file-uploader.js';
 
 /**
- * Check if a tool result is trivial and should be skipped.
- * Trivial results: empty, {}, {"success":true}, browser snapshots, etc.
+ * Check if a tool result is trivial and should be skipped entirely.
+ * Trivial results: empty, {}, {"success":true}, etc.
+ * Note: Long results and browser snapshots are NOT skipped - they get abbreviated display.
  */
 function isTrivialToolResult(content: string): boolean {
   try {
@@ -35,18 +36,6 @@ function isTrivialToolResult(content: string): boolean {
 
         // Check for trivial patterns
         if (text === '' || text === '{}' || text === 'null' || text === 'undefined') {
-          return true;
-        }
-
-        // Skip browser accessibility snapshots (very long, contains many ref= patterns)
-        if (text.length > 2000 && (text.match(/\[ref=/g) || []).length > 5) {
-          console.log('[DEBUG] Skipping browser accessibility snapshot');
-          return true;
-        }
-
-        // Skip very long results (likely machine-generated data not useful for Slack)
-        if (text.length > 5000) {
-          console.log('[DEBUG] Skipping very long tool result');
           return true;
         }
 

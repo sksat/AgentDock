@@ -184,6 +184,36 @@ export function formatToolUse(
 }
 
 /**
+ * Extract text from tool result content (JSON array format).
+ */
+function extractToolResultText(content: string): string {
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item.type === 'text' && typeof item.text === 'string') {
+          return item.text;
+        }
+      }
+    }
+  } catch {
+    // Not JSON, return as-is
+  }
+  return content;
+}
+
+/**
+ * Check if content is a browser accessibility snapshot.
+ */
+function isBrowserSnapshot(text: string): { isSnapshot: boolean; elementCount: number } {
+  const refMatches = text.match(/\[ref=/g);
+  if (text.length > 1000 && refMatches && refMatches.length > 3) {
+    return { isSnapshot: true, elementCount: refMatches.length };
+  }
+  return { isSnapshot: false, elementCount: 0 };
+}
+
+/**
  * Format tool result as Slack blocks.
  */
 export function formatToolResult(
@@ -192,11 +222,55 @@ export function formatToolResult(
   isError: boolean
 ): KnownBlock[] {
   const blocks: KnownBlock[] = [];
-
   const emoji = isError ? ':x:' : ':white_check_mark:';
   const label = isError ? 'Error' : 'Result';
-  const truncated = truncateText(content, 1500);
 
+  // Extract actual text from JSON array format
+  const text = extractToolResultText(content);
+
+  // Check for browser snapshot
+  const snapshot = isBrowserSnapshot(text);
+  if (snapshot.isSnapshot) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `${emoji} *${label}:* :camera: Browser snapshot (${snapshot.elementCount} elements)`,
+        },
+      ],
+    } as ContextBlock);
+    return blocks;
+  }
+
+  // For very long results, show summary
+  if (text.length > 2000) {
+    const preview = truncateText(text, 500);
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `${emoji} *${label}:* _(${text.length} chars, truncated)_`,
+        },
+      ],
+    } as ContextBlock);
+    if (preview) {
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `\`\`\`\n${preview}\n\`\`\``,
+          },
+        ],
+      } as ContextBlock);
+    }
+    return blocks;
+  }
+
+  // Normal result
+  const truncated = truncateText(text, 1500);
   blocks.push({
     type: 'context',
     elements: [
