@@ -9,6 +9,7 @@ import type {
   UsageTotals,
   BlockUsage,
   ScreencastMetadata,
+  TodoItem,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, BashToolContent, McpToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -67,6 +68,17 @@ export interface ScreencastState {
   };
 }
 
+export interface TodoHistoryEntry {
+  id: string;
+  timestamp: string;
+  todos: TodoItem[];
+}
+
+export interface TodoState {
+  current: TodoItem[];
+  history: TodoHistoryEntry[];
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -86,6 +98,7 @@ export interface UseSessionReturn {
   modelUsage: ModelUsage[] | null;
   globalUsage: GlobalUsage | null;
   screencast: ScreencastState | null;
+  todoState: TodoState;
 
   // Session management
   listSessions: () => void;
@@ -145,6 +158,9 @@ type SessionPendingQuestion = Map<string, PendingQuestion>;
 
 // Store screencast state per session
 type SessionScreencast = Map<string, ScreencastState>;
+
+// Store todo state per session
+type SessionTodoState = Map<string, TodoState>;
 
 // Types for server-side message items
 interface ServerMessageItem {
@@ -282,6 +298,9 @@ export function useSession(): UseSessionReturn {
   // Screencast state stored per session
   const [sessionScreencast, setSessionScreencast] = useState<SessionScreencast>(new Map());
 
+  // Todo state stored per session
+  const [sessionTodoState, setSessionTodoState] = useState<SessionTodoState>(new Map());
+
   // Active session state
   const [isLoading, setIsLoading] = useState(false);
   const [loadingReason, setLoadingReason] = useState<'compact' | null>(null);
@@ -376,6 +395,9 @@ export function useSession(): UseSessionReturn {
   const pendingPermission = activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null;
   const pendingQuestion = activeSessionId ? (sessionPendingQuestion.get(activeSessionId) ?? null) : null;
   const screencast = activeSessionId ? (sessionScreencast.get(activeSessionId) ?? null) : null;
+  const todoState = activeSessionId
+    ? (sessionTodoState.get(activeSessionId) ?? { current: [], history: [] })
+    : { current: [], history: [] };
 
   // Helper to update messages for a specific session
   const updateSessionMessages = useCallback(
@@ -852,6 +874,30 @@ export function useSession(): UseSessionReturn {
           if (message.hasBrowserSession) {
             send({ type: 'start_screencast', sessionId: message.sessionId });
           }
+          // Restore todo state from history
+          const todoHistory: TodoHistoryEntry[] = [];
+          let latestTodos: TodoItem[] = [];
+          for (const item of message.history) {
+            if (item.type === 'todo_update') {
+              const content = item.content as { toolUseId: string; todos: TodoItem[] };
+              todoHistory.push({
+                id: content.toolUseId,
+                timestamp: item.timestamp,
+                todos: content.todos,
+              });
+              latestTodos = content.todos;
+            }
+          }
+          if (todoHistory.length > 0) {
+            setSessionTodoState((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(message.sessionId, {
+                current: latestTodos,
+                history: todoHistory,
+              });
+              return newMap;
+            });
+          }
           break;
         }
 
@@ -1121,6 +1167,34 @@ export function useSession(): UseSessionReturn {
           break;
         }
 
+        case 'todo_update': {
+          const sessionId = message.sessionId;
+          const { toolUseId, todos } = message;
+          // Update todo state for sidebar panel
+          setSessionTodoState((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? { current: [], history: [] };
+            newMap.set(sessionId, {
+              current: todos,
+              history: [
+                ...current.history,
+                { id: toolUseId, timestamp: new Date().toISOString(), todos },
+              ],
+            });
+            return newMap;
+          });
+          // Also add to message stream
+          updateSessionMessages(sessionId, (prev) => [
+            ...prev,
+            {
+              type: 'todo_update',
+              content: { toolUseId, todos },
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+          break;
+        }
+
         case 'system_info':
           setSystemInfo({
             model: message.model,
@@ -1259,6 +1333,7 @@ export function useSession(): UseSessionReturn {
     modelUsage,
     globalUsage,
     screencast,
+    todoState,
     listSessions,
     createSession,
     selectSession,

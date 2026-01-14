@@ -389,6 +389,8 @@ export type ServerMessage =
   | PermissionRequestMessage
   // AskUserQuestion
   | AskUserQuestionMessage
+  // TodoWrite
+  | TodoUpdateMessage
   // Screencast
   | ScreencastFrameMessage
   | ScreencastStatusMessage
@@ -548,6 +550,23 @@ export interface AskUserQuestionMessage {
   questions: QuestionItem[];
 }
 
+// ==================== TodoWrite Messages ====================
+
+/** Individual todo item from TodoWrite tool */
+export interface TodoItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm: string;
+}
+
+/** Todo update message sent when Claude uses TodoWrite */
+export interface TodoUpdateMessage {
+  type: 'todo_update';
+  sessionId: string;
+  toolUseId: string;
+  todos: TodoItem[];
+}
+
 // ==================== Screencast Messages ====================
 
 export interface ScreencastMetadata {
@@ -625,7 +644,7 @@ export interface MessageItem {
   timestamp: string;
 }
 
-export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'tool_output' | 'bash_tool' | 'mcp_tool' | 'permission' | 'question' | 'system';
+export type MessageItemType = 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'tool_output' | 'bash_tool' | 'mcp_tool' | 'permission' | 'question' | 'system' | 'todo_update';
 
 export interface QuestionItem {
   question: string;

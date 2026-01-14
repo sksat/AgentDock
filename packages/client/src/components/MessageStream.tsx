@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import clsx from 'clsx';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
+import { TodoItem } from './TodoItem';
+import type { TodoItem as TodoItemType } from '@anthropic/claude-bridge-shared';
 
 export interface MessageStreamItem {
-  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system' | 'question';
+  type: 'user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | 'bash_tool' | 'mcp_tool' | 'system' | 'question' | 'todo_update';
   content: unknown;
   timestamp: string;
 }
@@ -53,11 +55,22 @@ export interface QuestionMessageContent {
   answers: QuestionAnswer[];
 }
 
+export interface TodoUpdateContent {
+  toolUseId: string;
+  todos: TodoItemType[];
+}
+
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
 }
 
-export function MessageStream({ messages }: MessageStreamProps) {
+/** Handle for imperative actions on MessageStream */
+export interface MessageStreamHandle {
+  /** Scroll to a specific todo update by its toolUseId */
+  scrollToTodoUpdate: (toolUseId: string) => void;
+}
+
+export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -92,6 +105,23 @@ export function MessageStream({ messages }: MessageStreamProps) {
     setAutoScroll(isAtBottom);
   }, []);
 
+  // Expose scrollToTodoUpdate to parent components via ref
+  // This is used by TodoPanel to scroll to a task's last update when clicked
+  useImperativeHandle(ref, () => ({
+    scrollToTodoUpdate: (toolUseId: string) => {
+      if (!containerRef.current) return;
+
+      const element = containerRef.current.querySelector(
+        `[data-todo-update-id="${toolUseId}"]`
+      );
+      if (element) {
+        // Disable auto-scroll to prevent jumping back to bottom
+        setAutoScroll(false);
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    },
+  }), []);
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
@@ -116,7 +146,7 @@ export function MessageStream({ messages }: MessageStreamProps) {
       ))}
     </div>
   );
-}
+});
 
 interface MessageItemProps {
   message: MessageStreamItem;
@@ -148,6 +178,8 @@ function MessageItem({ message, thinkingExpanded, onToggleThinking }: MessageIte
       return <SystemMessage content={message.content as SystemMessageContent} />;
     case 'question':
       return <QuestionMessage content={message.content as QuestionMessageContent} />;
+    case 'todo_update':
+      return <TodoUpdateMessage content={message.content as TodoUpdateContent} />;
     default:
       return null;
   }
@@ -824,6 +856,45 @@ function QuestionMessage({ content }: { content: QuestionMessageContent }) {
           <span className="text-text-secondary ml-2">
             User has answered your questions: {answersText}. You can now continue with the user&apos;s answers in mind.
           </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TodoUpdateMessage({ content }: { content: TodoUpdateContent }) {
+  // Guard against invalid content
+  if (!content || !Array.isArray(content.todos)) {
+    return (
+      <div data-testid="message-item" className="flex justify-start">
+        <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-primary mt-1.5"></span>
+          <div className="text-sm">
+            <span className="text-text-primary font-medium">TodoWrite</span>
+            <span className="text-text-secondary ml-2">Updated task list.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const completedCount = content.todos.filter((t) => t.status === 'completed').length;
+  const totalCount = content.todos.length;
+
+  return (
+    // data-todo-update-id is used for scrolling from TodoPanel when a task is clicked
+    <div data-testid="message-item" data-todo-update-id={content.toolUseId} className="flex justify-start">
+      <div className="max-w-[80%] rounded-lg border border-border overflow-hidden bg-bg-secondary">
+        <div className="px-3 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
+          <span className="text-text-primary font-medium text-sm">ToDo</span>
+          <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-0.5 rounded">
+            {completedCount}/{totalCount}
+          </span>
+        </div>
+        <div className="p-2 space-y-0.5">
+          {content.todos.map((todo, index) => (
+            <TodoItem key={index} todo={todo} compact />
+          ))}
         </div>
       </div>
     </div>

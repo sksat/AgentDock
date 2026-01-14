@@ -630,3 +630,116 @@ describe('McpToolMessage - Browser tool formatting', () => {
     expect(screen.getByText('Navigation successful')).toBeInTheDocument();
   });
 });
+
+describe('TodoUpdateMessage', () => {
+  it('should render todo update with valid content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: {
+          toolUseId: 'todo-1',
+          todos: [
+            { content: 'Task 1', status: 'completed', activeForm: 'Completing Task 1' },
+            { content: 'Task 2', status: 'in_progress', activeForm: 'Working on Task 2' },
+            { content: 'Task 3', status: 'pending', activeForm: 'Task 3 pending' },
+          ],
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('ToDo')).toBeInTheDocument();
+    expect(screen.getByText('1/3')).toBeInTheDocument(); // 1 completed out of 3
+    expect(screen.getByText('Task 1')).toBeInTheDocument();
+    expect(screen.getByText('Working on Task 2')).toBeInTheDocument(); // Shows activeForm for in_progress
+    expect(screen.getByText('Task 3')).toBeInTheDocument();
+  });
+
+  it('should show strikethrough for completed tasks', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: {
+          toolUseId: 'todo-1',
+          todos: [
+            { content: 'Completed task', status: 'completed', activeForm: 'Done' },
+          ],
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const completedText = screen.getByText('Completed task');
+    expect(completedText).toHaveClass('line-through');
+  });
+});
+
+describe('TodoUpdateMessage robustness', () => {
+  it('should not crash with null content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: null as any,
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/TodoWrite/)).toBeInTheDocument();
+  });
+
+  it('should not crash with undefined content', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: undefined as any,
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/TodoWrite/)).toBeInTheDocument();
+  });
+
+  it('should not crash with empty object (missing todos)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: {} as any,
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/TodoWrite/)).toBeInTheDocument();
+  });
+
+  it('should not crash when todos is not an array', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: { toolUseId: 'todo-1', todos: 'not an array' } as any,
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText(/TodoWrite/)).toBeInTheDocument();
+  });
+
+  it('should handle empty todos array gracefully', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'todo_update',
+        content: { toolUseId: 'todo-1', todos: [] },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByText('ToDo')).toBeInTheDocument();
+    expect(screen.getByText('0/0')).toBeInTheDocument();
+  });
+});
