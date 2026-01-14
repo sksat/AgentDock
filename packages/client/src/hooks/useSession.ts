@@ -961,6 +961,15 @@ export function useSession(): UseSessionReturn {
               s.id === message.sessionId ? { ...s, status: message.status } : s
             )
           );
+          // Update isLoading based on status (for queued input processing)
+          if (message.sessionId === activeSessionId) {
+            if (message.status === 'running') {
+              setIsLoading(true);
+            } else if (message.status === 'idle') {
+              setIsLoading(false);
+              setLoadingReason(null);
+            }
+          }
           break;
         }
 
