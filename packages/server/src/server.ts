@@ -16,6 +16,8 @@ import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
+import { PodmanClaudeRunner } from './podman-claude-runner.js';
+import { ContainerConfig, ContainerMount, createDefaultContainerConfig } from './container-config.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
 import { GitStatusProvider } from './git-status-provider.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
@@ -42,6 +44,14 @@ export interface ServerOptions {
   usageMonitorInterval?: number;
   /** Disable usage monitoring (default: false) */
   disableUsageMonitor?: boolean;
+  /** Enable container mode (run Claude in Podman container) */
+  containerEnabled?: boolean;
+  /** Container image to use (required if containerEnabled is true) */
+  containerImage?: string;
+  /** Additional volume mounts for container */
+  containerMounts?: ContainerMount[];
+  /** Additional arguments for podman */
+  containerExtraArgs?: string[];
 }
 
 /**
@@ -254,6 +264,10 @@ export function createServer(options: ServerOptions): BridgeServer {
     mcpServerCwd,  // Optional, not needed if using absolute path
     usageMonitorInterval = 30000,
     disableUsageMonitor = false,
+    containerEnabled = false,
+    containerImage,
+    containerMounts = [],
+    containerExtraArgs = [],
   } = options;
 
   // WebSocket URL for MCP server to connect back to
@@ -276,7 +290,20 @@ export function createServer(options: ServerOptions): BridgeServer {
     interval: 5000,
   });
 
-  // Create runner factory based on mock mode
+  // Build container config if enabled
+  let containerConfig: ContainerConfig | null = null;
+  if (containerEnabled) {
+    if (!containerImage) {
+      throw new Error('containerImage is required when containerEnabled is true');
+    }
+    containerConfig = createDefaultContainerConfig(containerImage, {
+      extraMounts: containerMounts,
+      extraArgs: containerExtraArgs,
+    });
+    console.log(`[Server] Container mode enabled with image: ${containerImage}`);
+  }
+
+  // Create runner factory based on mode (mock > container > default)
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
   if (useMock) {
     runnerFactory = () => {
@@ -288,6 +315,17 @@ export function createServer(options: ServerOptions): BridgeServer {
       return mock;
     };
     console.log('[Server] Using mock Claude runner');
+  } else if (containerConfig) {
+    runnerFactory = (opts) => {
+      return new PodmanClaudeRunner({
+        workingDir: opts.workingDir,
+        containerConfig: containerConfig!,
+        claudePath: opts.claudePath,
+        mcpConfigPath: opts.mcpConfigPath,
+        permissionToolName: opts.permissionToolName,
+      });
+    };
+    console.log('[Server] Using Podman container runner');
   }
 
   const runnerManager = new RunnerManager(runnerFactory);
