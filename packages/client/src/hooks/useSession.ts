@@ -409,13 +409,12 @@ export function useSession(): UseSessionReturn {
         // Update URL
         window.history.pushState({ sessionId }, '', `/session/${sessionId}`);
         // Note: pendingPermission and pendingQuestion are per-session, no need to clear
-        // Request session history if not already loaded
-        if (!sessionMessages.has(sessionId)) {
-          send({ type: 'attach_session', sessionId });
-        }
+        // Always attach to session to receive real-time updates
+        // (Server handles duplicate attaches gracefully by using a Set)
+        send({ type: 'attach_session', sessionId });
       }
     },
-    [sessions, sessionMessages, send]
+    [sessions, send]
   );
 
   const deselectSession = useCallback(() => {
