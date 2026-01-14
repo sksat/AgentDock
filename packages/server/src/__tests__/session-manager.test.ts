@@ -460,4 +460,107 @@ describe('SessionManager', () => {
       expect(sessions[1].id).toBe(persisted.id);
     });
   });
+
+  describe('thread bindings', () => {
+    it('should save and load thread bindings', () => {
+      // Create a session first (foreign key constraint)
+      const session = sessionManager.createSession({ name: 'Test Session' });
+
+      const binding = {
+        slackTeamId: 'T123',
+        slackChannelId: 'C456',
+        slackThreadTs: '1234567890.123456',
+        agentDockSessionId: session.id,
+        createdAt: '2024-01-01T00:00:00Z',
+      };
+
+      sessionManager.saveThreadBinding(binding);
+
+      const loaded = sessionManager.loadAllThreadBindings();
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0]).toEqual(binding);
+    });
+
+    it('should load multiple thread bindings', () => {
+      const session1 = sessionManager.createSession({ name: 'Session 1' });
+      const session2 = sessionManager.createSession({ name: 'Session 2' });
+
+      const binding1 = {
+        slackTeamId: 'T123',
+        slackChannelId: 'C456',
+        slackThreadTs: '1234567890.111111',
+        agentDockSessionId: session1.id,
+        createdAt: '2024-01-01T00:00:00Z',
+      };
+
+      const binding2 = {
+        slackTeamId: 'T123',
+        slackChannelId: 'C456',
+        slackThreadTs: '1234567890.222222',
+        agentDockSessionId: session2.id,
+        createdAt: '2024-01-01T00:00:01Z',
+      };
+
+      sessionManager.saveThreadBinding(binding1);
+      sessionManager.saveThreadBinding(binding2);
+
+      const loaded = sessionManager.loadAllThreadBindings();
+      expect(loaded).toHaveLength(2);
+    });
+
+    it('should delete thread binding when session is deleted (cascade)', () => {
+      const session = sessionManager.createSession({ name: 'Test Session' });
+
+      const binding = {
+        slackTeamId: 'T123',
+        slackChannelId: 'C456',
+        slackThreadTs: '1234567890.123456',
+        agentDockSessionId: session.id,
+        createdAt: '2024-01-01T00:00:00Z',
+      };
+
+      sessionManager.saveThreadBinding(binding);
+
+      // Verify binding exists
+      expect(sessionManager.loadAllThreadBindings()).toHaveLength(1);
+
+      // Delete the session
+      sessionManager.deleteSession(session.id);
+
+      // Binding should be deleted via CASCADE
+      expect(sessionManager.loadAllThreadBindings()).toHaveLength(0);
+    });
+
+    it('should return empty array when no bindings exist', () => {
+      const loaded = sessionManager.loadAllThreadBindings();
+      expect(loaded).toEqual([]);
+    });
+
+    it('should persist bindings across instances (file-based DB)', () => {
+      const dbPath = join(tempBaseDir, 'binding-test.db');
+
+      // Create binding with first instance
+      const manager1 = new SessionManager({ dbPath, sessionsBaseDir: tempBaseDir });
+      const session = manager1.createSession({ name: 'Test Session' });
+
+      const binding = {
+        slackTeamId: 'T123',
+        slackChannelId: 'C456',
+        slackThreadTs: '1234567890.123456',
+        agentDockSessionId: session.id,
+        createdAt: '2024-01-01T00:00:00Z',
+      };
+
+      manager1.saveThreadBinding(binding);
+      manager1.close();
+
+      // Read with second instance
+      const manager2 = new SessionManager({ dbPath, sessionsBaseDir: tempBaseDir });
+      const loaded = manager2.loadAllThreadBindings();
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0]).toEqual(binding);
+
+      manager2.close();
+    });
+  });
 });

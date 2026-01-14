@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type Database from 'better-sqlite3';
-import type { SessionInfo, SessionStatus, MessageItem, PermissionMode } from '@agent-dock/shared';
+import type { SessionInfo, SessionStatus, MessageItem, PermissionMode, SlackThreadBinding } from '@agent-dock/shared';
 import { initDatabase } from './database.js';
 
 export interface SessionManagerOptions {
@@ -83,6 +83,9 @@ export class SessionManager {
     getUsage: Database.Statement;
     upsertModelUsage: Database.Statement;
     getModelUsage: Database.Statement;
+    // Thread binding operations (for Slack persistence)
+    insertThreadBinding: Database.Statement;
+    getThreadBindings: Database.Statement;
   };
 
   constructor(options: SessionManagerOptions = {}) {
@@ -134,6 +137,15 @@ export class SessionManager {
       getModelUsage: this.db.prepare(`
         SELECT model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
         FROM session_model_usage WHERE session_id = ?
+      `),
+      // Thread binding operations (for Slack persistence)
+      insertThreadBinding: this.db.prepare(`
+        INSERT INTO slack_thread_bindings (session_id, slack_team_id, slack_channel_id, slack_thread_ts, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `),
+      getThreadBindings: this.db.prepare(`
+        SELECT session_id, slack_team_id, slack_channel_id, slack_thread_ts, created_at
+        FROM slack_thread_bindings
       `),
     };
 
@@ -507,6 +519,42 @@ export class SessionManager {
       outputTokens: row.output_tokens,
       cacheCreationTokens: row.cache_creation_tokens,
       cacheReadTokens: row.cache_read_tokens,
+    }));
+  }
+
+  // ==================== Thread Binding Operations ====================
+
+  /**
+   * Save a thread binding (Slack thread -> AgentDock session mapping)
+   */
+  saveThreadBinding(binding: SlackThreadBinding): void {
+    this.stmts.insertThreadBinding.run(
+      binding.agentDockSessionId,
+      binding.slackTeamId,
+      binding.slackChannelId,
+      binding.slackThreadTs,
+      binding.createdAt
+    );
+  }
+
+  /**
+   * Load all thread bindings from the database
+   */
+  loadAllThreadBindings(): SlackThreadBinding[] {
+    const rows = this.stmts.getThreadBindings.all() as Array<{
+      session_id: string;
+      slack_team_id: string;
+      slack_channel_id: string;
+      slack_thread_ts: string;
+      created_at: string;
+    }>;
+
+    return rows.map((row) => ({
+      agentDockSessionId: row.session_id,
+      slackTeamId: row.slack_team_id,
+      slackChannelId: row.slack_channel_id,
+      slackThreadTs: row.slack_thread_ts,
+      createdAt: row.created_at,
     }));
   }
 
