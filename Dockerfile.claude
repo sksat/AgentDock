@@ -14,12 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user for rootless compatibility
-# Using UID 1000 to match common host user UID
-RUN useradd -m -s /bin/bash -u 1000 claude
-
-# Set up home directory
-USER claude
+# Use existing node user (UID 1000) for rootless compatibility
+USER node
 WORKDIR /workspace
 
 # Default command
