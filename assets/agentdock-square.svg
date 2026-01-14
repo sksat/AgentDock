@@ -1,0 +1,20 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景（Slack用に暗い背景） -->
+  <rect x="0" y="0" width="100" height="100" fill="#1a1a2e"/>
+
+  <!-- ターミナルウィンドウ枠 -->
+  <rect x="5" y="15" width="90" height="70" rx="8" fill="none" stroke="#0ea5e9" stroke-width="3"/>
+
+  <!-- アンカー（プロンプト記号として） -->
+  <circle cx="20" cy="42" r="6" fill="none" stroke="#0ea5e9" stroke-width="3"/>
+  <line x1="20" y1="48" x2="20" y2="62" stroke="#0ea5e9" stroke-width="3"/>
+  <path d="M11 57 Q11 68 20 68 Q29 68 29 57" fill="none" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- カーソル（アンカー下部と同じ高さ） -->
+  <rect x="36" y="65" width="52" height="4" fill="#22c55e"/>
+
+  <!-- エージェントドット（カーソルの上に乗る） -->
+  <circle cx="46" cy="52" r="7" fill="#0ea5e9"/>
+  <circle cx="64" cy="52" r="7" fill="#22c55e"/>
+  <circle cx="82" cy="52" r="7" fill="#a855f7"/>
+</svg>
