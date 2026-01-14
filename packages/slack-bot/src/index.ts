@@ -8,6 +8,10 @@ import {
   formatToolUse,
   formatToolResult,
   formatError,
+  isBrowserSnapshot,
+  extractToolResultText,
+  formatToolUseWithResult,
+  type ToolResultStatus,
 } from './message-formatter.js';
 import {
   buildPermissionRequestBlocks,
@@ -15,7 +19,7 @@ import {
   parsePermissionAction,
   actionToPermissionResponse,
 } from './permission-ui.js';
-import { processAndUploadImages, uploadFile, processAndUploadBase64Image, extractBase64Image } from './file-uploader.js';
+import { processAndUploadImages, uploadFile, processAndUploadBase64Image, extractBase64Image, uploadTextSnippet } from './file-uploader.js';
 
 /**
  * Check if a tool result is trivial and should be skipped entirely.
@@ -121,6 +125,28 @@ async function main(): Promise<void> {
     { channel: string; threadTs: string; toolName: string; input: unknown }
   >();
 
+  // Pending tool uses (toolUseId -> { messageTs, channel, threadTs, toolName, input })
+  // Used to update tool_use messages when tool_result comes in
+  const pendingToolUses = new Map<
+    string,
+    { messageTs: string; channel: string; threadTs: string; toolName: string; input: unknown }
+  >();
+
+  // Cached long results for modal display (toolUseId -> full result text)
+  // Cleaned up after 10 minutes
+  const cachedResults = new Map<string, { text: string; timestamp: number }>();
+  const RESULT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+  // Periodically clean up old cached results
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of cachedResults) {
+      if (now - value.timestamp > RESULT_CACHE_TTL) {
+        cachedResults.delete(key);
+      }
+    }
+  }, 60 * 1000); // Check every minute
+
 
   // Set up message forwarding from AgentDock to Slack
   bridge.onMessage(async (message) => {
@@ -154,17 +180,47 @@ async function main(): Promise<void> {
 
         case 'tool_use': {
           const blocks = formatToolUse(message.toolName, message.toolUseId, message.input);
-          await app.client.chat.postMessage({
+          const postResult = await app.client.chat.postMessage({
             channel,
             thread_ts: threadTs,
             blocks,
             text: `Using tool: ${message.toolName}`,
           });
+
+          // Save message ts for later update when tool_result comes
+          if (postResult.ts) {
+            console.log(`[DEBUG] Saved pending tool_use: ${message.toolUseId} -> ts=${postResult.ts}`);
+            pendingToolUses.set(message.toolUseId, {
+              messageTs: postResult.ts,
+              channel,
+              threadTs,
+              toolName: message.toolName,
+              input: message.input,
+            });
+          } else {
+            console.log(`[DEBUG] Failed to get ts from postResult for tool_use: ${message.toolUseId}`);
+          }
           break;
         }
 
         case 'tool_result': {
-          // Check if this is a base64 image (screenshot) - upload image only, skip message
+          // Get the pending tool_use message to update
+          // Sometimes tool_result arrives before tool_use due to async processing
+          // Wait and retry if not found
+          let pendingToolUse = pendingToolUses.get(message.toolUseId);
+          if (!pendingToolUse) {
+            // Wait up to 500ms for tool_use to be saved
+            for (let i = 0; i < 5; i++) {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              pendingToolUse = pendingToolUses.get(message.toolUseId);
+              if (pendingToolUse) {
+                console.log(`[DEBUG] Found pendingToolUse after ${(i + 1) * 100}ms retry`);
+                break;
+              }
+            }
+          }
+
+          // Check if this is a base64 image (screenshot) - upload image only
           if (!message.isError && message.content) {
             const base64Image = extractBase64Image(message.content);
             if (base64Image) {
@@ -178,28 +234,148 @@ async function main(): Promise<void> {
               if (uploadedBase64) {
                 console.log('Uploaded base64 screenshot to Slack');
               }
-              break; // Skip posting the tool_result message
+
+              // Update tool_use message with success indicator (no link for images)
+              if (pendingToolUse) {
+                const updatedBlocks = formatToolUseWithResult(
+                  pendingToolUse.toolName,
+                  message.toolUseId,
+                  pendingToolUse.input,
+                  { type: 'success', summary: '(screenshot uploaded)' }
+                );
+                await app.client.chat.update({
+                  channel: pendingToolUse.channel,
+                  ts: pendingToolUse.messageTs,
+                  blocks: updatedBlocks,
+                  text: `${pendingToolUse.toolName} completed`,
+                });
+                pendingToolUses.delete(message.toolUseId);
+              }
+              break;
             }
 
-            // Check if this is a trivial result (skip posting)
+            const resultText = extractToolResultText(message.content);
+            const LONG_RESULT_THRESHOLD = 1000;
+
+            // Check if this is a trivial result
             if (isTrivialToolResult(message.content)) {
               console.log('[DEBUG] Skipping trivial tool result');
+              // Update tool_use message with just a checkmark
+              if (pendingToolUse) {
+                const updatedBlocks = formatToolUseWithResult(
+                  pendingToolUse.toolName,
+                  message.toolUseId,
+                  pendingToolUse.input,
+                  { type: 'skipped' }
+                );
+                await app.client.chat.update({
+                  channel: pendingToolUse.channel,
+                  ts: pendingToolUse.messageTs,
+                  blocks: updatedBlocks,
+                  text: `${pendingToolUse.toolName} completed`,
+                });
+                pendingToolUses.delete(message.toolUseId);
+              }
+              break;
+            }
+
+            // Check if this is a long result - add "View details" button
+            if (resultText.length > LONG_RESULT_THRESHOLD) {
+              console.log(`[DEBUG] Long result detected (${resultText.length} chars), adding view button...`);
+              console.log(`[DEBUG] toolUseId: ${message.toolUseId}, pendingToolUse found: ${!!pendingToolUse}`);
+
+              // Cache the result for modal display
+              cachedResults.set(message.toolUseId, {
+                text: resultText,
+                timestamp: Date.now(),
+              });
+
+              // Check if it's a browser snapshot for a more specific summary
+              const snapshot = isBrowserSnapshot(resultText);
+              const summary = snapshot.isSnapshot
+                ? `Snapshot (${snapshot.elementCount} elements)`
+                : `${resultText.length} chars`;
+
+              // Update tool_use message with view button
+              if (pendingToolUse) {
+                const updatedBlocks = formatToolUseWithResult(
+                  pendingToolUse.toolName,
+                  message.toolUseId,
+                  pendingToolUse.input,
+                  { type: 'success', summary }
+                );
+
+                // Add "View details" button
+                updatedBlocks.push({
+                  type: 'actions',
+                  elements: [
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: 'View details',
+                        emoji: true,
+                      },
+                      action_id: `view_result_${message.toolUseId}`,
+                      value: message.toolUseId,
+                    },
+                  ],
+                } as any);
+
+                try {
+                  const updateResult = await app.client.chat.update({
+                    channel: pendingToolUse.channel,
+                    ts: pendingToolUse.messageTs,
+                    blocks: updatedBlocks,
+                    text: `${pendingToolUse.toolName} completed - ${summary}`,
+                  });
+                  console.log(`[DEBUG] chat.update result: ok=${updateResult.ok}`);
+                } catch (updateError) {
+                  console.error('[DEBUG] chat.update failed:', updateError);
+                }
+                pendingToolUses.delete(message.toolUseId);
+              } else {
+                console.log('[DEBUG] No pendingToolUse found, cannot update message');
+              }
               break;
             }
           }
 
-          // Post tool result message for non-trivial, non-image results
-          const blocks = formatToolResult(
-            message.toolUseId,
-            message.content,
-            message.isError || false
-          );
-          await app.client.chat.postMessage({
-            channel,
-            thread_ts: threadTs,
-            blocks,
-            text: message.isError ? 'Tool error' : 'Tool completed',
-          });
+          // Short result or error - update tool_use message with inline result
+          if (pendingToolUse) {
+            const resultText = message.content ? extractToolResultText(message.content) : '';
+            const resultStatus: ToolResultStatus = message.isError
+              ? { type: 'error', message: resultText.slice(0, 100) }
+              : { type: 'success', summary: resultText.length > 100 ? `${resultText.slice(0, 100)}...` : resultText };
+
+            const updatedBlocks = formatToolUseWithResult(
+              pendingToolUse.toolName,
+              message.toolUseId,
+              pendingToolUse.input,
+              resultStatus
+            );
+
+            await app.client.chat.update({
+              channel: pendingToolUse.channel,
+              ts: pendingToolUse.messageTs,
+              blocks: updatedBlocks,
+              text: message.isError ? `${pendingToolUse.toolName} error` : `${pendingToolUse.toolName} completed`,
+            });
+            pendingToolUses.delete(message.toolUseId);
+          } else {
+            // Fallback: post as separate message if no pending tool_use found
+            const blocks = formatToolResult(
+              message.toolUseId,
+              message.content,
+              message.isError || false
+            );
+            await app.client.chat.postMessage({
+              channel,
+              thread_ts: threadTs,
+              blocks,
+              text: message.isError ? 'Tool error' : 'Tool completed',
+            });
+          }
 
           // Upload screenshot file if path is provided
           if (message.screenshotFilename && !message.isError) {
@@ -383,6 +559,77 @@ async function main(): Promise<void> {
     pendingPermissions.delete(parsedAction.requestId);
   });
 
+  // Handle "View details" button clicks - open modal with full result
+  app.action(/^view_result_/, async ({ action, ack, body, client }) => {
+    await ack();
+
+    if (action.type !== 'button') return;
+
+    const buttonAction = action as { action_id: string; value?: string };
+    const toolUseId = buttonAction.value;
+    if (!toolUseId) return;
+
+    // Get cached result
+    const cached = cachedResults.get(toolUseId);
+    if (!cached) {
+      console.error('No cached result found for toolUseId:', toolUseId);
+      return;
+    }
+
+    // Truncate for modal (modal has 3000 char limit per text block)
+    // Split into multiple blocks if needed
+    const maxBlockTextLength = 2900;
+    const textBlocks: any[] = [];
+    let remaining = cached.text;
+
+    while (remaining.length > 0) {
+      const chunk = remaining.slice(0, maxBlockTextLength);
+      remaining = remaining.slice(maxBlockTextLength);
+
+      textBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `\`\`\`\n${chunk}\n\`\`\``,
+        },
+      });
+
+      // Slack modal has 100 block limit
+      if (textBlocks.length >= 50) {
+        textBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '_... content truncated (too long for modal)_',
+          },
+        });
+        break;
+      }
+    }
+
+    try {
+      await client.views.open({
+        trigger_id: (body as any).trigger_id,
+        view: {
+          type: 'modal',
+          title: {
+            type: 'plain_text',
+            text: 'Tool Result',
+            emoji: true,
+          },
+          close: {
+            type: 'plain_text',
+            text: 'Close',
+            emoji: true,
+          },
+          blocks: textBlocks,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to open modal:', error);
+    }
+  });
+
   // Start the Slack app
   await app.start();
   console.log('Slack Bot is running!');
@@ -416,9 +663,12 @@ export {
   formatToolUse,
   formatToolResult,
   formatError,
+  isBrowserSnapshot,
+  extractToolResultText,
   buildPermissionRequestBlocks,
   buildPermissionResultBlocks,
   parsePermissionAction,
   actionToPermissionResponse,
   processAndUploadImages,
+  uploadTextSnippet,
 };

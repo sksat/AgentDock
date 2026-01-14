@@ -262,3 +262,47 @@ export async function processAndUploadBase64Image(
 
   return result.ok;
 }
+
+/**
+ * Upload text content as a code snippet to Slack.
+ * Slack displays snippets as collapsible with "Show more" by default.
+ */
+export async function uploadTextSnippet(
+  client: WebClient,
+  content: string,
+  channel: string,
+  threadTs: string,
+  options?: {
+    filename?: string;
+    title?: string;
+    filetype?: string;
+  }
+): Promise<{ ok: boolean; permalink?: string; error?: string }> {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = options?.filename || `snapshot-${timestamp}.txt`;
+
+    console.log(`[DEBUG] uploadTextSnippet - uploading ${filename}, size: ${content.length}`);
+
+    const result = await client.files.uploadV2({
+      channel_id: channel,
+      thread_ts: threadTs,
+      content,
+      filename,
+      title: options?.title,
+      // Use 'text' or 'markdown' for syntax highlighting
+      snippet_type: options?.filetype || 'text',
+    });
+
+    // Extract permalink from result
+    const file = (result as { file?: { permalink?: string } }).file;
+    const permalink = file?.permalink;
+
+    console.log(`[DEBUG] uploadTextSnippet - uploaded successfully, permalink: ${permalink}`);
+    return { ok: true, permalink };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Failed to upload text snippet:', errorMessage);
+    return { ok: false, error: errorMessage };
+  }
+}

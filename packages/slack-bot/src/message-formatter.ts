@@ -386,9 +386,35 @@ export function formatToolUse(
 }
 
 /**
- * Extract text from tool result content (JSON array format).
+ * Check if content is a browser accessibility snapshot.
+ * Exported for use in index.ts to handle snapshot uploads.
+ *
+ * Detects two formats:
+ * 1. Old format with [ref=...] patterns
+ * 2. New Playwright MCP format with accessibility tree (- link, - button, etc.)
  */
-function extractToolResultText(content: string): string {
+export function isBrowserSnapshot(text: string): { isSnapshot: boolean; elementCount: number } {
+  // Check for old format with [ref=...] patterns
+  const refMatches = text.match(/\[ref=/g);
+  if (text.length > 1000 && refMatches && refMatches.length > 3) {
+    return { isSnapshot: true, elementCount: refMatches.length };
+  }
+
+  // Check for new Playwright MCP format with accessibility tree
+  // Look for patterns like: "- link", "- button", "- combobox", "- navigation:", etc.
+  const accessibilityPatterns = text.match(/^\s*- (?:link|button|img|combobox|navigation|search|contentinfo|text|heading)/gm);
+  if (text.length > 500 && accessibilityPatterns && accessibilityPatterns.length > 5) {
+    return { isSnapshot: true, elementCount: accessibilityPatterns.length };
+  }
+
+  return { isSnapshot: false, elementCount: 0 };
+}
+
+/**
+ * Extract text from tool result content (for checking if it's a snapshot).
+ * Exported for use in index.ts.
+ */
+export function extractToolResultText(content: string): string {
   try {
     const parsed = JSON.parse(content);
     if (Array.isArray(parsed)) {
@@ -405,14 +431,175 @@ function extractToolResultText(content: string): string {
 }
 
 /**
- * Check if content is a browser accessibility snapshot.
+ * Result status for tool use display.
  */
-function isBrowserSnapshot(text: string): { isSnapshot: boolean; elementCount: number } {
-  const refMatches = text.match(/\[ref=/g);
-  if (text.length > 1000 && refMatches && refMatches.length > 3) {
-    return { isSnapshot: true, elementCount: refMatches.length };
+export type ToolResultStatus =
+  | { type: 'pending' }
+  | { type: 'success'; summary?: string; permalink?: string }
+  | { type: 'error'; message?: string }
+  | { type: 'skipped' };
+
+/**
+ * Format tool use with optional result status.
+ * When result is provided, the tool use display is updated to include result info.
+ * For long results, provide a permalink to the uploaded file.
+ */
+export function formatToolUseWithResult(
+  toolName: string,
+  toolUseId: string,
+  input: unknown,
+  result?: ToolResultStatus
+): KnownBlock[] {
+  const blocks: KnownBlock[] = [];
+
+  // Check if it's a browser tool
+  if (isBrowserToolName(toolName)) {
+    const { header, detail } = formatBrowserToolInput(toolName, input);
+
+    // Build header with result status
+    let headerWithResult = header;
+    if (result) {
+      switch (result.type) {
+        case 'success':
+          if (result.permalink) {
+            headerWithResult = `${header}  :white_check_mark: <${result.permalink}|${result.summary || 'View result'}>`;
+          } else if (result.summary) {
+            headerWithResult = `${header}  :white_check_mark: ${result.summary}`;
+          } else {
+            headerWithResult = `${header}  :white_check_mark:`;
+          }
+          break;
+        case 'error':
+          headerWithResult = `${header}  :x: ${result.message || 'Error'}`;
+          break;
+        case 'skipped':
+          // Just show the tool use without any indicator
+          break;
+      }
+    }
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: headerWithResult,
+      },
+    } as SectionBlock);
+
+    if (detail) {
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: detail,
+          },
+        ],
+      } as ContextBlock);
+    }
+
+    return blocks;
   }
-  return { isSnapshot: false, elementCount: 0 };
+
+  // Non-browser tool: show tool name with result status
+  let headerText = `:wrench: *${toolName}*`;
+  if (result) {
+    switch (result.type) {
+      case 'success':
+        if (result.permalink) {
+          headerText = `:wrench: *${toolName}*  :white_check_mark: <${result.permalink}|${result.summary || 'View result'}>`;
+        } else if (result.summary) {
+          headerText = `:wrench: *${toolName}*  :white_check_mark: ${result.summary}`;
+        } else {
+          headerText = `:wrench: *${toolName}*  :white_check_mark:`;
+        }
+        break;
+      case 'error':
+        headerText = `:wrench: *${toolName}*  :x: ${result.message || 'Error'}`;
+        break;
+      case 'skipped':
+        // Just show the tool use
+        break;
+    }
+  }
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: headerText,
+    },
+  } as SectionBlock);
+
+  // Format input based on tool type
+  let inputText = '';
+  switch (toolName) {
+    case 'Bash':
+      if (typeof input === 'object' && input !== null && 'command' in input) {
+        inputText = `\`\`\`\n${truncateText((input as any).command, 1000)}\n\`\`\``;
+      }
+      break;
+
+    case 'Read':
+      if (typeof input === 'object' && input !== null && 'file_path' in input) {
+        inputText = `Reading: \`${(input as any).file_path}\``;
+        if ((input as any).offset || (input as any).limit) {
+          inputText += ` (offset: ${(input as any).offset || 0}, limit: ${(input as any).limit || 'all'})`;
+        }
+      }
+      break;
+
+    case 'Write':
+    case 'Edit':
+      if (typeof input === 'object' && input !== null && 'file_path' in input) {
+        inputText = `File: \`${(input as any).file_path}\``;
+        if ((input as any).content) {
+          const content = truncateText((input as any).content, 500);
+          inputText += `\n\`\`\`\n${content}\n\`\`\``;
+        }
+      }
+      break;
+
+    case 'Glob':
+      if (typeof input === 'object' && input !== null && 'pattern' in input) {
+        inputText = `Pattern: \`${(input as any).pattern}\``;
+        if ((input as any).path) {
+          inputText += ` in \`${(input as any).path}\``;
+        }
+      }
+      break;
+
+    case 'Grep':
+      if (typeof input === 'object' && input !== null && 'pattern' in input) {
+        inputText = `Pattern: \`${(input as any).pattern}\``;
+        if ((input as any).path) {
+          inputText += ` in \`${(input as any).path}\``;
+        }
+      }
+      break;
+
+    default:
+      // Generic JSON display for unknown tools
+      try {
+        inputText = `\`\`\`json\n${truncateText(JSON.stringify(input, null, 2), 800)}\n\`\`\``;
+      } catch {
+        inputText = '_Input could not be displayed_';
+      }
+  }
+
+  if (inputText) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: inputText,
+        },
+      ],
+    } as ContextBlock);
+  }
+
+  return blocks;
 }
 
 /**
