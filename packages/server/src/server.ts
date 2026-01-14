@@ -794,6 +794,25 @@ export function createServer(options: ServerOptions): BridgeServer {
         break;
       }
 
+      // Thread binding operations (for Slack persistence)
+      case 'save_thread_binding': {
+        sessionManager.saveThreadBinding(message.binding);
+        response = {
+          type: 'thread_binding_saved',
+          binding: message.binding,
+        };
+        break;
+      }
+
+      case 'load_thread_bindings': {
+        const bindings = sessionManager.loadAllThreadBindings();
+        response = {
+          type: 'thread_bindings_list',
+          bindings,
+        };
+        break;
+      }
+
       case 'rename_session': {
         const renamed = sessionManager.renameSession(message.sessionId, message.name);
         if (renamed) {
