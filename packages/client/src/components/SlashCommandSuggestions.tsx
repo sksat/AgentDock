@@ -28,6 +28,7 @@ const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
 
   // Settings
   { name: 'permission', label: 'Permission mode...', description: 'Change permission mode', category: 'settings' },
+  { name: 'thinking', label: 'Toggle thinking', description: 'Enable/disable extended thinking mode', category: 'settings' },
   { name: 'config', label: 'Configuration', description: 'View and edit settings', category: 'settings' },
   { name: 'help', label: 'Help', description: 'Show all available commands', category: 'settings' },
 ];
@@ -36,6 +37,7 @@ export interface SlashCommandSuggestionsProps {
   query: string;
   currentModel?: string;
   permissionMode?: string;
+  thinkingEnabled?: boolean;
   selectedIndex: number;
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
@@ -47,6 +49,7 @@ export function SlashCommandSuggestions({
   query,
   currentModel,
   permissionMode,
+  thinkingEnabled,
   selectedIndex,
   onSelect,
   onClose,
@@ -70,6 +73,7 @@ export function SlashCommandSuggestions({
     ...cmd,
     value: cmd.name === 'model' ? currentModel :
            cmd.name === 'permission' ? permissionMode :
+           cmd.name === 'thinking' ? (thinkingEnabled ? 'ON' : 'OFF') :
            cmd.value,
   }));
 

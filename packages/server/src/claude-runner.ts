@@ -22,6 +22,8 @@ export interface StartOptions {
   allowedTools?: string[];
   disallowedTools?: string[];
   images?: ImageContent[];
+  /** Enable extended thinking mode */
+  thinkingEnabled?: boolean;
 }
 
 export interface UsageData {
@@ -73,17 +75,26 @@ export class ClaudeRunner extends EventEmitter {
     const args = this.buildArgs(prompt, options);
     const hasImages = options.images && options.images.length > 0;
 
+    // Build environment with optional thinking tokens
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+    };
+    if (options.thinkingEnabled) {
+      env.MAX_THINKING_TOKENS = '31999';
+      console.log('[ClaudeRunner] Extended thinking enabled with MAX_THINKING_TOKENS=31999');
+    }
+
     if (hasImages) {
       // Use child_process.spawn with pipes for image messages
       // This allows us to write stdin before the process reads it
-      this.startWithPipes(prompt, args, options.images!);
+      this.startWithPipes(prompt, args, options.images!, env);
     } else {
       // Use PTY for regular messages (supports interactive features)
-      this.startWithPty(prompt, args);
+      this.startWithPty(prompt, args, env);
     }
   }
 
-  private startWithPty(prompt: string, args: string[]): void {
+  private startWithPty(prompt: string, args: string[], env: Record<string, string>): void {
     console.log('[ClaudeRunner] Starting with PTY:', this.options.claudePath, args.join(' '));
 
     this.ptyProcess = pty.spawn(this.options.claudePath!, args, {
@@ -91,7 +102,7 @@ export class ClaudeRunner extends EventEmitter {
       cols: 200,
       rows: 50,
       cwd: this.options.workingDir,
-      env: process.env as { [key: string]: string },
+      env,
     });
 
     console.log('[ClaudeRunner] PTY process started with PID:', this.ptyProcess.pid);
@@ -110,7 +121,7 @@ export class ClaudeRunner extends EventEmitter {
     });
   }
 
-  private startWithPipes(prompt: string, args: string[], images: ImageContent[]): void {
+  private startWithPipes(prompt: string, args: string[], images: ImageContent[], env: Record<string, string>): void {
     console.log('[ClaudeRunner] Starting with pipes for image:', this.options.claudePath, args.join(' '));
     console.log('[ClaudeRunner] Images attached:', images.length);
 
@@ -119,7 +130,7 @@ export class ClaudeRunner extends EventEmitter {
 
     this.childProcess = spawn(this.options.claudePath!, args, {
       cwd: this.options.workingDir,
-      env: process.env as NodeJS.ProcessEnv,
+      env: env as NodeJS.ProcessEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -273,6 +284,17 @@ export class ClaudeRunner extends EventEmitter {
   private parseLine(line: string): void {
     try {
       const event = JSON.parse(line) as StreamEvent;
+      // Debug: uncomment to log thinking events for streaming investigation
+      // if (event.type === 'assistant' && event.message?.content) {
+      //   const hasThinking = event.message.content.some((b) => b.type === 'thinking');
+      //   if (hasThinking) {
+      //     const thinkingBlocks = event.message.content.filter((b) => b.type === 'thinking');
+      //     console.log('[ClaudeRunner] Thinking event received:', {
+      //       blockCount: thinkingBlocks.length,
+      //       lengths: thinkingBlocks.map((b) => (b as { thinking: string }).thinking.length),
+      //     });
+      //   }
+      // }
       this.processEvent(event);
     } catch {
       // Ignore non-JSON lines (likely terminal control sequences)

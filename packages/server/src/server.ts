@@ -1014,6 +1014,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             mcpConfigPath,
             permissionToolName,
             images,
+            thinkingEnabled: message.thinkingEnabled,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit

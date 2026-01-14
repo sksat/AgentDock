@@ -103,6 +103,8 @@ export interface UserMessageMessage {
   source?: InputSource;
   /** Slack context when source is 'slack' */
   slackContext?: SlackContext;
+  /** Enable extended thinking mode for this message */
+  thinkingEnabled?: boolean;
 }
 
 export interface InterruptMessage {

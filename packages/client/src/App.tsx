@@ -3,11 +3,13 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { useNavigation } from './hooks/useNavigation';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
+import { getDefaultThinkingEnabled } from './components/SettingsPage';
 import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
 import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
 import type { SidebarSession } from './components';
+import type { ImageAttachment } from './components/MessageStream';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
@@ -110,7 +112,13 @@ function App() {
     setSend,
   } = useSession();
 
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  // Per-session thinking state (sessionId -> enabled)
+  const [sessionThinking, setSessionThinking] = useState<Map<string, boolean>>(new Map());
+
+  // Get current session's thinking state (defaults to global setting)
+  const thinkingEnabled = activeSessionId
+    ? sessionThinking.get(activeSessionId) ?? getDefaultThinkingEnabled()
+    : getDefaultThinkingEnabled();
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' } | null>(null);
   const [sessionView, setSessionView] = useState<SessionView>('stream');
@@ -172,8 +180,22 @@ function App() {
   );
 
   const handleToggleThinking = useCallback(() => {
-    setThinkingEnabled((prev) => !prev);
-  }, []);
+    if (!activeSessionId) return;
+    setSessionThinking((prev) => {
+      const newMap = new Map(prev);
+      const currentValue = prev.get(activeSessionId) ?? getDefaultThinkingEnabled();
+      newMap.set(activeSessionId, !currentValue);
+      return newMap;
+    });
+  }, [activeSessionId]);
+
+  // Wrapper for sendMessage that includes thinkingEnabled
+  const handleSendMessage = useCallback(
+    (content: string, images?: ImageAttachment[], workingDir?: string) => {
+      sendMessage(content, images, workingDir, thinkingEnabled);
+    },
+    [sendMessage, thinkingEnabled]
+  );
 
   // Handle model change (server handles logging)
   const handleModelChange = useCallback((newModel: string) => {
@@ -269,7 +291,7 @@ function App() {
                 sessions={sessions}
                 globalUsage={globalUsage}
                 isConnected={isConnected}
-                onSendMessage={sendMessage}
+                onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
               />
             ) : (
@@ -379,7 +401,7 @@ function App() {
 
               {/* Input area with status bar */}
               <InputArea
-                onSend={sendMessage}
+                onSend={handleSendMessage}
                 onInterrupt={interrupt}
                 disabled={!isConnected}
                 isLoading={isLoading}

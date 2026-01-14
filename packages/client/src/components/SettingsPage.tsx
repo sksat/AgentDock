@@ -8,15 +8,17 @@ interface Settings {
   defaultModel: string;
   defaultPermissionMode: string;
   theme: 'dark' | 'light';
+  defaultThinkingEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   defaultModel: 'claude-opus-4-5-20250514',
   defaultPermissionMode: 'ask',
   theme: 'dark',
+  defaultThinkingEnabled: false,
 };
 
-function loadSettings(): Settings {
+export function loadSettings(): Settings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -26,6 +28,11 @@ function loadSettings(): Settings {
     // Ignore parse errors
   }
   return DEFAULT_SETTINGS;
+}
+
+/** Get the default thinking mode from global settings */
+export function getDefaultThinkingEnabled(): boolean {
+  return loadSettings().defaultThinkingEnabled;
 }
 
 function saveSettings(settings: Settings): void {
@@ -105,6 +112,40 @@ function SelectOption({ label, description, selected, onClick }: SelectOptionPro
   );
 }
 
+interface ToggleSwitchProps {
+  enabled: boolean;
+  onToggle: () => void;
+  label: string;
+  description: string;
+}
+
+function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSwitchProps) {
+  return (
+    <button
+      onClick={onToggle}
+      className="w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between bg-bg-tertiary hover:bg-bg-tertiary/80"
+    >
+      <div className="flex flex-col">
+        <span className="font-medium text-text-primary">{label}</span>
+        <span className="text-xs text-text-secondary">{description}</span>
+      </div>
+      <div
+        className={clsx(
+          'w-11 h-6 rounded-full p-0.5 transition-colors',
+          enabled ? 'bg-accent-primary' : 'bg-gray-600'
+        )}
+      >
+        <div
+          className={clsx(
+            'w-5 h-5 rounded-full bg-white shadow-sm transition-transform',
+            enabled ? 'translate-x-5' : 'translate-x-0'
+          )}
+        />
+      </div>
+    </button>
+  );
+}
+
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
 
@@ -180,6 +221,19 @@ export function SettingsPage() {
                 onClick={() => updateSetting('theme', 'light')}
               />
             </div>
+          </SettingCard>
+
+          {/* Extended Thinking */}
+          <SettingCard
+            title="Extended Thinking"
+            description="Default thinking mode for new sessions"
+          >
+            <ToggleSwitch
+              enabled={settings.defaultThinkingEnabled}
+              onToggle={() => updateSetting('defaultThinkingEnabled', !settings.defaultThinkingEnabled)}
+              label="Enable by default"
+              description="Claude will show its reasoning process (uses more tokens)"
+            />
           </SettingCard>
 
           {/* About */}
