@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo } from 'react';
 import clsx from 'clsx';
 import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
@@ -242,30 +242,40 @@ interface MessageItemProps {
   workingDir?: string;
 }
 
-function MessageItem({ message, thinkingExpanded, onToggleThinking, workingDir }: MessageItemProps) {
-  switch (message.type) {
-    case 'user':
-      // Support both old string format and new object format with images
-      if (typeof message.content === 'string') {
-        return <UserMessage content={{ text: message.content }} />;
-      }
-      return <UserMessage content={message.content as UserMessageContent} />;
-    case 'assistant':
-      return <AssistantMessage content={message.content as string} />;
-    case 'thinking':
-      return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
-    case 'tool':
-      return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
-    case 'system':
-      return <SystemMessage content={message.content as SystemMessageContent} />;
-    case 'question':
-      return <QuestionMessage content={message.content as QuestionMessageContent} />;
-    case 'todo_update':
-      return <TodoUpdateMessage content={message.content as TodoUpdateContent} />;
-    default:
-      return null;
+const MessageItem = memo(
+  function MessageItem({ message, thinkingExpanded, onToggleThinking, workingDir }: MessageItemProps) {
+    switch (message.type) {
+      case 'user':
+        // Support both old string format and new object format with images
+        if (typeof message.content === 'string') {
+          return <UserMessage content={{ text: message.content }} />;
+        }
+        return <UserMessage content={message.content as UserMessageContent} />;
+      case 'assistant':
+        return <AssistantMessage content={message.content as string} />;
+      case 'thinking':
+        return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
+      case 'tool':
+        return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
+      case 'system':
+        return <SystemMessage content={message.content as SystemMessageContent} />;
+      case 'question':
+        return <QuestionMessage content={message.content as QuestionMessageContent} />;
+      case 'todo_update':
+        return <TodoUpdateMessage content={message.content as TodoUpdateContent} />;
+      default:
+        return null;
+    }
+  },
+  (prev, next) => {
+    // Custom comparison: only re-render if relevant props actually changed
+    return (
+      prev.message === next.message &&
+      prev.thinkingExpanded === next.thinkingExpanded &&
+      prev.workingDir === next.workingDir
+    );
   }
-}
+);
 
 function UserMessage({ content }: { content: UserMessageContent }) {
   const hasImages = content.images && content.images.length > 0;
