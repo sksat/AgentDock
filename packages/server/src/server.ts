@@ -17,6 +17,7 @@ import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
+import { GitStatusProvider } from './git-status-provider.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
 import { SettingsManager } from './settings-manager.js';
 
@@ -270,6 +271,11 @@ export function createServer(options: ServerOptions): BridgeServer {
         db: sessionManager.getDb(),
       });
 
+  // Create git status provider (5 second polling)
+  const gitStatusProvider = new GitStatusProvider({
+    interval: 5000,
+  });
+
   // Create runner factory based on mock mode
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
   if (useMock) {
@@ -384,6 +390,20 @@ export function createServer(options: ServerOptions): BridgeServer {
       console.error('[UsageMonitor] Error:', error.message);
     });
   }
+
+  // Set up git status provider events
+  gitStatusProvider.on('status', (sessionId, result) => {
+    sendToSession(sessionId, {
+      type: 'git_status',
+      sessionId,
+      status: result.status,
+      isGitRepo: result.isGitRepo,
+      error: result.error,
+    });
+  });
+  gitStatusProvider.on('error', (sessionId, error) => {
+    console.error(`[GitStatusProvider] Error for session ${sessionId}:`, error.message);
+  });
 
   // Set up browser session manager events for screencast
   browserSessionManager.on('frame', ({ sessionId, data, metadata }) => {
@@ -959,6 +979,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Store WebSocket for this session so it can receive events
           addWebSocketToSession(message.sessionId, ws);
 
+          // Register session for git status tracking
+          gitStatusProvider.registerSession(message.sessionId, session.workingDir);
+
           const usage = sessionManager.getUsage(message.sessionId);
           const modelUsage = sessionManager.getModelUsage(message.sessionId);
           const pendingPermission = sessionPendingPermissions.get(message.sessionId);
@@ -1012,6 +1035,8 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (deleted) {
           // Clean up session-allowed tools
           sessionAllowedTools.delete(message.sessionId);
+          // Unregister from git status tracking
+          gitStatusProvider.unregisterSession(message.sessionId);
           response = {
             type: 'session_deleted',
             sessionId: message.sessionId,
@@ -1992,6 +2017,8 @@ Keep it concise but comprehensive.`;
         httpServer.listen(port, host, () => {
           // Start usage monitor
           usageMonitor?.start();
+          // Start git status provider
+          gitStatusProvider.start();
           resolve();
         });
       });
@@ -2004,6 +2031,8 @@ Keep it concise but comprehensive.`;
       return new Promise((resolve) => {
         // Stop usage monitor
         usageMonitor?.stop();
+        // Stop git status provider
+        gitStatusProvider.stop();
         // Stop all running Claude processes
         runnerManager.stopAll();
         wss?.close();

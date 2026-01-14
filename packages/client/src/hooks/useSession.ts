@@ -12,6 +12,7 @@ import type {
   ScreencastMetadata,
   TodoItem,
   GlobalSettings,
+  GitStatus,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, ToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -81,6 +82,12 @@ export interface TodoState {
   history: TodoHistoryEntry[];
 }
 
+export interface GitStatusState {
+  status: GitStatus | null;
+  isGitRepo: boolean;
+  error?: string;
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -101,6 +108,7 @@ export interface UseSessionReturn {
   globalUsage: GlobalUsage | null;
   screencast: ScreencastState | null;
   todoState: TodoState;
+  gitStatus: GitStatusState | null;
 
   // Session management
   listSessions: () => void;
@@ -169,6 +177,9 @@ type SessionScreencast = Map<string, ScreencastState>;
 
 // Store todo state per session
 type SessionTodoState = Map<string, TodoState>;
+
+// Store git status per session
+type SessionGitStatus = Map<string, GitStatusState>;
 
 // Types for server-side message items
 interface ServerMessageItem {
@@ -280,6 +291,9 @@ export function useSession(): UseSessionReturn {
 
   // Todo state stored per session
   const [sessionTodoState, setSessionTodoState] = useState<SessionTodoState>(new Map());
+
+  // Git status stored per session
+  const [sessionGitStatus, setSessionGitStatus] = useState<SessionGitStatus>(new Map());
 
   // Active session state
   const [isLoading, setIsLoading] = useState(false);
@@ -405,6 +419,10 @@ export function useSession(): UseSessionReturn {
         ? (sessionTodoState.get(activeSessionId) ?? { current: [], history: [] })
         : { current: [], history: [] },
     [activeSessionId, sessionTodoState]
+  );
+  const gitStatus = useMemo(
+    () => (activeSessionId ? sessionGitStatus.get(activeSessionId) ?? null : null),
+    [activeSessionId, sessionGitStatus]
   );
 
   // Helper to update messages for a specific session
@@ -1208,6 +1226,20 @@ export function useSession(): UseSessionReturn {
           });
           break;
 
+        case 'git_status': {
+          const sessionId = message.sessionId;
+          setSessionGitStatus((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(sessionId, {
+              status: message.status,
+              isGitRepo: message.isGitRepo,
+              error: message.error,
+            });
+            return newMap;
+          });
+          break;
+        }
+
         case 'system_message': {
           const sessionId = message.sessionId;
           updateSessionMessages(sessionId, (prev) => [
@@ -1342,6 +1374,7 @@ export function useSession(): UseSessionReturn {
     globalUsage,
     screencast,
     todoState,
+    gitStatus,
     listSessions,
     createSession,
     selectSession,
