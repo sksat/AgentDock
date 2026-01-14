@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import clsx from 'clsx';
+import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
 import { DiffView } from './DiffView';
@@ -303,8 +304,8 @@ function UserMessage({ content }: { content: UserMessageContent }) {
 function AssistantMessage({ content }: { content: string }) {
   return (
     <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[80%] px-4 py-3 rounded-lg bg-bg-tertiary text-text-primary whitespace-pre-wrap">
-        {content}
+      <div className="max-w-[80%] px-4 py-3 rounded-lg bg-bg-tertiary text-text-primary prose prose-invert prose-sm max-w-none">
+        <Streamdown mode="streaming">{content}</Streamdown>
       </div>
     </div>
   );

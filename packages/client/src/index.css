@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Include streamdown styles for markdown rendering */
+@source "../node_modules/streamdown/dist/*.js";
+
 /* Custom CSS variables */
 @theme {
   --color-bg-primary: #0a0a0a;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 
 describe('MessageStream', () => {
@@ -654,5 +654,171 @@ describe('TodoUpdateMessage robustness', () => {
     expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
     expect(screen.getByText('ToDo')).toBeInTheDocument();
     expect(screen.getByText('0/0')).toBeInTheDocument();
+  });
+});
+
+describe('AssistantMessage Markdown rendering', () => {
+  it('should render plain text correctly', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Hello world', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+  });
+
+  it('should render bold text with strong styling', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'This is **bold** text', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Streamdown uses span with data-streamdown="strong" for bold text
+    const strongElement = container.querySelector('[data-streamdown="strong"]');
+    expect(strongElement).toBeInTheDocument();
+    expect(strongElement?.textContent).toBe('bold');
+  });
+
+  it('should render italic text with emphasis styling', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'This is *italic* text', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Check that italic text is rendered (Streamdown may use <em> or span with data attribute)
+    const italicText = screen.getByText('italic');
+    expect(italicText).toBeInTheDocument();
+    // Verify it has italic styling (either <em> tag or italic class)
+    expect(
+      italicText.tagName === 'EM' ||
+      italicText.classList.contains('italic') ||
+      italicText.closest('em')
+    ).toBeTruthy();
+  });
+
+  it('should render inline code as <code>', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Run `npm install` command', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const codeElement = screen.getByText('npm install');
+    expect(codeElement.tagName).toBe('CODE');
+  });
+
+  it('should render code blocks with <pre><code>', async () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'assistant',
+        content: '```javascript\nconst x = 1;\n```',
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Wait for async Shiki syntax highlighting to complete
+    // Note: Shiki tokenizes code, so individual tokens may be in separate elements
+    await waitFor(() => {
+      const preElement = container.querySelector('pre');
+      expect(preElement).toBeInTheDocument();
+      const codeElement = container.querySelector('code');
+      expect(codeElement).toBeInTheDocument();
+      // Check that code content is rendered (may be tokenized into spans)
+      expect(codeElement?.textContent).toContain('const');
+      expect(codeElement?.textContent).toContain('1');
+    }, { timeout: 3000 });
+  });
+
+  it('should render unordered lists as <ul><li>', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: '- Item 1\n- Item 2', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const item1 = screen.getByText('Item 1');
+    expect(item1.closest('li')).toBeInTheDocument();
+    expect(item1.closest('ul')).toBeInTheDocument();
+  });
+
+  it('should render ordered lists as <ol><li>', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: '1. First\n2. Second', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const item = screen.getByText('First');
+    expect(item.closest('li')).toBeInTheDocument();
+    expect(item.closest('ol')).toBeInTheDocument();
+  });
+
+  it('should render headings', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: '## Heading Level 2', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const heading = screen.getByRole('heading', { level: 2 });
+    expect(heading).toHaveTextContent('Heading Level 2');
+  });
+
+  it('should render links as <a> with href', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Check out [this link](https://example.com)', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    const link = screen.getByRole('link', { name: 'this link' });
+    // Streamdown may normalize URLs by adding a trailing slash
+    expect(link.getAttribute('href')).toMatch(/^https:\/\/example\.com\/?$/);
+  });
+
+  // Streaming robustness tests
+  it('should not crash with unterminated bold syntax', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: 'This is **incomplete', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByTestId('message-item')).toBeInTheDocument();
+  });
+
+  it('should not crash with unterminated code block', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: '```javascript\nconst x = 1;', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+    expect(screen.getByTestId('message-item')).toBeInTheDocument();
+  });
+
+  it('should not crash with empty content', () => {
+    const messages: MessageStreamItem[] = [
+      { type: 'assistant', content: '', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+
+    expect(() => render(<MessageStream messages={messages} />)).not.toThrow();
+  });
+
+  it('should handle content updates during streaming (re-render)', async () => {
+    const messages1: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    const { rerender, container } = render(<MessageStream messages={messages1} />);
+
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+
+    // Simulate streaming update with completed bold text
+    const messages2: MessageStreamItem[] = [
+      { type: 'assistant', content: 'Hello **world**!', timestamp: '2024-01-01T00:00:00Z' },
+    ];
+    rerender(<MessageStream messages={messages2} />);
+
+    // Wait for the markdown to be rendered and check strong element exists
+    // Streamdown uses span with data-streamdown="strong" for bold text
+    await waitFor(() => {
+      const strongElement = container.querySelector('[data-streamdown="strong"]');
+      expect(strongElement).toBeInTheDocument();
+      expect(strongElement?.textContent).toBe('world');
+    }, { timeout: 2000 });
   });
 });
