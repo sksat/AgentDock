@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
+    "dev:once": "pnpm --filter client run dev & pnpm --filter server run dev:once",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck"
