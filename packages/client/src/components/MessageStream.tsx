@@ -391,7 +391,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       );
     }
 
-    // Edit tool - show diff
+    // Edit tool - show diff (error message only if failed)
     if (content.toolName === 'Edit') {
       const oldString = inp.old_string as string || '';
       const newString = inp.new_string as string || '';
@@ -399,13 +399,9 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       return (
         <div className="mt-1 ml-4 ">
           <DiffView toolName="Edit" filePath={fmtPath(filePath)} oldContent={oldString} newContent={newString} />
-          {content.output && (
-            <div className="mt-2 border border-border rounded-lg overflow-hidden">
-              <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Result</div>
-              <pre className={clsx(
-                'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto',
-                content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-              )}>{content.output}</pre>
+          {content.isError && content.output && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-accent-danger/10 text-accent-danger text-sm font-mono">
+              {content.output}
             </div>
           )}
         </div>
