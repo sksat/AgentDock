@@ -124,6 +124,22 @@ export function isBrowserTool(toolName: string): boolean {
 }
 
 /**
+ * Check if a tool should be auto-allowed without user permission
+ * Includes:
+ *   - Browser tools (isBrowserTool)
+ *   - AskUserQuestion (no permission needed - it's a UI interaction tool)
+ */
+export function isAutoAllowedTool(toolName: string): boolean {
+  if (isBrowserTool(toolName)) {
+    return true;
+  }
+  if (toolName === 'AskUserQuestion') {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Execute a browser command via BrowserController
  */
 async function executeBrowserCommand(controller: BrowserController, command: BrowserCommand): Promise<unknown> {
@@ -1453,8 +1469,8 @@ export function createServer(options: ServerOptions): BridgeServer {
           break;
         }
 
-        // Auto-allow browser tools (built-in AgentDock feature)
-        if (isBrowserTool(message.toolName)) {
+        // Auto-allow certain tools (browser tools, AskUserQuestion, etc.)
+        if (isAutoAllowedTool(message.toolName)) {
           ws.send(JSON.stringify({
             type: 'permission_response',
             sessionId: message.sessionId,
