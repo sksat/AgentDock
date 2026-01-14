@@ -1,4 +1,4 @@
-import { useState, useCallback, type KeyboardEvent } from 'react';
+import { useState, useCallback, memo, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 import { UsageDisplay, type GlobalUsageData } from './UsageDisplay';
 import type { SessionStatus, SessionUsageInfo } from '@agent-dock/shared';
@@ -213,25 +213,26 @@ interface SessionItemProps {
   onRenameKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
 }
 
-function SessionItem({
-  session,
-  isActive,
-  isRenaming,
-  isCollapsed,
-  renameValue,
-  onSelect,
-  onDelete,
-  onDoubleClick,
-  onRenameChange,
-  onRenameSubmit,
-  onRenameKeyDown,
-}: SessionItemProps) {
-  const statusColor = {
-    idle: 'bg-text-secondary',
-    running: 'bg-accent-success animate-pulse',
-    waiting_input: 'bg-orange-500',
-    waiting_permission: 'bg-orange-500',
-  }[session.status];
+const SessionItem = memo(
+  function SessionItem({
+    session,
+    isActive,
+    isRenaming,
+    isCollapsed,
+    renameValue,
+    onSelect,
+    onDelete,
+    onDoubleClick,
+    onRenameChange,
+    onRenameSubmit,
+    onRenameKeyDown,
+  }: SessionItemProps) {
+    const statusColor = {
+      idle: 'bg-text-secondary',
+      running: 'bg-accent-success animate-pulse',
+      waiting_input: 'bg-orange-500',
+      waiting_permission: 'bg-orange-500',
+    }[session.status];
 
   return (
     <div
@@ -333,4 +334,4 @@ function SessionItem({
       )}
     </div>
   );
-}
+});
