@@ -225,7 +225,7 @@ interface ThinkingMessageProps {
 function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps) {
   return (
     <div data-testid="message-item" className="flex justify-start">
-      <div className="max-w-[90%] rounded-lg border border-border/50 overflow-hidden">
+      <div className=" rounded-lg border border-border/50 overflow-hidden">
         <button
           onClick={onToggle}
           className="w-full px-4 py-2 bg-bg-secondary/50 border-b border-border/50 text-sm
@@ -318,7 +318,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
     if (content.toolName === 'Bash') {
       const command = inp.command as string || '';
       return (
-        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
           <div className="border-b border-border">
             <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">
               Command
@@ -349,7 +349,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
       const newString = inp.new_string as string || '';
       const filePath = inp.file_path as string || '';
       return (
-        <div className="mt-1 ml-4 max-w-[90%]">
+        <div className="mt-1 ml-4 ">
           <DiffView toolName="Edit" filePath={filePath} oldContent={oldString} newContent={newString} />
           {content.output && (
             <div className="mt-2 border border-border rounded-lg overflow-hidden">
@@ -369,7 +369,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
       const fileContent = inp.content as string || '';
       const filePath = inp.file_path as string || '';
       return (
-        <div className="mt-1 ml-4 max-w-[90%]">
+        <div className="mt-1 ml-4 ">
           <DiffView toolName="Write" filePath={filePath} newContent={fileContent} />
           {content.output && (
             <div className="mt-2 border border-border rounded-lg overflow-hidden">
@@ -386,7 +386,7 @@ function ToolMessage({ content }: { content: ToolContent }) {
 
     // Default: show input and output
     return (
-      <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden max-w-[90%]">
+      <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
         <div className="border-b border-border">
           <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Input</div>
           <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto max-h-48 overflow-y-auto">
