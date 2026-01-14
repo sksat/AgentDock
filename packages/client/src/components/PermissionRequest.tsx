@@ -29,6 +29,11 @@ interface ReadInput {
   limit?: number;
 }
 
+interface BashInput {
+  command: string;
+  description?: string;
+}
+
 function isWriteInput(input: unknown): input is WriteInput {
   return (
     typeof input === 'object' &&
@@ -62,6 +67,15 @@ function isReadInput(input: unknown): input is ReadInput {
   );
 }
 
+function isBashInput(input: unknown): input is BashInput {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'command' in input &&
+    typeof (input as BashInput).command === 'string'
+  );
+}
+
 // Component for displaying Read tool requests
 function FileReadView({ filePath, offset, limit }: { filePath: string; offset?: number; limit?: number }) {
   const hasRange = offset !== undefined || limit !== undefined;
@@ -91,6 +105,26 @@ function FileReadView({ filePath, offset, limit }: { filePath: string; offset?: 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
         <span className="text-sm">Reading file contents</span>
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying Bash tool requests with shell-like appearance
+function BashCommandView({ command, description }: { command: string; description?: string }) {
+  return (
+    <div>
+      {/* Title header with description */}
+      {description && (
+        <div className="text-sm text-text-secondary mb-2">{description}</div>
+      )}
+
+      {/* Shell-like command display */}
+      <div className="font-mono text-sm">
+        <div className="flex items-start gap-2">
+          <span className="text-accent-success select-none shrink-0">$</span>
+          <pre className="text-text-primary whitespace-pre-wrap break-all overflow-x-auto">{command}</pre>
+        </div>
       </div>
     </div>
   );
@@ -154,6 +188,17 @@ export function PermissionRequest({
     return null;
   }, [toolName, input]);
 
+  // Determine if this is a Bash operation
+  const bashViewData = useMemo(() => {
+    if (toolName === 'Bash' && isBashInput(input)) {
+      return {
+        command: input.command,
+        description: input.description,
+      };
+    }
+    return null;
+  }, [toolName, input]);
+
   return (
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
       <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
@@ -174,6 +219,11 @@ export function PermissionRequest({
             filePath={readViewData.filePath}
             offset={readViewData.offset}
             limit={readViewData.limit}
+          />
+        ) : bashViewData ? (
+          <BashCommandView
+            command={bashViewData.command}
+            description={bashViewData.description}
           />
         ) : (
           <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">
