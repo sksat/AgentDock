@@ -5,6 +5,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
 import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
+import { ErrorBanner } from './components/ErrorBanner';
 import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
 import type { SidebarSession } from './components';
@@ -346,11 +347,7 @@ function App() {
             </div>
 
             {/* Error banner */}
-            {error && (
-              <div className="px-4 py-2 bg-accent-danger/10 border-b border-accent-danger text-accent-danger">
-                {error}
-              </div>
-            )}
+            <ErrorBanner error={error} />
 
             {/* Main content */}
             <main className="flex-1 flex flex-col overflow-hidden">
