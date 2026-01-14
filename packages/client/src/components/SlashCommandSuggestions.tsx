@@ -41,6 +41,7 @@ export interface SlashCommandSuggestionsProps {
   selectedIndex: number;
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
+  onToggleThinking?: () => void;
   isOpen: boolean;
   customCommands?: SlashCommand[]; // Custom commands from project or user
 }
@@ -53,6 +54,7 @@ export function SlashCommandSuggestions({
   selectedIndex,
   onSelect,
   onClose,
+  onToggleThinking,
   isOpen,
   customCommands = [],
 }: SlashCommandSuggestionsProps) {
@@ -73,7 +75,6 @@ export function SlashCommandSuggestions({
     ...cmd,
     value: cmd.name === 'model' ? currentModel :
            cmd.name === 'permission' ? permissionMode :
-           cmd.name === 'thinking' ? (thinkingEnabled ? 'ON' : 'OFF') :
            cmd.value,
   }));
 
@@ -146,7 +147,14 @@ export function SlashCommandSuggestions({
                 key={command.prefix ? `${command.prefix}:${command.name}` : command.name}
                 role="option"
                 aria-selected={isSelected}
-                onClick={() => handleSelect(command)}
+                onClick={() => {
+                  // Thinking toggle: apply immediately without closing
+                  if (command.name === 'thinking' && onToggleThinking) {
+                    onToggleThinking();
+                    return;
+                  }
+                  handleSelect(command);
+                }}
                 className={clsx(
                   'w-full px-3 py-2 text-left transition-colors flex items-center justify-between gap-2',
                   isSelected
@@ -173,7 +181,21 @@ export function SlashCommandSuggestions({
                     {command.description}
                   </span>
                 </div>
-                {command.value && (
+                {command.name === 'thinking' ? (
+                  <div
+                    className={clsx(
+                      'w-9 h-5 rounded-full p-0.5 transition-colors flex-shrink-0',
+                      thinkingEnabled ? 'bg-accent-primary' : (isSelected ? 'bg-white/30' : 'bg-gray-600')
+                    )}
+                  >
+                    <div
+                      className={clsx(
+                        'w-4 h-4 rounded-full bg-white shadow-sm transition-transform',
+                        thinkingEnabled ? 'translate-x-4' : 'translate-x-0'
+                      )}
+                    />
+                  </div>
+                ) : command.value && (
                   <span className={clsx(
                     'text-xs flex-shrink-0',
                     isSelected ? 'text-white/70' : 'text-text-secondary'

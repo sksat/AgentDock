@@ -342,13 +342,8 @@ export function InputArea({
         e.preventDefault();
         cyclePermissionMode();
       }
-      // Tab (without Shift) to toggle thinking mode
-      if (e.key === 'Tab' && !e.shiftKey && onToggleThinking && !showSlashCommands) {
-        e.preventDefault();
-        onToggleThinking();
-      }
     },
-    [handleSend, executeSlashCommand, onToggleThinking, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
+    [handleSend, executeSlashCommand, onPermissionModeChange, cyclePermissionMode, showSlashCommands, value, slashCommandIndex, handleSlashCommandSelect, model]
   );
 
   // Auto-resize textarea
@@ -474,6 +469,7 @@ export function InputArea({
           selectedIndex={slashCommandIndex}
           onSelect={handleSlashCommandSelect}
           onClose={() => setShowSlashCommands(false)}
+          onToggleThinking={onToggleThinking}
           isOpen={showSlashCommands}
         />
 
