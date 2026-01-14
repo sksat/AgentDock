@@ -4,6 +4,13 @@ import type { IPty } from 'node-pty';
 import { spawn, ChildProcess } from 'child_process';
 import { StreamJsonParser, StreamEvent } from './stream-parser.js';
 
+// Permission mode as reported by Claude Code's system event
+// Maps to: 'default' -> ask, 'acceptEdits' -> auto-edit, 'plan' -> plan
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan';
+
+// Permission mode cycle order (Shift+Tab cycles through these)
+const PERMISSION_MODE_ORDER: ClaudePermissionMode[] = ['default', 'acceptEdits', 'plan'];
+
 export interface ClaudeRunnerOptions {
   workingDir?: string;
   claudePath?: string;
@@ -24,6 +31,8 @@ export interface StartOptions {
   images?: ImageContent[];
   /** Enable extended thinking mode */
   thinkingEnabled?: boolean;
+  /** Permission mode to use for the session */
+  permissionMode?: ClaudePermissionMode;
 }
 
 export interface UsageData {
@@ -46,6 +55,8 @@ export interface ClaudeRunnerEvents {
   exit: (data: { code: number | null; signal: string | null }) => void;
   /** Permission request for mock runner */
   permission_request: (data: { requestId: string; toolName: string; input: unknown }) => void;
+  /** Permission mode changed (from Claude Code's system event) */
+  permission_mode_changed: (data: { permissionMode: ClaudePermissionMode }) => void;
 }
 
 export class ClaudeRunner extends EventEmitter {
@@ -55,6 +66,7 @@ export class ClaudeRunner extends EventEmitter {
   private parser: StreamJsonParser;
   private buffer: string = '';
   private _isRunning: boolean = false;
+  private _permissionMode: ClaudePermissionMode = 'default';
 
   constructor(options: ClaudeRunnerOptions = {}) {
     super();
@@ -69,6 +81,83 @@ export class ClaudeRunner extends EventEmitter {
 
   get isRunning(): boolean {
     return this._isRunning;
+  }
+
+  get permissionMode(): ClaudePermissionMode {
+    return this._permissionMode;
+  }
+
+  /**
+   * Request permission mode change by sending Shift+Tab to Claude Code.
+   * The actual mode change is confirmed via system event response.
+   * @param targetMode The desired permission mode
+   * @returns true if Shift+Tab was sent, false if already at target or no PTY
+   */
+  requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean {
+    if (this._permissionMode === targetMode) {
+      return false;
+    }
+
+    if (!this.ptyProcess) {
+      console.log('[ClaudeRunner] Cannot change permission mode: no PTY process');
+      return false;
+    }
+
+    // Calculate how many Shift+Tab presses needed
+    const currentIndex = PERMISSION_MODE_ORDER.indexOf(this._permissionMode);
+    const targetIndex = PERMISSION_MODE_ORDER.indexOf(targetMode);
+
+    if (currentIndex === -1 || targetIndex === -1) {
+      console.log('[ClaudeRunner] Invalid permission mode');
+      return false;
+    }
+
+    // Calculate steps (cycle forward only)
+    let steps = targetIndex - currentIndex;
+    if (steps <= 0) {
+      steps += PERMISSION_MODE_ORDER.length;
+    }
+
+    console.log(`[ClaudeRunner] Sending ${steps} Shift+Tab(s) to change mode from ${this._permissionMode} to ${targetMode}`);
+
+    // Send Shift+Tab (escape sequence: \x1b[Z)
+    for (let i = 0; i < steps; i++) {
+      this.ptyProcess.write('\x1b[Z');
+    }
+
+    return true;
+  }
+
+  /**
+   * Update permission mode from Claude Code's system event.
+   * This is called when we receive a system event with permissionMode.
+   */
+  updatePermissionMode(mode: string): void {
+    const validMode = this.parsePermissionMode(mode);
+    if (validMode && validMode !== this._permissionMode) {
+      const oldMode = this._permissionMode;
+      this._permissionMode = validMode;
+      console.log(`[ClaudeRunner] Permission mode changed: ${oldMode} -> ${validMode}`);
+      this.emit('permission_mode_changed', { permissionMode: validMode });
+    }
+  }
+
+  /**
+   * Parse permission mode string from Claude Code to our type
+   */
+  private parsePermissionMode(mode: string): ClaudePermissionMode | null {
+    if (mode === 'default' || mode === 'acceptEdits' || mode === 'plan') {
+      return mode;
+    }
+    // Handle possible variations
+    if (mode === 'normal' || mode === 'ask') {
+      return 'default';
+    }
+    if (mode === 'auto-edit' || mode === 'autoEdit') {
+      return 'acceptEdits';
+    }
+    console.log(`[ClaudeRunner] Unknown permission mode: ${mode}`);
+    return null;
   }
 
   start(prompt: string, options: StartOptions = {}): void {
@@ -264,6 +353,13 @@ export class ClaudeRunner extends EventEmitter {
       args.push('--disallowedTools', options.disallowedTools.join(','));
     }
 
+    // Set permission mode at startup
+    if (options.permissionMode) {
+      args.push('--permission-mode', options.permissionMode);
+      // Also set internal state
+      this._permissionMode = options.permissionMode;
+    }
+
     return args;
   }
 
@@ -307,6 +403,11 @@ export class ClaudeRunner extends EventEmitter {
   private processEvent(event: StreamEvent): void {
     switch (event.type) {
       case 'system':
+        // Update internal permission mode state from Claude Code
+        if (event.permissionMode) {
+          this.updatePermissionMode(event.permissionMode);
+        }
+
         this.emit('system', {
           subtype: event.subtype,
           sessionId: event.session_id,

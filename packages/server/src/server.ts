@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
-import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory } from './runner-manager.js';
+import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
@@ -506,12 +506,21 @@ export function createServer(options: ServerOptions): BridgeServer {
       // Use global default for thinking
       const thinkingEnabled = settingsManager.get('defaultThinkingEnabled');
 
+      // Map session permission mode to Claude permission mode
+      const modeMap: Record<string, ClaudePermissionMode> = {
+        'ask': 'default',
+        'auto-edit': 'acceptEdits',
+        'plan': 'plan',
+      };
+      const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
         claudeSessionId: session.claudeSessionId,
         mcpConfigPath,
         permissionToolName,
         thinkingEnabled,
+        permissionMode,
         onEvent: (sid, eventType, data) => {
           handleRunnerEvent(sid, eventType, data);
           // Clean up MCP config on exit
@@ -741,15 +750,45 @@ export function createServer(options: ServerOptions): BridgeServer {
         if (systemData.model) {
           sessionManager.setModel(sessionId, systemData.model);
         }
+
         // Send system info to client
+        // Permission mode is set at startup via --permission-mode flag
+        const runner = runnerManager.getRunner(sessionId);
+        const reverseMap: Record<ClaudePermissionMode, string> = {
+          'default': 'ask',
+          'acceptEdits': 'auto-edit',
+          'plan': 'plan',
+        };
+        const currentMode = runner ? reverseMap[runner.permissionMode] : systemData.permissionMode;
         sendToSession(sessionId, {
           type: 'system_info',
           sessionId,
           model: systemData.model,
-          permissionMode: systemData.permissionMode,
+          permissionMode: currentMode,
           cwd: systemData.cwd,
           tools: systemData.tools,
         });
+        break;
+      }
+
+      case 'permission_mode_changed': {
+        const modeData = eventData as { permissionMode: ClaudePermissionMode };
+        // Map ClaudePermissionMode back to PermissionMode (shared)
+        const reverseMap: Record<ClaudePermissionMode, string> = {
+          'default': 'ask',
+          'acceptEdits': 'auto-edit',
+          'plan': 'plan',
+        };
+        const sharedMode = reverseMap[modeData.permissionMode];
+        // Update session manager
+        sessionManager.setPermissionMode(sessionId, sharedMode as 'ask' | 'auto-edit' | 'plan');
+        // Broadcast to all clients attached to this session
+        sendToSession(sessionId, {
+          type: 'system_info',
+          sessionId,
+          permissionMode: sharedMode,
+        });
+        console.log(`[Server] Permission mode synced for session ${sessionId}: ${sharedMode}`);
         break;
       }
 
@@ -870,6 +909,26 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Check if a browser session exists for this session
           const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
 
+          // Get current permission mode from runner (if running) for sync
+          const runner = runnerManager.getRunner(message.sessionId);
+          if (runner) {
+            // Map ClaudePermissionMode to PermissionMode and send system_info
+            const reverseMap: Record<ClaudePermissionMode, string> = {
+              'default': 'ask',
+              'acceptEdits': 'auto-edit',
+              'plan': 'plan',
+            };
+            const currentMode = reverseMap[runner.permissionMode];
+            // Send system_info with current permission mode after attach response
+            setTimeout(() => {
+              sendToSession(message.sessionId, {
+                type: 'system_info',
+                sessionId: message.sessionId,
+                permissionMode: currentMode,
+              });
+            }, 0);
+          }
+
           response = {
             type: 'session_attached',
             sessionId: message.sessionId,
@@ -971,23 +1030,48 @@ export function createServer(options: ServerOptions): BridgeServer {
 
       case 'set_permission_mode': {
         const session = sessionManager.getSession(message.sessionId);
-        if (session) {
-          // Store the permission mode for the session
-          sessionManager.setPermissionMode(message.sessionId, message.mode);
-          // Send back the updated system info
-          response = {
-            type: 'system_info',
-            sessionId: message.sessionId,
-            permissionMode: message.mode,
-          };
-        } else {
+        if (!session) {
           response = {
             type: 'error',
             sessionId: message.sessionId,
             message: 'Session not found',
           };
+          break;
         }
-        break;
+
+        // Map PermissionMode (shared) to ClaudePermissionMode
+        const modeMap: Record<string, ClaudePermissionMode> = {
+          'ask': 'default',
+          'auto-edit': 'acceptEdits',
+          'plan': 'plan',
+        };
+        const claudeMode = modeMap[message.mode];
+        if (!claudeMode) {
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: `Invalid permission mode: ${message.mode}`,
+          };
+          break;
+        }
+
+        // Always store the permission mode in session
+        // It will be applied on next Claude Code startup via --permission-mode flag
+        sessionManager.setPermissionMode(message.sessionId, message.mode);
+        console.log(`[Server] Permission mode set for session ${message.sessionId}: ${message.mode}`);
+
+        // Broadcast to all clients attached to this session
+        sendToSession(message.sessionId, {
+          type: 'system_info',
+          sessionId: message.sessionId,
+          permissionMode: message.mode,
+        });
+
+        // Note: If Claude Code is currently running, the mode change won't take effect
+        // until the next turn. This is by design - Claude Code's -p mode doesn't accept
+        // interactive input like Shift+Tab.
+        // No additional response needed - already broadcast via sendToSession
+        return;
       }
 
       case 'set_model': {
@@ -1140,6 +1224,14 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Use message's thinkingEnabled if specified, otherwise use global default
           const thinkingEnabled = message.thinkingEnabled ?? settingsManager.get('defaultThinkingEnabled');
 
+          // Map session permission mode to Claude permission mode
+          const modeMap: Record<string, ClaudePermissionMode> = {
+            'ask': 'default',
+            'auto-edit': 'acceptEdits',
+            'plan': 'plan',
+          };
+          const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
@@ -1147,6 +1239,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             permissionToolName,
             images,
             thinkingEnabled,
+            permissionMode,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -1451,11 +1544,20 @@ Keep it concise but comprehensive.`;
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
 
+          // Map session permission mode to Claude permission mode
+          const modeMap: Record<string, ClaudePermissionMode> = {
+            'ask': 'default',
+            'auto-edit': 'acceptEdits',
+            'plan': 'plan',
+          };
+          const permissionMode = session.permissionMode ? modeMap[session.permissionMode] : undefined;
+
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
+            permissionMode,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {

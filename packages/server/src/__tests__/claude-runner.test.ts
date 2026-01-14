@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents } from '../claude-runner.js';
+import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, ClaudePermissionMode } from '../claude-runner.js';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 
@@ -578,6 +578,189 @@ describe('ClaudeRunner', () => {
 
       expect(mockSpawn).toHaveBeenCalled();
       expect(mockPtySpawn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('permission mode', () => {
+    it('should have default permission mode initially', () => {
+      const runner = new ClaudeRunner();
+      expect(runner.permissionMode).toBe('default');
+    });
+
+    describe('updatePermissionMode', () => {
+      it('should update permission mode and emit event', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+
+        runner.updatePermissionMode('acceptEdits');
+
+        expect(runner.permissionMode).toBe('acceptEdits');
+        expect(modeChangedHandler).toHaveBeenCalledWith({ permissionMode: 'acceptEdits' });
+      });
+
+      it('should not emit event if mode is the same', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+
+        runner.updatePermissionMode('default');
+
+        expect(modeChangedHandler).not.toHaveBeenCalled();
+      });
+
+      it('should handle variation "normal" as "default"', () => {
+        const runner = new ClaudeRunner();
+        runner.updatePermissionMode('acceptEdits'); // Change first
+        runner.updatePermissionMode('normal');
+        expect(runner.permissionMode).toBe('default');
+      });
+
+      it('should handle variation "ask" as "default"', () => {
+        const runner = new ClaudeRunner();
+        runner.updatePermissionMode('acceptEdits'); // Change first
+        runner.updatePermissionMode('ask');
+        expect(runner.permissionMode).toBe('default');
+      });
+
+      it('should handle variation "auto-edit" as "acceptEdits"', () => {
+        const runner = new ClaudeRunner();
+        runner.updatePermissionMode('auto-edit');
+        expect(runner.permissionMode).toBe('acceptEdits');
+      });
+
+      it('should handle variation "autoEdit" as "acceptEdits"', () => {
+        const runner = new ClaudeRunner();
+        runner.updatePermissionMode('autoEdit');
+        expect(runner.permissionMode).toBe('acceptEdits');
+      });
+
+      it('should ignore unknown mode', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+
+        runner.updatePermissionMode('unknownMode');
+
+        expect(runner.permissionMode).toBe('default');
+        expect(modeChangedHandler).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('requestPermissionModeChange', () => {
+      it('should return false if already at target mode', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+
+        const result = runner.requestPermissionModeChange('default');
+
+        expect(result).toBe(false);
+        expect(mockPty.pty.write).not.toHaveBeenCalledWith('\x1b[Z');
+      });
+
+      it('should return false if no PTY process', () => {
+        const runner = new ClaudeRunner();
+        // Don't start - no PTY
+
+        const result = runner.requestPermissionModeChange('acceptEdits');
+
+        expect(result).toBe(false);
+      });
+
+      it('should send Shift+Tab to change from default to acceptEdits (1 step)', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+
+        const result = runner.requestPermissionModeChange('acceptEdits');
+
+        expect(result).toBe(true);
+        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
+        expect(mockPty.pty.write).toHaveBeenCalledWith('\x1b[Z');
+      });
+
+      it('should send 2 Shift+Tabs to change from default to plan', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+
+        const result = runner.requestPermissionModeChange('plan');
+
+        expect(result).toBe(true);
+        expect(mockPty.pty.write).toHaveBeenCalledTimes(2);
+        expect(mockPty.pty.write).toHaveBeenNthCalledWith(1, '\x1b[Z');
+        expect(mockPty.pty.write).toHaveBeenNthCalledWith(2, '\x1b[Z');
+      });
+
+      it('should send 1 Shift+Tab to change from acceptEdits to plan', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+        runner.updatePermissionMode('acceptEdits');
+        vi.clearAllMocks(); // Clear the write calls from start
+
+        const result = runner.requestPermissionModeChange('plan');
+
+        expect(result).toBe(true);
+        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
+      });
+
+      it('should wrap around: plan to default needs 1 Shift+Tab', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+        runner.updatePermissionMode('plan');
+        vi.clearAllMocks();
+
+        const result = runner.requestPermissionModeChange('default');
+
+        expect(result).toBe(true);
+        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
+      });
+
+      it('should wrap around: acceptEdits to default needs 2 Shift+Tabs', () => {
+        const runner = new ClaudeRunner();
+        runner.start('test');
+        runner.updatePermissionMode('acceptEdits');
+        vi.clearAllMocks();
+
+        const result = runner.requestPermissionModeChange('default');
+
+        expect(result).toBe(true);
+        expect(mockPty.pty.write).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('system event with permissionMode', () => {
+      it('should update permission mode from system event', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+        runner.start('test');
+
+        const systemMessage = JSON.stringify({
+          type: 'system',
+          subtype: 'init',
+          session_id: 'session_123',
+          permissionMode: 'acceptEdits',
+        });
+        mockPty.dataCallback?.(systemMessage + '\n');
+
+        expect(runner.permissionMode).toBe('acceptEdits');
+        expect(modeChangedHandler).toHaveBeenCalledWith({ permissionMode: 'acceptEdits' });
+      });
+
+      it('should not emit if permissionMode not in system event', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+        runner.start('test');
+
+        const systemMessage = JSON.stringify({
+          type: 'system',
+          subtype: 'init',
+          session_id: 'session_123',
+        });
+        mockPty.dataCallback?.(systemMessage + '\n');
+
+        expect(modeChangedHandler).not.toHaveBeenCalled();
+      });
     });
   });
 });
