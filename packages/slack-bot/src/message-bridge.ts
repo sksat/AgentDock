@@ -22,6 +22,7 @@ export interface SendUserMessageOptions {
 /**
  * Handles WebSocket communication with AgentDock server.
  * Provides methods for sending/receiving messages and managing sessions.
+ * Automatically reconnects when connection is lost.
  */
 export class MessageBridge {
   private ws: WebSocket | null = null;
@@ -31,6 +32,10 @@ export class MessageBridge {
     resolve: (session: SessionInfo) => void;
     reject: (error: Error) => void;
   } | null = null;
+  private shouldReconnect = true;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private reconnectDelay = 1000; // Start with 1 second
 
   constructor(url: string) {
     this.url = url;
@@ -51,15 +56,26 @@ export class MessageBridge {
       throw new Error('Already connected');
     }
 
+    this.shouldReconnect = true;
+    return this.doConnect();
+  }
+
+  private doConnect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.url);
 
       this.ws.on('open', () => {
+        console.log('Connected to AgentDock server');
+        this.reconnectAttempts = 0;
+        this.reconnectDelay = 1000;
         resolve();
       });
 
       this.ws.on('error', (error) => {
-        reject(error);
+        // Only reject on initial connection, not reconnects
+        if (this.reconnectAttempts === 0) {
+          reject(error);
+        }
       });
 
       this.ws.on('message', (data) => {
@@ -68,14 +84,40 @@ export class MessageBridge {
 
       this.ws.on('close', () => {
         this.ws = null;
+        this.scheduleReconnect();
       });
     });
+  }
+
+  private scheduleReconnect(): void {
+    if (!this.shouldReconnect) {
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`Failed to reconnect after ${this.maxReconnectAttempts} attempts`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+
+    console.log(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+    setTimeout(() => {
+      if (this.shouldReconnect && !this.isConnected) {
+        this.doConnect().catch((err) => {
+          console.error('Reconnection failed:', err.message);
+        });
+      }
+    }, delay);
   }
 
   /**
    * Disconnect from AgentDock server.
    */
   async disconnect(): Promise<void> {
+    this.shouldReconnect = false;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

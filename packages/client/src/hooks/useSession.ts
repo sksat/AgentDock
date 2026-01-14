@@ -1214,9 +1214,26 @@ export function useSession(): UseSessionReturn {
           });
           break;
         }
+
+        case 'user_input': {
+          // Add user input from another client (e.g., Slack) to messages
+          const sessionId = message.sessionId;
+          updateSessionMessages(sessionId, (prev) => [
+            ...prev,
+            {
+              type: 'user',
+              content: {
+                text: message.content,
+                source: message.source,
+              },
+              timestamp: message.timestamp,
+            },
+          ]);
+          break;
+        }
       }
     },
-    [activeSessionId, updateSessionMessages]
+    [activeSessionId, updateSessionMessages, send]
   );
 
   return {

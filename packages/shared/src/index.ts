@@ -365,6 +365,8 @@ export type ServerMessage =
   | SessionListMessage
   | SessionDeletedMessage
   | SessionStatusChangedMessage
+  // User input (broadcast to other clients)
+  | UserInputMessage
   // Agent output
   | TextOutputMessage
   | ThinkingOutputMessage
@@ -439,6 +441,19 @@ export interface SessionStatusChangedMessage {
   type: 'session_status_changed';
   sessionId: string;
   status: SessionStatus;
+}
+
+/** User input broadcast to all clients attached to a session */
+export interface UserInputMessage {
+  type: 'user_input';
+  sessionId: string;
+  content: string;
+  /** Source of the input (web UI or Slack) */
+  source: InputSource;
+  /** Slack context when source is 'slack' */
+  slackContext?: SlackContext;
+  /** Timestamp when the input was received */
+  timestamp: string;
 }
 
 export interface TextOutputMessage {

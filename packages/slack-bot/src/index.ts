@@ -277,6 +277,22 @@ async function main(): Promise<void> {
           }
           break;
         }
+
+        case 'user_input': {
+          // Only post to Slack if the input came from Web (not from Slack itself)
+          if (message.source !== 'slack') {
+            // Post with different icon and username to distinguish from bot
+            // Requires "chat:write.customize" scope in Slack App settings
+            await app.client.chat.postMessage({
+              channel,
+              thread_ts: threadTs,
+              text: message.content,
+              username: 'Web User',
+              icon_emoji: ':computer:',
+            });
+          }
+          break;
+        }
       }
     } catch (error) {
       console.error('Error forwarding message to Slack:', error);

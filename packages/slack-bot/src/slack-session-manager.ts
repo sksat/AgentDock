@@ -42,6 +42,7 @@ export class SlackSessionManager {
 
   /**
    * Find an existing session for a thread, or create a new one.
+   * Also attaches to the session to receive messages.
    */
   async findOrCreateSession(
     teamId: string,
@@ -53,12 +54,17 @@ export class SlackSessionManager {
     // Check if we already have a session for this thread
     const existing = this.threadBindings.get(key);
     if (existing) {
+      // Re-attach to ensure we receive messages
+      this.bridge.attachSession(existing.agentDockSessionId);
       return existing;
     }
 
     // Create a new session in AgentDock
     const sessionName = this.generateSessionName();
     const session = await this.bridge.createSession(sessionName, this.defaultWorkingDir);
+
+    // Attach to the session to receive messages
+    this.bridge.attachSession(session.id);
 
     // Create the binding
     const binding: SlackThreadBinding = {

@@ -166,6 +166,7 @@ CREATE TABLE slack_thread_bindings (
 
 - `app_mentions:read` - メンションの受信
 - `chat:write` - メッセージの送信
+- `chat:write.customize` - メッセージのユーザー名・アイコンをカスタマイズ
 - `channels:history` - チャンネル履歴の読み取り
 - `reactions:write` - リアクションの追加/削除
 - `files:write` - ファイル・画像のアップロード
@@ -231,6 +232,7 @@ CREATE TABLE slack_thread_bindings (
 |-------|------|
 | `app_mentions:read` | メンションを受信 |
 | `chat:write` | メッセージを送信 |
+| `chat:write.customize` | メッセージのユーザー名・アイコンをカスタマイズ（Web User 表示用） |
 | `channels:history` | パブリックチャンネルの履歴を読む |
 | `groups:history` | プライベートチャンネルの履歴を読む |
 | `reactions:write` | リアクションを追加/削除 |

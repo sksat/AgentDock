@@ -77,6 +77,7 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
 
   // Handle app_mention events (when bot is mentioned)
   app.event('app_mention', async ({ event, client, say }) => {
+    console.log('[DEBUG] app_mention event received:', JSON.stringify(event, null, 2));
     const mentionEvent = event as AppMentionEvent;
     const { text, channel, ts, thread_ts, user, team } = mentionEvent;
 
@@ -102,12 +103,14 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
     }
 
     try {
+      console.log('[DEBUG] Finding or creating session for thread:', threadTs);
       // Find or create a session for this thread
       const binding = await sessionManager.findOrCreateSession(
         team || 'unknown',
         channel,
         threadTs
       );
+      console.log('[DEBUG] Session binding:', JSON.stringify(binding, null, 2));
 
       // Start progress indicator on the specific message
       // ts is the timestamp of this message (for reaction)
@@ -115,6 +118,7 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
       await progressIndicator.startProcessing(channel, threadTs, ts);
 
       // Send the user message to AgentDock
+      console.log('[DEBUG] Sending user message to AgentDock:', messageText);
       bridge.sendUserMessage(binding.agentDockSessionId, messageText, {
         source: 'slack',
         slackContext: {
@@ -123,6 +127,7 @@ export function createSlackApp(options: SlackAppOptions): SlackAppResult {
           userId: user || 'unknown',
         },
       });
+      console.log('[DEBUG] User message sent successfully');
     } catch (error) {
       console.error('Error handling app_mention:', error);
       // Stop progress indicator on error
