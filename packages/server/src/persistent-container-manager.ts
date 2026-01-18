@@ -59,16 +59,23 @@ export class PersistentContainerManager extends EventEmitter {
     const baseArgs = buildPodmanArgs(containerConfig, workingDir, {});
 
     // Replace 'run' with 'run -d' for detached mode and add sleep infinity
+    // baseArgs structure: ['run', '-it', '--rm', '--userns=keep-id', ...mounts..., image]
+    // We need to:
+    // 1. Skip first 4 args (run, -it, --rm, --userns=keep-id) - we add our own
+    // 2. Skip last element (image) - we add it after port mapping
+    const mountArgs = baseArgs.slice(4, -1);
     const args = [
       'run',
       '-d', // detached
       '--rm',
       '--userns=keep-id',
-      ...baseArgs.slice(4), // Skip 'run', '-it', '--rm', '--userns=keep-id'
+      ...mountArgs,
       '-p', `${this.options.bridgePort}:3002`, // Expose bridge port
       containerConfig.image,
       'sleep', 'infinity', // Keep container running
     ];
+
+    console.log(`[PersistentContainer] Starting container: podman ${args.join(' ')}`);
 
     return new Promise((resolve, reject) => {
       const proc = spawn('podman', args);

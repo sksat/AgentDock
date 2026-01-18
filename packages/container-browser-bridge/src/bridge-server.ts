@@ -148,8 +148,16 @@ export class BridgeServer extends EventEmitter {
         await this.browserManager.navigate(command.url);
         return null;
 
+      case 'browser_navigate_back':
+        await this.browserManager.navigateBack();
+        return null;
+
       case 'browser_click':
         await this.browserManager.click(command.x, command.y, command.button);
+        return null;
+
+      case 'browser_hover':
+        await this.browserManager.hover(command.ref);
         return null;
 
       case 'browser_type':
@@ -164,11 +172,51 @@ export class BridgeServer extends EventEmitter {
         await this.browserManager.scroll(command.deltaX, command.deltaY);
         return null;
 
+      case 'browser_select_option':
+        await this.browserManager.selectOption(command.ref, command.values);
+        return null;
+
+      case 'browser_drag':
+        await this.browserManager.drag(command.startRef, command.endRef);
+        return null;
+
+      case 'browser_fill_form':
+        await this.browserManager.fillForm(command.fields);
+        return null;
+
       case 'browser_snapshot':
         return await this.browserManager.snapshot();
 
       case 'browser_screenshot':
         return await this.browserManager.screenshot(command.fullPage);
+
+      case 'browser_console_messages':
+        return this.browserManager.getConsoleMessages(command.level);
+
+      case 'browser_network_requests':
+        return this.browserManager.getNetworkRequests(command.includeStatic);
+
+      case 'browser_evaluate':
+        return await this.browserManager.evaluate(command.function, command.ref);
+
+      case 'browser_wait_for':
+        await this.browserManager.waitFor({
+          text: command.text,
+          textGone: command.textGone,
+          time: command.time,
+        });
+        return null;
+
+      case 'browser_handle_dialog':
+        await this.browserManager.handleDialog(command.accept, command.promptText);
+        return null;
+
+      case 'browser_resize':
+        await this.browserManager.resize(command.width, command.height);
+        return null;
+
+      case 'browser_tabs':
+        return await this.browserManager.tabs(command.action, command.index);
 
       case 'start_screencast':
         await this.browserManager.startScreencast(command.options);

@@ -5,12 +5,24 @@ export type BridgeCommand =
   | LaunchBrowserCommand
   | CloseBrowserCommand
   | BrowserNavigateCommand
+  | BrowserNavigateBackCommand
   | BrowserClickCommand
+  | BrowserHoverCommand
   | BrowserTypeCommand
   | BrowserPressKeyCommand
   | BrowserScrollCommand
+  | BrowserSelectOptionCommand
+  | BrowserDragCommand
+  | BrowserFillFormCommand
   | BrowserSnapshotCommand
   | BrowserScreenshotCommand
+  | BrowserConsoleMessagesCommand
+  | BrowserNetworkRequestsCommand
+  | BrowserEvaluateCommand
+  | BrowserWaitForCommand
+  | BrowserHandleDialogCommand
+  | BrowserResizeCommand
+  | BrowserTabsCommand
   | StartScreencastCommand
   | StopScreencastCommand;
 
@@ -31,11 +43,21 @@ export interface BrowserNavigateCommand {
   url: string;
 }
 
+export interface BrowserNavigateBackCommand {
+  type: 'browser_navigate_back';
+}
+
 export interface BrowserClickCommand {
   type: 'browser_click';
   x: number;
   y: number;
   button?: 'left' | 'right' | 'middle';
+}
+
+export interface BrowserHoverCommand {
+  type: 'browser_hover';
+  ref: string;
+  element: string;
 }
 
 export interface BrowserTypeCommand {
@@ -54,6 +76,31 @@ export interface BrowserScrollCommand {
   deltaY: number;
 }
 
+export interface BrowserSelectOptionCommand {
+  type: 'browser_select_option';
+  ref: string;
+  element: string;
+  values: string[];
+}
+
+export interface BrowserDragCommand {
+  type: 'browser_drag';
+  startRef: string;
+  startElement: string;
+  endRef: string;
+  endElement: string;
+}
+
+export interface BrowserFillFormCommand {
+  type: 'browser_fill_form';
+  fields: Array<{
+    ref: string;
+    name: string;
+    type: 'textbox' | 'checkbox' | 'radio' | 'combobox' | 'slider';
+    value: string;
+  }>;
+}
+
 export interface BrowserSnapshotCommand {
   type: 'browser_snapshot';
 }
@@ -61,6 +108,48 @@ export interface BrowserSnapshotCommand {
 export interface BrowserScreenshotCommand {
   type: 'browser_screenshot';
   fullPage?: boolean;
+}
+
+export interface BrowserConsoleMessagesCommand {
+  type: 'browser_console_messages';
+  level?: 'error' | 'warning' | 'info' | 'debug';
+}
+
+export interface BrowserNetworkRequestsCommand {
+  type: 'browser_network_requests';
+  includeStatic?: boolean;
+}
+
+export interface BrowserEvaluateCommand {
+  type: 'browser_evaluate';
+  function: string;
+  ref?: string;
+  element?: string;
+}
+
+export interface BrowserWaitForCommand {
+  type: 'browser_wait_for';
+  text?: string;
+  textGone?: string;
+  time?: number;
+}
+
+export interface BrowserHandleDialogCommand {
+  type: 'browser_handle_dialog';
+  accept: boolean;
+  promptText?: string;
+}
+
+export interface BrowserResizeCommand {
+  type: 'browser_resize';
+  width: number;
+  height: number;
+}
+
+export interface BrowserTabsCommand {
+  type: 'browser_tabs';
+  action: 'list' | 'new' | 'close' | 'select';
+  index?: number;
 }
 
 export interface StartScreencastCommand {

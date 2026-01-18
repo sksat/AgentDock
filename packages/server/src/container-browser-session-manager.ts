@@ -256,30 +256,38 @@ export class ContainerBrowserSessionManager extends EventEmitter {
    * Execute a browser command (matching BrowserController interface)
    */
   async executeCommand(sessionId: string, commandName: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    // Map to bridge command format
+    // Map command names to bridge command types
+    // Input may be short names (navigate, click) or full names (browser_navigate)
+    // Bridge expects: browser_navigate, browser_click, etc.
     const commandMap: Record<string, string> = {
-      'browser_navigate': 'navigate',
-      'browser_navigate_back': 'navigate_back',
-      'browser_click': 'click',
-      'browser_hover': 'hover',
-      'browser_type': 'type',
-      'browser_press_key': 'press_key',
-      'browser_select_option': 'select_option',
-      'browser_drag': 'drag',
-      'browser_fill_form': 'fill_form',
-      'browser_snapshot': 'snapshot',
-      'browser_take_screenshot': 'screenshot',
-      'browser_console_messages': 'console_messages',
-      'browser_network_requests': 'network_requests',
-      'browser_evaluate': 'evaluate',
-      'browser_wait_for': 'wait_for',
-      'browser_handle_dialog': 'handle_dialog',
-      'browser_resize': 'resize',
-      'browser_tabs': 'tabs',
+      // Short name -> Bridge command type
+      'navigate': 'browser_navigate',
+      'navigate_back': 'browser_navigate_back',
+      'click': 'browser_click',
+      'hover': 'browser_hover',
+      'type': 'browser_type',
+      'press_key': 'browser_press_key',
+      'select_option': 'browser_select_option',
+      'drag': 'browser_drag',
+      'fill_form': 'browser_fill_form',
+      'snapshot': 'browser_snapshot',
+      'screenshot': 'browser_screenshot',
+      'take_screenshot': 'browser_screenshot',
+      'console_messages': 'browser_console_messages',
+      'network_requests': 'browser_network_requests',
+      'evaluate': 'browser_evaluate',
+      'wait_for': 'browser_wait_for',
+      'handle_dialog': 'browser_handle_dialog',
+      'resize': 'browser_resize',
+      'tabs': 'browser_tabs',
+      'close': 'close_browser',
+      // Also handle full names that might need translation
+      'browser_take_screenshot': 'browser_screenshot',
       'browser_close': 'close_browser',
     };
 
     const bridgeCommandType = commandMap[commandName] ?? commandName;
+    console.log(`[ContainerBrowserSession] executeCommand: ${commandName} -> ${bridgeCommandType}`);
 
     return this.sendCommand(sessionId, {
       type: bridgeCommandType,
