@@ -150,6 +150,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultPermissionMode: 'ask',
     defaultThinkingEnabled: false,
     defaultRunnerBackend: 'native',
+    defaultBrowserInContainer: true,
   });
 
   useEffect(() => {

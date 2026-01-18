@@ -272,7 +272,7 @@ export class SessionManager {
       session.claudeSessionId ?? null,
       session.permissionMode ?? null,
       session.model ?? null,
-      session.runnerBackend ?? 'native',
+      session.runnerBackend ?? null,
       session.browserInContainer === undefined ? null : (session.browserInContainer ? 1 : 0)
     );
   }
