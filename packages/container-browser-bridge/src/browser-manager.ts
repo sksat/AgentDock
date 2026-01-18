@@ -204,7 +204,7 @@ export class BrowserManager extends EventEmitter {
     await this.page.dragAndDrop(startSelector, endSelector);
   }
 
-  async fillForm(fields: Array<{ ref: string; name: string; type: string; value: string }>): Promise<void> {
+  async fillForm(fields: Array<{ ref: string; name: string; type: 'textbox' | 'checkbox' | 'radio' | 'combobox' | 'slider'; value: string }>): Promise<void> {
     if (!this.page) throw new Error('Browser not launched');
     for (const field of fields) {
       const selector = field.ref;
@@ -214,7 +214,9 @@ export class BrowserManager extends EventEmitter {
           break;
         case 'checkbox':
         case 'radio':
-          if (field.value === 'true') {
+          // Accept 'true', 'True', 'TRUE', '1', or boolean true (as string)
+          const isChecked = ['true', '1'].includes(field.value.toLowerCase());
+          if (isChecked) {
             await this.page.check(selector);
           } else {
             await this.page.uncheck(selector);
