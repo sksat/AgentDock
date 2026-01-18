@@ -1,0 +1,57 @@
+# Dockerfile for Claude Code with Browser support
+# Build: podman build -t claude-browser:v1 -f Dockerfile.claude-browser .
+# Run: podman run -it --rm --userns=keep-id -v ./workspace:/workspace:O claude-browser:v1
+
+FROM node:22-slim
+
+# Install dependencies for Claude Code and Chromium
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    ca-certificates \
+    # Chromium dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
+    fonts-liberation \
+    fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
+
+# Switch to node user for Playwright installation
+USER node
+
+# Install Playwright with Chromium
+# Use PLAYWRIGHT_BROWSERS_PATH to install in user directory
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+RUN npx playwright install chromium
+
+# Copy and build container-browser-bridge
+COPY --chown=node:node packages/container-browser-bridge /home/node/browser-bridge
+WORKDIR /home/node/browser-bridge
+RUN npm install && npm run build
+
+# Set working directory
+WORKDIR /workspace
+
+# Expose bridge port
+EXPOSE 3002
+
+# Default command (can be overridden)
+CMD ["/bin/bash"]
