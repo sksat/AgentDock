@@ -67,6 +67,28 @@ describe('BrowserManager', () => {
       await manager.close();
       await expect(manager.navigate('https://example.com')).rejects.toThrow('Browser not launched');
     });
+
+    it('should reject javascript: URLs', async () => {
+      await expect(manager.navigate('javascript:alert(1)')).rejects.toThrow('URL scheme');
+    });
+
+    it('should reject file: URLs', async () => {
+      await expect(manager.navigate('file:///etc/passwd')).rejects.toThrow('URL scheme');
+    });
+
+    it('should allow https: URLs', async () => {
+      // This would make an actual network request, but validates the scheme check passes
+      // We can't test actual navigation to https without network
+      await expect(manager.navigate('https://example.com')).resolves.not.toThrow();
+    });
+
+    it('should allow data: URLs', async () => {
+      await expect(manager.navigate('data:text/html,<h1>OK</h1>')).resolves.not.toThrow();
+    });
+
+    it('should reject invalid URLs', async () => {
+      await expect(manager.navigate('not-a-valid-url')).rejects.toThrow('Invalid URL');
+    });
   });
 
   describe('user actions', () => {

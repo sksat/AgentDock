@@ -124,9 +124,26 @@ export class BrowserManager extends EventEmitter {
     return this.browser !== null;
   }
 
+  // Allowed URL schemes for navigation
+  private static readonly ALLOWED_URL_SCHEMES = ['http:', 'https:', 'data:', 'about:'];
+
   // Browser actions
   async navigate(url: string): Promise<void> {
     if (!this.page) throw new Error('Browser not launched');
+
+    // Validate URL scheme to prevent javascript: and other dangerous URIs
+    try {
+      const parsedUrl = new URL(url);
+      if (!BrowserManager.ALLOWED_URL_SCHEMES.includes(parsedUrl.protocol)) {
+        throw new Error(`URL scheme '${parsedUrl.protocol}' is not allowed. Allowed schemes: ${BrowserManager.ALLOWED_URL_SCHEMES.join(', ')}`);
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error(`Invalid URL: ${url}`);
+      }
+      throw error;
+    }
+
     await this.page.goto(url);
   }
 
