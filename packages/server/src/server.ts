@@ -1107,6 +1107,14 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Store WebSocket for this session so it can receive events
           addWebSocketToSession(message.sessionId, ws);
 
+          // Restore session settings from DB to runtime maps
+          if (session.runnerBackend) {
+            sessionRunnerBackends.set(message.sessionId, session.runnerBackend);
+          }
+          if (session.browserInContainer !== undefined) {
+            sessionBrowserInContainer.set(message.sessionId, session.browserInContainer);
+          }
+
           // Register session for git status tracking
           gitStatusProvider.registerSession(message.sessionId, session.workingDir);
 
