@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo, type KeyboardEvent }
 import clsx from 'clsx';
 import { UsageChart } from './UsageChart';
 import type { GlobalUsageData } from './UsageDisplay';
-import type { SessionInfo, RunnerBackend } from '@agent-dock/shared';
+import type { SessionInfo, RunnerBackend, ImageAttachment } from '@agent-dock/shared';
 
 // Detect home directory from paths (e.g., /home/user or /Users/user)
 function detectHomeDir(paths: string[]): string | null {
@@ -30,7 +30,7 @@ export interface WelcomePageProps {
   sessions: SessionInfo[];
   globalUsage: GlobalUsageData | null;
   isConnected: boolean;
-  onSendMessage: (message: string, images?: undefined, workingDir?: string, runnerBackend?: RunnerBackend) => void;
+  onSendMessage: (message: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => void;
   onSelectSession: (sessionId: string) => void;
   /** Whether Podman is available on the server */
   podmanAvailable?: boolean;
