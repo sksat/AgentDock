@@ -386,14 +386,29 @@ export function createServer(options: ServerOptions): BridgeServer {
    * Determine if a session should use container browser based on settings
    */
   function shouldUseContainerBrowser(sessionId: string): boolean {
-    // Check explicit session setting first
+    // Check explicit session setting first (runtime map)
     const explicit = sessionBrowserInContainer.get(sessionId);
     if (explicit !== undefined) {
       return explicit;
     }
 
+    // Check session's stored browserInContainer setting from DB
+    const session = sessionManager.getSession(sessionId);
+    if (session?.browserInContainer !== undefined) {
+      // Also populate runtime map for future calls
+      sessionBrowserInContainer.set(sessionId, session.browserInContainer);
+      return session.browserInContainer;
+    }
+
     // Default: true when running in podman, false when native
-    const runnerBackend = sessionRunnerBackends.get(sessionId) ?? settingsManager.get('defaultRunnerBackend');
+    // Check runtime map first, then session's stored value, then global default
+    let runnerBackend = sessionRunnerBackends.get(sessionId);
+    if (runnerBackend === undefined && session?.runnerBackend) {
+      runnerBackend = session.runnerBackend;
+      // Also populate runtime map for future calls
+      sessionRunnerBackends.set(sessionId, runnerBackend);
+    }
+    runnerBackend = runnerBackend ?? settingsManager.get('defaultRunnerBackend');
     return runnerBackend === 'podman';
   }
 
