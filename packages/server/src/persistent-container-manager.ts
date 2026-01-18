@@ -19,6 +19,12 @@ export interface PersistentContainerEvents {
   error: (error: Error) => void;
 }
 
+// Reconnection configuration
+const RECONNECT_INITIAL_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+const RECONNECT_MAX_ATTEMPTS = 10;
+const RECONNECT_BACKOFF_MULTIPLIER = 2;
+
 /**
  * Manages a persistent Podman container for a session.
  * The container stays alive across multiple Claude invocations
@@ -31,6 +37,8 @@ export class PersistentContainerManager extends EventEmitter {
   private bridgeWs: WebSocket | null = null;
   private bridgeReconnectTimer: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
+  private reconnectAttempts = 0;
+  private reconnectDelay = RECONNECT_INITIAL_DELAY_MS;
 
   constructor(options: PersistentContainerOptions) {
     super();
@@ -92,7 +100,15 @@ export class PersistentContainerManager extends EventEmitter {
 
       proc.on('close', (code) => {
         if (code === 0) {
-          this.containerId = stdout.trim().substring(0, 12);
+          const rawId = stdout.trim();
+          // Validate container ID format (should be hexadecimal, at least 12 chars)
+          if (!rawId || rawId.length < 12 || !/^[a-f0-9]+$/i.test(rawId)) {
+            const error = new Error(`Invalid container ID received: ${rawId}`);
+            this.emit('error', error);
+            reject(error);
+            return;
+          }
+          this.containerId = rawId.substring(0, 12);
           console.log(`[PersistentContainer] Started container: ${this.containerId}`);
           this.emit('container_started', this.containerId);
           resolve(this.containerId);
@@ -164,6 +180,9 @@ export class PersistentContainerManager extends EventEmitter {
       ws.on('open', () => {
         clearTimeout(timeout);
         this.bridgeWs = ws;
+        // Reset reconnection state on successful connection
+        this.reconnectAttempts = 0;
+        this.reconnectDelay = RECONNECT_INITIAL_DELAY_MS;
         console.log(`[PersistentContainer] Connected to bridge at ${url}`);
         this.emit('bridge_connected');
         resolve();
@@ -201,15 +220,30 @@ export class PersistentContainerManager extends EventEmitter {
   private scheduleReconnect(): void {
     if (this.bridgeReconnectTimer) return;
 
+    // Check if max attempts reached
+    if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+      console.error(`[PersistentContainer] Max reconnection attempts (${RECONNECT_MAX_ATTEMPTS}) reached, giving up`);
+      this.emit('error', new Error(`Bridge reconnection failed after ${RECONNECT_MAX_ATTEMPTS} attempts`));
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`[PersistentContainer] Scheduling reconnect attempt ${this.reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS} in ${this.reconnectDelay}ms`);
+
     this.bridgeReconnectTimer = setTimeout(() => {
       this.bridgeReconnectTimer = null;
       if (!this.isShuttingDown && this.containerId) {
         this.connectToBridge().catch((error) => {
           console.error('[PersistentContainer] Reconnect failed:', error);
+          // Apply exponential backoff for next attempt
+          this.reconnectDelay = Math.min(
+            this.reconnectDelay * RECONNECT_BACKOFF_MULTIPLIER,
+            RECONNECT_MAX_DELAY_MS
+          );
           this.scheduleReconnect();
         });
       }
-    }, 2000);
+    }, this.reconnectDelay);
   }
 
   /**
