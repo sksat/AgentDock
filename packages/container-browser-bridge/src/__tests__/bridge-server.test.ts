@@ -245,9 +245,9 @@ describe('BridgeServer', () => {
         client = new WebSocket(`ws://localhost:${TEST_PORT}`);
         client.on('open', async () => {
           const launchPromise = new Promise<void>((res) => {
-            client.once('message', () => res());
+            client!.once('message', () => res());
           });
-          client.send(JSON.stringify({
+          client!.send(JSON.stringify({
             requestId: 'launch',
             command: { type: 'launch_browser', options: { headless: true } },
           }));
@@ -263,7 +263,7 @@ describe('BridgeServer', () => {
 
       // Set up frame listener
       const framePromise = new Promise<void>((resolve) => {
-        client.on('message', (data) => {
+        client!.on('message', (data) => {
           const msg = JSON.parse(data.toString());
           if (msg.type === 'screencast_frame') {
             frames.push(msg);
@@ -273,14 +273,14 @@ describe('BridgeServer', () => {
       });
 
       // Start screencast
-      client.send(JSON.stringify({
+      client!.send(JSON.stringify({
         requestId: 'start-sc',
         command: { type: 'start_screencast', options: { format: 'jpeg', quality: 50 } },
       }));
 
       // Navigate to trigger frames
       await new Promise(resolve => setTimeout(resolve, 100));
-      client.send(JSON.stringify({
+      client!.send(JSON.stringify({
         requestId: 'nav',
         command: { type: 'browser_navigate', url: 'data:text/html,<h1>Frame Test</h1>' },
       }));
@@ -297,8 +297,8 @@ describe('BridgeServer', () => {
     it('should stop screencast', async () => {
       // Start screencast
       await new Promise<void>((resolve) => {
-        client.once('message', () => resolve());
-        client.send(JSON.stringify({
+        client!.once('message', () => resolve());
+        client!.send(JSON.stringify({
           requestId: 'start-sc',
           command: { type: 'start_screencast' },
         }));
@@ -306,10 +306,10 @@ describe('BridgeServer', () => {
 
       // Stop screencast
       const responsePromise = new Promise<unknown>((resolve) => {
-        client.once('message', (data) => resolve(JSON.parse(data.toString())));
+        client!.once('message', (data) => resolve(JSON.parse(data.toString())));
       });
 
-      client.send(JSON.stringify({
+      client!.send(JSON.stringify({
         requestId: 'stop-sc',
         command: { type: 'stop_screencast' },
       }));
