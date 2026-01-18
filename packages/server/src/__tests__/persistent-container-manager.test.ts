@@ -19,8 +19,10 @@ import type { ContainerConfig } from '../container-config.js';
 describe('PersistentContainerManager', () => {
   let manager: PersistentContainerManager;
   const mockContainerConfig: ContainerConfig = {
+    enabled: true,
+    runtime: 'podman',
     image: 'test-image:latest',
-    mounts: [],
+    workdirOverlay: false,
     extraMounts: [],
     extraArgs: [],
   };
