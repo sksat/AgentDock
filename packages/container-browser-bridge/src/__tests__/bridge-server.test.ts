@@ -111,6 +111,39 @@ describe('BridgeServer', () => {
       expect(response.success).toBe(false);
       expect(response.error).toContain('Unknown command');
     });
+
+    it('should include requestId in error response', async () => {
+      const responsePromise = waitForCommandResult(client!, 'error-test-123');
+      // Send command that will fail (browser not launched, trying to navigate)
+      client!.send(JSON.stringify({
+        requestId: 'error-test-123',
+        command: { type: 'browser_navigate', url: 'https://example.com' },
+      }));
+
+      const response = await responsePromise;
+      expect(response.type).toBe('command_result');
+      expect(response.requestId).toBe('error-test-123');
+      expect(response.success).toBe(false);
+      expect(response.error).toBeDefined();
+    });
+
+    it('should send generic error for malformed JSON', async () => {
+      const errorPromise = new Promise<{ type: string; message: string }>((resolve) => {
+        client!.on('message', (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'error') {
+            resolve(msg);
+          }
+        });
+      });
+
+      // Send malformed JSON
+      client!.send('not valid json');
+
+      const response = await errorPromise;
+      expect(response.type).toBe('error');
+      expect(response.message).toBeDefined();
+    });
   });
 
   describe('browser operations', () => {

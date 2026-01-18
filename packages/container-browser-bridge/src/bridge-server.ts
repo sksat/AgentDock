@@ -59,15 +59,28 @@ export class BridgeServer extends EventEmitter {
           this.hostConnection = ws;
 
           ws.on('message', async (data) => {
+            let requestId: string | undefined;
             try {
               const message = JSON.parse(data.toString()) as BridgeRequest;
+              requestId = message.requestId;
               await this.handleRequest(message);
             } catch (error) {
               console.error('[BridgeServer] Error handling message:', error);
-              this.sendToHost({
-                type: 'error',
-                message: error instanceof Error ? error.message : 'Unknown error',
-              });
+              // Include requestId in error response if available
+              if (requestId) {
+                this.sendToHost({
+                  type: 'command_result',
+                  requestId,
+                  success: false,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                });
+              } else {
+                // Fallback for parse errors where requestId is not available
+                this.sendToHost({
+                  type: 'error',
+                  message: error instanceof Error ? error.message : 'Unknown error',
+                });
+              }
             }
           });
 
