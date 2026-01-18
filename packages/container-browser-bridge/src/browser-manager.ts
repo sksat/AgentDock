@@ -230,20 +230,38 @@ export class BrowserManager extends EventEmitter {
 
   async evaluate(fn: string, selector?: string): Promise<unknown> {
     if (!this.page) throw new Error('Browser not launched');
+
+    // Validate function string format to prevent obvious injection attempts
+    // Must look like a function expression: () => ... or function() { ... }
+    const fnTrimmed = fn.trim();
+    const isArrowFunction = /^(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/.test(fnTrimmed);
+    const isRegularFunction = /^function\s*\(/.test(fnTrimmed);
+    const isAsyncFunction = /^async\s+(function\s*\(|(\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>)/.test(fnTrimmed);
+
+    if (!isArrowFunction && !isRegularFunction && !isAsyncFunction) {
+      throw new Error('Invalid function format: must be a function expression (arrow function or function declaration)');
+    }
+
     if (selector) {
       const element = await this.page.$(selector);
       if (element) {
-        // Execute the function with the element
-        // eslint-disable-next-line @typescript-eslint/no-implied-eval
-        const evalFn = new Function('element', `return (${fn})(element)`) as (el: unknown) => unknown;
-        return await element.evaluate(evalFn);
+        // Use Playwright's built-in evaluate which safely handles the function string
+        // The function is executed in the browser context, isolated from Node.js
+        return await element.evaluate((el, fnStr) => {
+          // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+          const evalFn = new Function('element', `return (${fnStr})(element)`);
+          return evalFn(el);
+        }, fn);
       }
       throw new Error(`Element not found: ${selector}`);
     }
-    // Execute the function without element
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const evalFn = new Function(`return (${fn})()`) as () => unknown;
-    return await this.page.evaluate(evalFn);
+
+    // Execute the function in browser context (isolated from Node.js)
+    return await this.page.evaluate((fnStr) => {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+      const evalFn = new Function(`return (${fnStr})()`);
+      return evalFn();
+    }, fn);
   }
 
   async waitFor(options: { text?: string; textGone?: string; time?: number }): Promise<void> {

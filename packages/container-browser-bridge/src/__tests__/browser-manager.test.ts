@@ -203,6 +203,54 @@ describe('BrowserManager', () => {
     });
   });
 
+  describe('evaluate', () => {
+    beforeEach(async () => {
+      await manager.launch({ headless: true });
+      await manager.navigate('data:text/html,<h1 id="title">Test</h1>');
+    });
+
+    it('should evaluate arrow function', async () => {
+      const result = await manager.evaluate('() => document.title');
+      expect(result).toBeDefined();
+    });
+
+    it('should evaluate regular function', async () => {
+      const result = await manager.evaluate('function() { return 1 + 1 }');
+      expect(result).toBe(2);
+    });
+
+    it('should evaluate async arrow function', async () => {
+      const result = await manager.evaluate('async () => await Promise.resolve(42)');
+      expect(result).toBe(42);
+    });
+
+    it('should evaluate with selector', async () => {
+      const result = await manager.evaluate('(el) => el.textContent', '#title');
+      expect(result).toBe('Test');
+    });
+
+    it('should reject invalid function format - plain expression', async () => {
+      await expect(manager.evaluate('1 + 1')).rejects.toThrow('Invalid function format');
+    });
+
+    it('should reject invalid function format - code injection attempt', async () => {
+      await expect(manager.evaluate('1); process.exit(1); (() => {')).rejects.toThrow('Invalid function format');
+    });
+
+    it('should reject invalid function format - statement', async () => {
+      await expect(manager.evaluate('console.log("test")')).rejects.toThrow('Invalid function format');
+    });
+
+    it('should throw if element not found with selector', async () => {
+      await expect(manager.evaluate('(el) => el.textContent', '#nonexistent')).rejects.toThrow('Element not found');
+    });
+
+    it('should throw if browser not launched', async () => {
+      await manager.close();
+      await expect(manager.evaluate('() => 1')).rejects.toThrow('Browser not launched');
+    });
+  });
+
   describe('screencast', () => {
     beforeEach(async () => {
       await manager.launch({ headless: true });
