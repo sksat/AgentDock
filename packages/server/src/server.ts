@@ -358,6 +358,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to runner backend preference (undefined means use default)
   const sessionRunnerBackends = new Map<string, RunnerBackend>();
 
+  // Map session ID to browser in container preference (undefined means follow default)
+  const sessionBrowserInContainer = new Map<string, boolean>();
+
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
     const message: GlobalUsageMessage = {
@@ -1012,10 +1015,14 @@ export function createServer(options: ServerOptions): BridgeServer {
           name: message.name,
           workingDir: message.workingDir,
           runnerBackend: message.runnerBackend,
+          browserInContainer: message.browserInContainer,
         });
-        // Also store in runtime map for consistent lookups
+        // Also store in runtime maps for consistent lookups
         if (message.runnerBackend !== undefined) {
           sessionRunnerBackends.set(session.id, message.runnerBackend);
+        }
+        if (message.browserInContainer !== undefined) {
+          sessionBrowserInContainer.set(session.id, message.browserInContainer);
         }
         // Broadcast to all clients for real-time session list updates
         broadcastSessionCreated(session);
@@ -1090,6 +1097,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Clean up session-allowed tools and runner backend preferences
           sessionAllowedTools.delete(message.sessionId);
           sessionRunnerBackends.delete(message.sessionId);
+          sessionBrowserInContainer.delete(message.sessionId);
           // Unregister from git status tracking
           gitStatusProvider.unregisterSession(message.sessionId);
           response = {

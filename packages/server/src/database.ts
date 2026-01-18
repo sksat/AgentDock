@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -42,6 +42,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     6: () => migrateToV6(db),
     7: () => migrateToV7(db),
     8: () => migrateToV8(db),
+    9: () => migrateToV9(db),
   };
 
   db.transaction(() => {
@@ -74,7 +75,8 @@ function migrateToV1(db: Database.Database): void {
       output_tokens INTEGER DEFAULT 0,
       cache_creation_tokens INTEGER DEFAULT 0,
       cache_read_tokens INTEGER DEFAULT 0,
-      runner_backend TEXT DEFAULT 'native'
+      runner_backend TEXT DEFAULT 'native',
+      browser_in_container INTEGER DEFAULT NULL
     )
   `);
 
@@ -245,6 +247,17 @@ function migrateToV8(db: Database.Database): void {
     if (columns.has('use_container')) {
       db.exec("UPDATE sessions SET runner_backend = 'podman' WHERE use_container = 1");
     }
+  }
+}
+
+function migrateToV9(db: Database.Database): void {
+  // Add browser_in_container column to sessions table
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('browser_in_container')) {
+    // NULL means "follow default" (true when runner_backend is 'podman')
+    db.exec('ALTER TABLE sessions ADD COLUMN browser_in_container INTEGER DEFAULT NULL');
   }
 }
 

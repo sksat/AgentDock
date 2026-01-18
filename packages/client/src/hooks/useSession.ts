@@ -113,7 +113,7 @@ export interface UseSessionReturn {
 
   // Session management
   listSessions: () => void;
-  createSession: (name?: string, workingDir?: string, runnerBackend?: RunnerBackend) => void;
+  createSession: (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean) => void;
   selectSession: (sessionId: string) => void;
   deselectSession: () => void;
   deleteSession: (sessionId: string) => void;
@@ -451,9 +451,9 @@ export function useSession(): UseSessionReturn {
   }, [send]);
 
   const createSession = useCallback(
-    (name?: string, workingDir?: string, runnerBackend?: RunnerBackend) => {
+    (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean) => {
       setPendingSessionCreate(true);
-      send({ type: 'create_session', name, workingDir, runnerBackend });
+      send({ type: 'create_session', name, workingDir, runnerBackend, browserInContainer });
     },
     [send]
   );

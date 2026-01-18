@@ -61,6 +61,8 @@ export interface CreateSessionMessage {
   workingDir?: string;
   /** Runner backend to use for this session */
   runnerBackend?: RunnerBackend;
+  /** Whether to run browser in container (default: true when runnerBackend is 'podman') */
+  browserInContainer?: boolean;
 }
 
 export interface AttachSessionMessage {
@@ -699,6 +701,8 @@ export interface SessionInfo {
   usage?: SessionUsageInfo;
   /** Runner backend used for this session */
   runnerBackend?: RunnerBackend;
+  /** Whether browser runs in container (only relevant when runnerBackend is 'podman') */
+  browserInContainer?: boolean;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';
@@ -840,6 +844,8 @@ export interface GlobalSettings {
   defaultPermissionMode: string;
   /** Default runner backend for new sessions */
   defaultRunnerBackend: RunnerBackend;
+  /** Default browser in container setting (default: true, follows runnerBackend by default) */
+  defaultBrowserInContainer: boolean;
 }
 
 /** Client -> Server: Request to get current settings */

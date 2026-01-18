@@ -6,6 +6,8 @@ export interface GlobalSettings {
   defaultModel: string;
   defaultPermissionMode: string;
   defaultRunnerBackend: RunnerBackend;
+  /** Default browser in container setting (true means browser runs in container when podman) */
+  defaultBrowserInContainer: boolean;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
@@ -13,6 +15,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   defaultModel: 'claude-opus-4-5-20250514',
   defaultPermissionMode: 'plan',
   defaultRunnerBackend: 'native',
+  defaultBrowserInContainer: true, // Default: browser follows runnerBackend
 };
 
 export class SettingsManager {
