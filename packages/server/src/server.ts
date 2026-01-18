@@ -2135,43 +2135,102 @@ Keep it concise but comprehensive.`;
       }
 
       case 'browser_command': {
-        const controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          // Auto-create browser session if not exists
+        const useContainerBrowser = shouldUseContainerBrowser(message.sessionId);
+
+        if (useContainerBrowser) {
+          // Container browser mode
+          if (!containerBrowserSessionManager.hasSession(message.sessionId)) {
+            // Auto-create container browser session
+            const session = sessionManager.getSession(message.sessionId);
+            if (!session) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: 'Session not found',
+              };
+              break;
+            }
+            try {
+              const containerManager = await getOrCreateContainerManager(message.sessionId, session.workingDir);
+              await containerBrowserSessionManager.createSession(message.sessionId, containerManager);
+              console.log(`[ContainerBrowserSession] Auto-created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to create container browser session',
+              };
+              break;
+            }
+          }
+
+          // Execute command via container browser session manager
           try {
-            await browserSessionManager.createSession(message.sessionId);
-            console.log(`[BrowserSession] Auto-created for session ${message.sessionId}`);
+            const result = await containerBrowserSessionManager.executeCommand(
+              message.sessionId,
+              message.command.name,
+              message.command as unknown as Record<string, unknown>
+            );
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: true,
+              result,
+            };
           } catch (error) {
             response = {
               type: 'browser_command_result',
               sessionId: message.sessionId,
               requestId: message.requestId,
               success: false,
-              error: error instanceof Error ? error.message : 'Failed to create browser session',
+              error: error instanceof Error ? error.message : 'Browser command failed',
             };
-            break;
           }
-        }
+        } else {
+          // Host browser mode
+          const controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            // Auto-create browser session if not exists
+            try {
+              await browserSessionManager.createSession(message.sessionId);
+              console.log(`[BrowserSession] Auto-created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to create browser session',
+              };
+              break;
+            }
+          }
 
-        // Execute the browser command
-        try {
-          const ctrl = browserSessionManager.getController(message.sessionId)!;
-          const result = await executeBrowserCommand(ctrl, message.command);
-          response = {
-            type: 'browser_command_result',
-            sessionId: message.sessionId,
-            requestId: message.requestId,
-            success: true,
-            result,
-          };
-        } catch (error) {
-          response = {
-            type: 'browser_command_result',
-            sessionId: message.sessionId,
-            requestId: message.requestId,
-            success: false,
-            error: error instanceof Error ? error.message : 'Browser command failed',
-          };
+          // Execute the browser command
+          try {
+            const ctrl = browserSessionManager.getController(message.sessionId)!;
+            const result = await executeBrowserCommand(ctrl, message.command);
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: true,
+              result,
+            };
+          } catch (error) {
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: false,
+              error: error instanceof Error ? error.message : 'Browser command failed',
+            };
+          }
         }
         break;
       }
