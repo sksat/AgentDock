@@ -19,6 +19,26 @@ import { ContainerConfig, buildPodmanArgs } from './container-config.js';
 // Permission mode cycle order (Shift+Tab cycles through these)
 const PERMISSION_MODE_ORDER: ClaudePermissionMode[] = ['default', 'acceptEdits', 'plan'];
 
+// Regex for valid tool names: alphanumeric, hyphen, underscore, colon, slash, at-sign, dot
+// Examples: "Bash", "Read", "mcp__server:tool", "plugin@namespace"
+const VALID_TOOL_NAME_REGEX = /^[a-zA-Z0-9_\-:/@.]+$/;
+
+/**
+ * Validate tool names to prevent command injection via tool arguments.
+ * Tool names should only contain safe characters.
+ */
+function validateToolNames(tools: string[]): void {
+  for (const tool of tools) {
+    if (!VALID_TOOL_NAME_REGEX.test(tool)) {
+      throw new Error(`Invalid tool name: "${tool}". Tool names can only contain alphanumeric characters, hyphens, underscores, colons, slashes, at-signs, and dots.`);
+    }
+    // Also reject if it looks like a flag
+    if (tool.startsWith('-')) {
+      throw new Error(`Invalid tool name: "${tool}". Tool names cannot start with a hyphen.`);
+    }
+  }
+}
+
 export interface PodmanClaudeRunnerOptions {
   /** Host working directory to mount into container */
   workingDir?: string;
@@ -243,11 +263,13 @@ export class PodmanClaudeRunner extends EventEmitter {
       }));
     }
 
-    // Allowed/disallowed tools
+    // Allowed/disallowed tools (validate before using)
     if (options.allowedTools && options.allowedTools.length > 0) {
+      validateToolNames(options.allowedTools);
       args.push('--allowedTools', options.allowedTools.join(','));
     }
     if (options.disallowedTools && options.disallowedTools.length > 0) {
+      validateToolNames(options.disallowedTools);
       args.push('--disallowedTools', options.disallowedTools.join(','));
     }
 

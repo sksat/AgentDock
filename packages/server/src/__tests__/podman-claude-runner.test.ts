@@ -345,4 +345,51 @@ describe('PodmanClaudeRunner', () => {
       expect(args).not.toContain('--network=host');
     });
   });
+
+  describe('tool name validation', () => {
+    it('should accept valid tool names', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      expect(() => {
+        runner.start('Hello', {
+          allowedTools: ['Bash', 'Read', 'mcp__server:tool', 'plugin@namespace'],
+        });
+      }).not.toThrow();
+    });
+
+    it('should reject tool names with special characters', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      expect(() => {
+        runner.start('Hello', {
+          allowedTools: ['Bash; rm -rf /', 'Read'],
+        });
+      }).toThrow('Invalid tool name');
+    });
+
+    it('should reject tool names starting with hyphen', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      expect(() => {
+        runner.start('Hello', {
+          allowedTools: ['--version', 'Bash'],
+        });
+      }).toThrow('cannot start with a hyphen');
+    });
+
+    it('should validate disallowedTools as well', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      expect(() => {
+        runner.start('Hello', {
+          disallowedTools: ['$(whoami)', 'Bash'],
+        });
+      }).toThrow('Invalid tool name');
+    });
+
+    it('should accept tool names with underscores and colons', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      expect(() => {
+        runner.start('Hello', {
+          allowedTools: ['mcp__bridge__tool', 'scope:action'],
+        });
+      }).not.toThrow();
+    });
+  });
 });
