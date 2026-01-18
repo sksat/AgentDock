@@ -11,6 +11,7 @@ function parseArgs() {
     useMock: boolean;
     containerEnabled: boolean;
     containerImage: string;
+    browserContainerImage: string | undefined;
   } = {
     dbPath: process.env.CLAUDE_BRIDGE_DB_PATH || './data.db',
     port: parseInt(process.env.PORT || '3001', 10),
@@ -19,6 +20,8 @@ function parseArgs() {
     // Container mode is enabled by default; set CONTAINER_DISABLED=true to disable
     containerEnabled: process.env.CONTAINER_DISABLED !== 'true' && process.env.CONTAINER_DISABLED !== '1',
     containerImage: process.env.CONTAINER_IMAGE || 'localhost/claude-code:local',
+    // Browser container image (for browser-in-container mode), defaults to claude-browser:dev
+    browserContainerImage: process.env.BROWSER_CONTAINER_IMAGE || 'localhost/claude-browser:dev',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -66,6 +69,7 @@ const server = createServer({
   dbPath: config.dbPath,
   containerEnabled: config.containerEnabled,
   containerImage: config.containerImage,
+  browserContainerImage: config.browserContainerImage,
 });
 
 server.start().then(() => {
@@ -73,6 +77,9 @@ server.start().then(() => {
   console.log(`WebSocket endpoint: ws://${config.host}:${config.port}/ws`);
   console.log(`Database: ${config.dbPath}`);
   console.log(`Container mode: ${config.containerEnabled ? `enabled (image: ${config.containerImage})` : 'disabled'}`);
+  if (config.containerEnabled && config.browserContainerImage) {
+    console.log(`Browser container image: ${config.browserContainerImage}`);
+  }
 });
 
 // Graceful shutdown

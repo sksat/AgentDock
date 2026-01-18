@@ -48,8 +48,10 @@ export interface ServerOptions {
   disableUsageMonitor?: boolean;
   /** Enable container mode (run Claude in Podman container) */
   containerEnabled?: boolean;
-  /** Container image to use (required if containerEnabled is true) */
+  /** Container image to use for Claude CLI (required if containerEnabled is true) */
   containerImage?: string;
+  /** Container image to use for browser (defaults to containerImage + '-browser' suffix or containerImage if not found) */
+  browserContainerImage?: string;
   /** Additional volume mounts for container */
   containerMounts?: ContainerMount[];
   /** Additional arguments for podman */
@@ -268,6 +270,7 @@ export function createServer(options: ServerOptions): BridgeServer {
     disableUsageMonitor = false,
     containerEnabled = false,
     containerImage,
+    browserContainerImage,
     containerMounts = [],
     containerExtraArgs = [],
   } = options;
@@ -294,6 +297,7 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Build container config if enabled
   let containerConfig: ContainerConfig | null = null;
+  let browserContainerConfig: ContainerConfig | null = null;
   if (containerEnabled) {
     if (!containerImage) {
       throw new Error('containerImage is required when containerEnabled is true');
@@ -303,6 +307,16 @@ export function createServer(options: ServerOptions): BridgeServer {
       extraArgs: containerExtraArgs,
     });
     console.log(`[Server] Container mode enabled with image: ${containerImage}`);
+
+    // Browser container config (uses browserContainerImage if provided, otherwise same as containerImage)
+    const browserImage = browserContainerImage ?? containerImage;
+    browserContainerConfig = createDefaultContainerConfig(browserImage, {
+      extraMounts: containerMounts,
+      extraArgs: containerExtraArgs,
+    });
+    if (browserContainerImage) {
+      console.log(`[Server] Browser container image: ${browserContainerImage}`);
+    }
   }
 
   // Create runner factory based on mode
@@ -389,13 +403,13 @@ export function createServer(options: ServerOptions): BridgeServer {
   async function getOrCreateContainerManager(sessionId: string, workingDir: string): Promise<PersistentContainerManager> {
     let manager = sessionContainerManagers.get(sessionId);
     if (!manager) {
-      if (!containerConfig) {
-        throw new Error('Container mode not configured');
+      if (!browserContainerConfig) {
+        throw new Error('Browser container mode not configured');
       }
       // Use a port based on session hash for uniqueness
       const bridgePort = 3002 + (sessionId.charCodeAt(0) % 1000);
       manager = new PersistentContainerManager({
-        containerConfig,
+        containerConfig: browserContainerConfig,
         workingDir,
         bridgePort,
       });
