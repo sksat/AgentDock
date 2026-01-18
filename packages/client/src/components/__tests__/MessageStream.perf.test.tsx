@@ -81,8 +81,8 @@ describe('MessageStream performance', () => {
         render(<MessageStream messages={messages} />);
       });
 
-      // Threshold: 500ms (current ~350ms)
-      expect(renderTime).toBeLessThan(500);
+      // Threshold: 800ms (local ~350ms, CI runners ~700ms)
+      expect(renderTime).toBeLessThan(800);
     });
   });
 
