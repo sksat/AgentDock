@@ -1,38 +1,39 @@
 import { useState, useCallback, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 export interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSession: (name?: string, workingDir?: string, useContainer?: boolean) => void;
-  /** Whether container mode is available on the server */
-  containerModeAvailable?: boolean;
-  /** Default value for useContainer (from global settings) */
-  defaultUseContainer?: boolean;
+  onCreateSession: (name?: string, workingDir?: string, runnerBackend?: RunnerBackend) => void;
+  /** Whether Podman is available on the server */
+  podmanAvailable?: boolean;
+  /** Default runner backend (from global settings) */
+  defaultRunnerBackend?: RunnerBackend;
 }
 
 export function NewSessionModal({
   isOpen,
   onClose,
   onCreateSession,
-  containerModeAvailable = false,
-  defaultUseContainer = false,
+  podmanAvailable = false,
+  defaultRunnerBackend = 'native',
 }: NewSessionModalProps) {
   const [name, setName] = useState('');
   const [workingDir, setWorkingDir] = useState('');
-  const [useContainer, setUseContainer] = useState(defaultUseContainer);
+  const [runnerBackend, setRunnerBackend] = useState<RunnerBackend>(defaultRunnerBackend);
 
   const handleSubmit = useCallback(() => {
     onCreateSession(
       name.trim() || undefined,
       workingDir.trim() || undefined,
-      containerModeAvailable ? useContainer : undefined
+      podmanAvailable ? runnerBackend : undefined
     );
     setName('');
     setWorkingDir('');
-    setUseContainer(defaultUseContainer);
+    setRunnerBackend(defaultRunnerBackend);
     onClose();
-  }, [name, workingDir, useContainer, containerModeAvailable, defaultUseContainer, onCreateSession, onClose]);
+  }, [name, workingDir, runnerBackend, podmanAvailable, defaultRunnerBackend, onCreateSession, onClose]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -115,28 +116,28 @@ export function NewSessionModal({
           </p>
         </div>
 
-        {/* Container Mode */}
-        {containerModeAvailable && (
+        {/* Runner Backend */}
+        {podmanAvailable && (
           <div className="mb-6">
             <button
               type="button"
-              onClick={() => setUseContainer(!useContainer)}
+              onClick={() => setRunnerBackend(runnerBackend === 'native' ? 'podman' : 'native')}
               className="w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between bg-bg-tertiary hover:bg-bg-tertiary/80"
             >
               <div className="flex flex-col">
-                <span className="font-medium text-text-primary">Run in container</span>
+                <span className="font-medium text-text-primary">Run with Podman</span>
                 <span className="text-xs text-text-secondary">Isolate this session in a Podman container</span>
               </div>
               <div
                 className={clsx(
                   'w-11 h-6 rounded-full p-0.5 transition-colors',
-                  useContainer ? 'bg-accent-primary' : 'bg-gray-600'
+                  runnerBackend === 'podman' ? 'bg-accent-primary' : 'bg-gray-600'
                 )}
               >
                 <div
                   className={clsx(
                     'w-5 h-5 rounded-full bg-white shadow-sm transition-transform',
-                    useContainer ? 'translate-x-5' : 'translate-x-0'
+                    runnerBackend === 'podman' ? 'translate-x-5' : 'translate-x-0'
                   )}
                 />
               </div>

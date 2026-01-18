@@ -11,6 +11,7 @@ import { ViewToggle, type SessionView } from './components/ViewToggle';
 import { GitStatusBadge } from './components/GitStatusBadge';
 import type { SidebarSession } from './components';
 import type { ImageAttachment } from './components/MessageStream';
+import type { RunnerBackend } from '@agent-dock/shared';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
@@ -200,8 +201,8 @@ function App() {
 
   // Wrapper for sendMessage that includes thinkingEnabled
   const handleSendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, useContainer?: boolean) => {
-      sendMessage(content, images, workingDir, thinkingEnabled, useContainer);
+    (content: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => {
+      sendMessage(content, images, workingDir, thinkingEnabled, runnerBackend);
     },
     [sendMessage, thinkingEnabled]
   );
@@ -218,7 +219,7 @@ function App() {
     status: s.status,
     createdAt: s.createdAt,
     usage: s.usage,
-    useContainer: s.useContainer,
+    runnerBackend: s.runnerBackend,
   }));
 
   // Get page title based on current view and session
@@ -267,8 +268,8 @@ function App() {
           isOpen={isNewSessionModalOpen}
           onClose={() => setIsNewSessionModalOpen(false)}
           onCreateSession={createSession}
-          containerModeAvailable={true}
-          defaultUseContainer={globalSettings?.defaultUseContainer ?? false}
+          podmanAvailable={true}
+          defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
         />
 
         {/* Navigation Rail - always visible */}
@@ -310,8 +311,8 @@ function App() {
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
-                containerModeAvailable={true}
-                defaultUseContainer={globalSettings?.defaultUseContainer ?? false}
+                podmanAvailable={true}
+                defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
               />
             ) : (
           <>
@@ -329,15 +330,15 @@ function App() {
                     error={gitStatus.error}
                   />
                 )}
-                {session?.useContainer && (
+                {session?.runnerBackend && session.runnerBackend !== 'native' && (
                   <span
                     className="flex items-center gap-1.5 px-2 py-1 bg-accent-primary/10 text-accent-primary rounded-md"
-                    title="Running in container"
+                    title={`Running with ${session.runnerBackend}`}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
-                    <span className="font-medium">Container</span>
+                    <span className="font-medium">{session.runnerBackend}</span>
                   </span>
                 )}
               </div>

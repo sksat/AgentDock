@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
@@ -355,8 +355,8 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to queued input (to be sent after current execution completes)
   const sessionInputQueue = new Map<string, string[]>();
 
-  // Map session ID to container preference (undefined means use default)
-  const sessionContainerPrefs = new Map<string, boolean>();
+  // Map session ID to runner backend preference (undefined means use default)
+  const sessionRunnerBackends = new Map<string, RunnerBackend>();
 
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
@@ -600,8 +600,8 @@ export function createServer(options: ServerOptions): BridgeServer {
       const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
       const permissionMode = modeMap[sessionMode];
 
-      // Use session's container preference if set, otherwise use global default
-      const useContainer = sessionContainerPrefs.get(sessionId) ?? settingsManager.get('defaultUseContainer');
+      // Use session's runner backend if set, otherwise use global default
+      const runnerBackend = sessionRunnerBackends.get(sessionId) ?? settingsManager.get('defaultRunnerBackend');
 
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
@@ -610,7 +610,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         permissionToolName,
         thinkingEnabled,
         permissionMode,
-        useContainer,
+        runnerBackend,
         onEvent: (sid, eventType, data) => {
           handleRunnerEvent(sid, eventType, data);
           // Clean up MCP config on exit
@@ -1011,11 +1011,11 @@ export function createServer(options: ServerOptions): BridgeServer {
         const session = sessionManager.createSession({
           name: message.name,
           workingDir: message.workingDir,
-          useContainer: message.useContainer,
+          runnerBackend: message.runnerBackend,
         });
         // Also store in runtime map for consistent lookups
-        if (message.useContainer !== undefined) {
-          sessionContainerPrefs.set(session.id, message.useContainer);
+        if (message.runnerBackend !== undefined) {
+          sessionRunnerBackends.set(session.id, message.runnerBackend);
         }
         // Broadcast to all clients for real-time session list updates
         broadcastSessionCreated(session);
@@ -1087,9 +1087,9 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'delete_session': {
         const deleted = sessionManager.deleteSession(message.sessionId);
         if (deleted) {
-          // Clean up session-allowed tools and container preferences
+          // Clean up session-allowed tools and runner backend preferences
           sessionAllowedTools.delete(message.sessionId);
-          sessionContainerPrefs.delete(message.sessionId);
+          sessionRunnerBackends.delete(message.sessionId);
           // Unregister from git status tracking
           gitStatusProvider.unregisterSession(message.sessionId);
           response = {
@@ -1371,8 +1371,8 @@ export function createServer(options: ServerOptions): BridgeServer {
           const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
           const permissionMode = modeMap[sessionMode];
 
-          // Use session's container preference if set, otherwise use global default
-          const useContainer = sessionContainerPrefs.get(message.sessionId) ?? settingsManager.get('defaultUseContainer');
+          // Use session's runner backend if set, otherwise use global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
 
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
@@ -1382,7 +1382,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             images,
             thinkingEnabled,
             permissionMode,
-            useContainer,
+            runnerBackend,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -1707,8 +1707,8 @@ Keep it concise but comprehensive.`;
           const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
           const permissionMode = modeMap[sessionMode];
 
-          // Use session's container preference if set, otherwise use global default
-          const useContainer = sessionContainerPrefs.get(message.sessionId) ?? settingsManager.get('defaultUseContainer');
+          // Use session's runner backend if set, otherwise use global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
 
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,
@@ -1716,7 +1716,7 @@ Keep it concise but comprehensive.`;
             mcpConfigPath,
             permissionToolName,
             permissionMode,
-            useContainer,
+            runnerBackend,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {

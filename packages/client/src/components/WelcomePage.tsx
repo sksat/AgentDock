@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo, type KeyboardEvent }
 import clsx from 'clsx';
 import { UsageChart } from './UsageChart';
 import type { GlobalUsageData } from './UsageDisplay';
-import type { SessionInfo } from '@agent-dock/shared';
+import type { SessionInfo, RunnerBackend } from '@agent-dock/shared';
 
 // Detect home directory from paths (e.g., /home/user or /Users/user)
 function detectHomeDir(paths: string[]): string | null {
@@ -30,12 +30,12 @@ export interface WelcomePageProps {
   sessions: SessionInfo[];
   globalUsage: GlobalUsageData | null;
   isConnected: boolean;
-  onSendMessage: (message: string, images?: undefined, workingDir?: string, useContainer?: boolean) => void;
+  onSendMessage: (message: string, images?: undefined, workingDir?: string, runnerBackend?: RunnerBackend) => void;
   onSelectSession: (sessionId: string) => void;
-  /** Whether container mode is available on the server */
-  containerModeAvailable?: boolean;
-  /** Default value for useContainer (from global settings) */
-  defaultUseContainer?: boolean;
+  /** Whether Podman is available on the server */
+  podmanAvailable?: boolean;
+  /** Default runner backend (from global settings) */
+  defaultRunnerBackend?: RunnerBackend;
 }
 
 export function WelcomePage({
@@ -43,13 +43,13 @@ export function WelcomePage({
   globalUsage,
   isConnected,
   onSendMessage,
-  containerModeAvailable = false,
-  defaultUseContainer = false,
+  podmanAvailable = false,
+  defaultRunnerBackend = 'native',
 }: WelcomePageProps) {
   const [inputValue, setInputValue] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [useContainer, setUseContainer] = useState(defaultUseContainer);
+  const [runnerBackend, setRunnerBackend] = useState<RunnerBackend>(defaultRunnerBackend);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -92,10 +92,10 @@ export function WelcomePage({
     const trimmed = inputValue.trim();
     if (trimmed && isConnected) {
       const expandedDir = workingDir ? expandPath(workingDir) : undefined;
-      onSendMessage(trimmed, undefined, expandedDir || undefined, containerModeAvailable ? useContainer : undefined);
+      onSendMessage(trimmed, undefined, expandedDir || undefined, podmanAvailable ? runnerBackend : undefined);
       setInputValue('');
     }
-  }, [inputValue, isConnected, onSendMessage, workingDir, expandPath, containerModeAvailable, useContainer]);
+  }, [inputValue, isConnected, onSendMessage, workingDir, expandPath, podmanAvailable, runnerBackend]);
 
   // Handle key events
   const handleKeyDown = useCallback(
@@ -203,30 +203,30 @@ export function WelcomePage({
               )}
             </div>
 
-            {/* Container Mode Toggle */}
-            {containerModeAvailable && (
+            {/* Runner Backend Toggle */}
+            {podmanAvailable && (
               <button
                 type="button"
-                onClick={() => setUseContainer(!useContainer)}
-                title={useContainer ? 'Container mode enabled' : 'Container mode disabled'}
+                onClick={() => setRunnerBackend(runnerBackend === 'native' ? 'podman' : 'native')}
+                title={runnerBackend === 'podman' ? 'Running with Podman' : 'Running natively'}
                 className="flex items-center gap-3 px-3 py-2 rounded-lg bg-bg-tertiary border border-border hover:bg-bg-tertiary/80 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
-                  <span className="text-sm font-medium text-text-primary">Container</span>
+                  <span className="text-sm font-medium text-text-primary">{runnerBackend}</span>
                 </div>
                 <div
                   className={clsx(
                     'w-9 h-5 rounded-full p-0.5 transition-colors',
-                    useContainer ? 'bg-accent-primary' : 'bg-gray-600'
+                    runnerBackend === 'podman' ? 'bg-accent-primary' : 'bg-gray-600'
                   )}
                 >
                   <div
                     className={clsx(
                       'w-4 h-4 rounded-full bg-white shadow-sm transition-transform',
-                      useContainer ? 'translate-x-4' : 'translate-x-0'
+                      runnerBackend === 'podman' ? 'translate-x-4' : 'translate-x-0'
                     )}
                   />
                 </div>

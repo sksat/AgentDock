@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -41,6 +41,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     5: () => migrateToV5(db),
     6: () => migrateToV6(db),
     7: () => migrateToV7(db),
+    8: () => migrateToV8(db),
   };
 
   db.transaction(() => {
@@ -73,7 +74,7 @@ function migrateToV1(db: Database.Database): void {
       output_tokens INTEGER DEFAULT 0,
       cache_creation_tokens INTEGER DEFAULT 0,
       cache_read_tokens INTEGER DEFAULT 0,
-      use_container INTEGER DEFAULT 0
+      runner_backend TEXT DEFAULT 'native'
     )
   `);
 
@@ -222,12 +223,28 @@ function migrateToV6(db: Database.Database): void {
 }
 
 function migrateToV7(db: Database.Database): void {
-  // Add use_container column to sessions table
+  // Add use_container column to sessions table (legacy, converted in V8)
   const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
   const columns = new Set(tableInfo.map(col => col.name));
 
   if (!columns.has('use_container')) {
     db.exec('ALTER TABLE sessions ADD COLUMN use_container INTEGER DEFAULT 0');
+  }
+}
+
+function migrateToV8(db: Database.Database): void {
+  // Convert use_container (INTEGER) to runner_backend (TEXT)
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  // Add runner_backend column if it doesn't exist
+  if (!columns.has('runner_backend')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN runner_backend TEXT DEFAULT 'native'");
+
+    // Convert existing use_container values to runner_backend
+    if (columns.has('use_container')) {
+      db.exec("UPDATE sessions SET runner_backend = 'podman' WHERE use_container = 1");
+    }
   }
 }
 

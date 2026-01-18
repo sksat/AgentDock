@@ -1,5 +1,6 @@
 import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent, ClaudePermissionMode } from './claude-runner.js';
 import { EventEmitter } from 'events';
+import { isContainerBackend, type RunnerBackend } from '@agent-dock/shared';
 
 // Re-export ClaudePermissionMode for use in server.ts
 export type { ClaudePermissionMode };
@@ -22,8 +23,8 @@ export interface StartSessionOptions {
   thinkingEnabled?: boolean;
   /** Permission mode to use for the session */
   permissionMode?: ClaudePermissionMode;
-  /** Whether to run Claude Code inside a container */
-  useContainer?: boolean;
+  /** Runner backend to use for this session */
+  runnerBackend?: RunnerBackend;
   onEvent: RunnerEventHandler;
 }
 
@@ -68,7 +69,7 @@ export class RunnerManager {
   }
 
   /**
-   * Set the container runner factory (used when useContainer is true)
+   * Set the container runner factory (used when runnerBackend is container-based)
    */
   setContainerRunnerFactory(factory: RunnerFactory): void {
     this.containerRunnerFactory = factory;
@@ -89,7 +90,7 @@ export class RunnerManager {
     };
 
     // Use container factory if requested and available
-    const factory = (options.useContainer && this.containerRunnerFactory)
+    const factory = (isContainerBackend(options.runnerBackend) && this.containerRunnerFactory)
       ? this.containerRunnerFactory
       : this.runnerFactory;
     const runner = factory(runnerOptions);

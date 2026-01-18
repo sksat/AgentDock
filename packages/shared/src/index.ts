@@ -4,6 +4,14 @@
 
 export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
 
+/** Runner backend type - how Claude Code is executed */
+export type RunnerBackend = 'native' | 'podman';
+
+/** Check if a runner backend is container-based */
+export function isContainerBackend(backend: RunnerBackend | undefined): boolean {
+  return backend === 'podman';
+}
+
 export type ClientMessage =
   // Session management
   | CreateSessionMessage
@@ -51,8 +59,8 @@ export interface CreateSessionMessage {
   type: 'create_session';
   name?: string;
   workingDir?: string;
-  /** Whether to run Claude Code inside a container (requires server container mode) */
-  useContainer?: boolean;
+  /** Runner backend to use for this session */
+  runnerBackend?: RunnerBackend;
 }
 
 export interface AttachSessionMessage {
@@ -689,8 +697,8 @@ export interface SessionInfo {
   model?: string;
   /** Usage data from ccusage (optional, may not be available) */
   usage?: SessionUsageInfo;
-  /** Whether this session runs in a container */
-  useContainer?: boolean;
+  /** Runner backend used for this session */
+  runnerBackend?: RunnerBackend;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';
@@ -830,8 +838,8 @@ export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
-  /** Whether to run Claude Code inside a container by default */
-  defaultUseContainer: boolean;
+  /** Default runner backend for new sessions */
+  defaultRunnerBackend: RunnerBackend;
 }
 
 /** Client -> Server: Request to get current settings */

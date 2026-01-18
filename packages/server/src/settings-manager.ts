@@ -1,17 +1,18 @@
 import type Database from 'better-sqlite3';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
-  defaultUseContainer: boolean;
+  defaultRunnerBackend: RunnerBackend;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   defaultThinkingEnabled: false,
   defaultModel: 'claude-opus-4-5-20250514',
   defaultPermissionMode: 'plan',
-  defaultUseContainer: false,
+  defaultRunnerBackend: 'native',
 };
 
 export class SettingsManager {

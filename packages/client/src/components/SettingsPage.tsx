@@ -149,7 +149,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultModel: 'claude-opus-4-5-20250514',
     defaultPermissionMode: 'ask',
     defaultThinkingEnabled: false,
-    defaultUseContainer: false,
+    defaultRunnerBackend: 'native',
   });
 
   useEffect(() => {
@@ -253,16 +253,16 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
             />
           </SettingCard>
 
-          {/* Container Mode */}
+          {/* Runner Backend */}
           <SettingCard
-            title="Container Mode"
-            description="Run Claude Code inside an isolated container"
+            title="Runner Backend"
+            description="How Claude Code is executed"
           >
             <ToggleSwitch
-              enabled={displaySettings.defaultUseContainer}
-              onToggle={() => updateGlobalSetting('defaultUseContainer', !displaySettings.defaultUseContainer)}
-              label="Enable by default"
-              description="Sessions run in Podman containers for isolation (requires server setup)"
+              enabled={displaySettings.defaultRunnerBackend === 'podman'}
+              onToggle={() => updateGlobalSetting('defaultRunnerBackend', displaySettings.defaultRunnerBackend === 'podman' ? 'native' : 'podman')}
+              label="Use Podman by default"
+              description="Run sessions in Podman containers for isolation (requires server setup)"
             />
           </SettingCard>
 
