@@ -1,15 +1,21 @@
 import type Database from 'better-sqlite3';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
+  defaultRunnerBackend: RunnerBackend;
+  /** Default browser in container setting (true means browser runs in container when podman) */
+  defaultBrowserInContainer: boolean;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   defaultThinkingEnabled: false,
   defaultModel: 'claude-opus-4-5-20250514',
   defaultPermissionMode: 'plan',
+  defaultRunnerBackend: 'native',
+  defaultBrowserInContainer: true, // Default: browser follows runnerBackend
 };
 
 export class SettingsManager {

@@ -1,7 +1,7 @@
 import { useState, useCallback, memo, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
 import { UsageDisplay, type GlobalUsageData } from './UsageDisplay';
-import type { SessionStatus, SessionUsageInfo } from '@agent-dock/shared';
+import type { SessionStatus, SessionUsageInfo, RunnerBackend } from '@agent-dock/shared';
 
 export type { GlobalUsageData };
 
@@ -13,6 +13,7 @@ export interface SidebarSession {
   status: SessionStatus;
   createdAt: string;
   usage?: SessionUsageInfo;
+  runnerBackend?: RunnerBackend;
 }
 
 export interface SidebarProps {
@@ -286,6 +287,16 @@ const SessionItem = memo(
           ) : (
             <>
               <span className="block truncate text-sm">{session.name}</span>
+              {session.runnerBackend && session.runnerBackend !== 'native' && (
+                <span
+                  title={`Running with ${session.runnerBackend}`}
+                  className="flex-shrink-0 text-text-secondary"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </span>
+              )}
               {session.usage && (
                 <span className="text-xs text-text-secondary flex-shrink-0 ml-auto">
                   ${session.usage.totalCost.toFixed(2)}

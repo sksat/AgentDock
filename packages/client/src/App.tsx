@@ -11,6 +11,7 @@ import { ViewToggle, type SessionView } from './components/ViewToggle';
 import { GitStatusBadge } from './components/GitStatusBadge';
 import type { SidebarSession } from './components';
 import type { ImageAttachment } from './components/MessageStream';
+import type { RunnerBackend } from '@agent-dock/shared';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
@@ -200,8 +201,8 @@ function App() {
 
   // Wrapper for sendMessage that includes thinkingEnabled
   const handleSendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string) => {
-      sendMessage(content, images, workingDir, thinkingEnabled);
+    (content: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => {
+      sendMessage(content, images, workingDir, thinkingEnabled, runnerBackend);
     },
     [sendMessage, thinkingEnabled]
   );
@@ -218,6 +219,7 @@ function App() {
     status: s.status,
     createdAt: s.createdAt,
     usage: s.usage,
+    runnerBackend: s.runnerBackend,
   }));
 
   // Get page title based on current view and session
@@ -266,6 +268,9 @@ function App() {
           isOpen={isNewSessionModalOpen}
           onClose={() => setIsNewSessionModalOpen(false)}
           onCreateSession={createSession}
+          podmanAvailable={true}
+          defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
+          defaultBrowserInContainer={globalSettings?.defaultBrowserInContainer ?? true}
         />
 
         {/* Navigation Rail - always visible */}
@@ -307,12 +312,14 @@ function App() {
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
+                podmanAvailable={true}
+                defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
               />
             ) : (
           <>
             {/* Session usage bar with view toggle and git status */}
             <div className="px-4 py-2 bg-bg-secondary/50 border-b border-border flex items-center justify-between gap-4 text-xs text-text-secondary">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <ViewToggle
                   currentView={sessionView}
                   onToggle={setSessionView}
@@ -323,6 +330,29 @@ function App() {
                     isGitRepo={gitStatus.isGitRepo}
                     error={gitStatus.error}
                   />
+                )}
+                {session?.runnerBackend && session.runnerBackend !== 'native' && (
+                  <span
+                    className="flex items-center gap-1.5 px-2 py-1 bg-accent-primary/10 text-accent-primary rounded-md"
+                    title={`Running with ${session.runnerBackend}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="font-medium">{session.runnerBackend}</span>
+                  </span>
+                )}
+                {/* Show badge when browser is NOT in container (mixed mode) */}
+                {session?.runnerBackend === 'podman' && session.browserInContainer === false && (
+                  <span
+                    className="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-md"
+                    title="Browser running on host (not in container)"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
+                    </svg>
+                    <span className="font-medium">Browser: Host</span>
+                  </span>
                 )}
               </div>
               {usageInfo && (

@@ -11,14 +11,18 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
+import { PodmanClaudeRunner } from './podman-claude-runner.js';
+import { ContainerConfig, ContainerMount, createDefaultContainerConfig } from './container-config.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
 import { GitStatusProvider } from './git-status-provider.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
+import { ContainerBrowserSessionManager } from './container-browser-session-manager.js';
+import { PersistentContainerManager } from './persistent-container-manager.js';
 import { SettingsManager } from './settings-manager.js';
 
 export interface ServerOptions {
@@ -42,6 +46,16 @@ export interface ServerOptions {
   usageMonitorInterval?: number;
   /** Disable usage monitoring (default: false) */
   disableUsageMonitor?: boolean;
+  /** Enable container mode (run Claude in Podman container) */
+  containerEnabled?: boolean;
+  /** Container image to use for Claude CLI (required if containerEnabled is true) */
+  containerImage?: string;
+  /** Container image to use for browser (defaults to containerImage + '-browser' suffix or containerImage if not found) */
+  browserContainerImage?: string;
+  /** Additional volume mounts for container */
+  containerMounts?: ContainerMount[];
+  /** Additional arguments for podman */
+  containerExtraArgs?: string[];
 }
 
 /**
@@ -254,6 +268,11 @@ export function createServer(options: ServerOptions): BridgeServer {
     mcpServerCwd,  // Optional, not needed if using absolute path
     usageMonitorInterval = 30000,
     disableUsageMonitor = false,
+    containerEnabled = false,
+    containerImage,
+    browserContainerImage,
+    containerMounts = [],
+    containerExtraArgs = [],
   } = options;
 
   // WebSocket URL for MCP server to connect back to
@@ -276,7 +295,31 @@ export function createServer(options: ServerOptions): BridgeServer {
     interval: 5000,
   });
 
-  // Create runner factory based on mock mode
+  // Build container config if enabled
+  let containerConfig: ContainerConfig | null = null;
+  let browserContainerConfig: ContainerConfig | null = null;
+  if (containerEnabled) {
+    if (!containerImage) {
+      throw new Error('containerImage is required when containerEnabled is true');
+    }
+    containerConfig = createDefaultContainerConfig(containerImage, {
+      extraMounts: containerMounts,
+      extraArgs: containerExtraArgs,
+    });
+    console.log(`[Server] Container mode enabled with image: ${containerImage}`);
+
+    // Browser container config (uses browserContainerImage if provided, otherwise same as containerImage)
+    const browserImage = browserContainerImage ?? containerImage;
+    browserContainerConfig = createDefaultContainerConfig(browserImage, {
+      extraMounts: containerMounts,
+      extraArgs: containerExtraArgs,
+    });
+    if (browserContainerImage) {
+      console.log(`[Server] Browser container image: ${browserContainerImage}`);
+    }
+  }
+
+  // Create runner factory based on mode
   let runnerFactory: RunnerFactory = defaultRunnerFactory;
   if (useMock) {
     runnerFactory = () => {
@@ -291,7 +334,27 @@ export function createServer(options: ServerOptions): BridgeServer {
   }
 
   const runnerManager = new RunnerManager(runnerFactory);
+
+  // Set up container runner factory if container mode is available
+  if (containerConfig && !useMock) {
+    const containerRunnerFactory: RunnerFactory = (opts) => {
+      return new PodmanClaudeRunner({
+        workingDir: opts.workingDir,
+        containerConfig: containerConfig!,
+        claudePath: opts.claudePath,
+        mcpConfigPath: opts.mcpConfigPath,
+        permissionToolName: opts.permissionToolName,
+      });
+    };
+    runnerManager.setContainerRunnerFactory(containerRunnerFactory);
+    console.log('[Server] Container runner available (image: %s)', containerConfig.image);
+  }
   const browserSessionManager = new BrowserSessionManager();
+  const containerBrowserSessionManager = new ContainerBrowserSessionManager();
+
+  // Map session ID to PersistentContainerManager (for sessions using container browser)
+  const sessionContainerManagers = new Map<string, PersistentContainerManager>();
+
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
 
@@ -312,6 +375,63 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Map session ID to queued input (to be sent after current execution completes)
   const sessionInputQueue = new Map<string, string[]>();
+
+  // Map session ID to runner backend preference (undefined means use default)
+  const sessionRunnerBackends = new Map<string, RunnerBackend>();
+
+  // Map session ID to browser in container preference (undefined means follow default)
+  const sessionBrowserInContainer = new Map<string, boolean>();
+
+  /**
+   * Determine if a session should use container browser based on settings
+   */
+  function shouldUseContainerBrowser(sessionId: string): boolean {
+    // Check explicit session setting first (runtime map)
+    const explicit = sessionBrowserInContainer.get(sessionId);
+    if (explicit !== undefined) {
+      return explicit;
+    }
+
+    // Check session's stored browserInContainer setting from DB
+    const session = sessionManager.getSession(sessionId);
+    if (session?.browserInContainer !== undefined) {
+      // Also populate runtime map for future calls
+      sessionBrowserInContainer.set(sessionId, session.browserInContainer);
+      return session.browserInContainer;
+    }
+
+    // Default: true when running in podman, false when native
+    // Check runtime map first, then session's stored value, then global default
+    let runnerBackend = sessionRunnerBackends.get(sessionId);
+    if (runnerBackend === undefined && session?.runnerBackend) {
+      runnerBackend = session.runnerBackend;
+      // Also populate runtime map for future calls
+      sessionRunnerBackends.set(sessionId, runnerBackend);
+    }
+    runnerBackend = runnerBackend ?? settingsManager.get('defaultRunnerBackend');
+    return runnerBackend === 'podman';
+  }
+
+  /**
+   * Get or create PersistentContainerManager for a session
+   */
+  async function getOrCreateContainerManager(sessionId: string, workingDir: string): Promise<PersistentContainerManager> {
+    let manager = sessionContainerManagers.get(sessionId);
+    if (!manager) {
+      if (!browserContainerConfig) {
+        throw new Error('Browser container mode not configured');
+      }
+      // Use a port based on session hash for uniqueness
+      const bridgePort = 3002 + (sessionId.charCodeAt(0) % 1000);
+      manager = new PersistentContainerManager({
+        containerConfig: browserContainerConfig,
+        workingDir,
+        bridgePort,
+      });
+      sessionContainerManagers.set(sessionId, manager);
+    }
+    return manager;
+  }
 
   // Broadcast global usage to all clients
   function broadcastUsage(data: UsageData): void {
@@ -427,6 +547,30 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   browserSessionManager.on('error', ({ sessionId, message }) => {
     console.error(`[BrowserSession] Error for ${sessionId}: ${message}`);
+  });
+
+  // Set up container browser session manager events for screencast
+  containerBrowserSessionManager.on('frame', ({ sessionId, data, metadata }) => {
+    sendToSession(sessionId, {
+      type: 'screencast_frame',
+      sessionId,
+      data,
+      metadata,
+    });
+  });
+
+  containerBrowserSessionManager.on('status', ({ sessionId, active, browserUrl, browserTitle }) => {
+    sendToSession(sessionId, {
+      type: 'screencast_status',
+      sessionId,
+      active,
+      browserUrl,
+      browserTitle,
+    });
+  });
+
+  containerBrowserSessionManager.on('error', ({ sessionId, message }) => {
+    console.error(`[ContainerBrowserSession] Error for ${sessionId}: ${message}`);
   });
 
   // Accumulator for current turn's text (to save as single history entry)
@@ -555,6 +699,9 @@ export function createServer(options: ServerOptions): BridgeServer {
       const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
       const permissionMode = modeMap[sessionMode];
 
+      // Use session's runner backend if set, otherwise use global default
+      const runnerBackend = sessionRunnerBackends.get(sessionId) ?? settingsManager.get('defaultRunnerBackend');
+
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
         claudeSessionId: session.claudeSessionId,
@@ -562,6 +709,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         permissionToolName,
         thinkingEnabled,
         permissionMode,
+        runnerBackend,
         onEvent: (sid, eventType, data) => {
           handleRunnerEvent(sid, eventType, data);
           // Clean up MCP config on exit
@@ -962,7 +1110,16 @@ export function createServer(options: ServerOptions): BridgeServer {
         const session = sessionManager.createSession({
           name: message.name,
           workingDir: message.workingDir,
+          runnerBackend: message.runnerBackend,
+          browserInContainer: message.browserInContainer,
         });
+        // Also store in runtime maps for consistent lookups
+        if (message.runnerBackend !== undefined) {
+          sessionRunnerBackends.set(session.id, message.runnerBackend);
+        }
+        if (message.browserInContainer !== undefined) {
+          sessionBrowserInContainer.set(session.id, message.browserInContainer);
+        }
         // Broadcast to all clients for real-time session list updates
         broadcastSessionCreated(session);
         // Also send response to the creating client (will be deduplicated on client side)
@@ -979,6 +1136,14 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Store WebSocket for this session so it can receive events
           addWebSocketToSession(message.sessionId, ws);
 
+          // Restore session settings from DB to runtime maps
+          if (session.runnerBackend) {
+            sessionRunnerBackends.set(message.sessionId, session.runnerBackend);
+          }
+          if (session.browserInContainer !== undefined) {
+            sessionBrowserInContainer.set(message.sessionId, session.browserInContainer);
+          }
+
           // Register session for git status tracking
           gitStatusProvider.registerSession(message.sessionId, session.workingDir);
 
@@ -986,8 +1151,10 @@ export function createServer(options: ServerOptions): BridgeServer {
           const modelUsage = sessionManager.getModelUsage(message.sessionId);
           const pendingPermission = sessionPendingPermissions.get(message.sessionId);
 
-          // Check if a browser session exists for this session
-          const hasBrowserSession = browserSessionManager.getController(message.sessionId) !== undefined;
+          // Check if a browser session exists for this session (either host or container)
+          const hasBrowserSession =
+            browserSessionManager.getController(message.sessionId) !== undefined ||
+            containerBrowserSessionManager.hasSession(message.sessionId);
 
           // Get current permission mode for sync
           // Priority: runner's current mode > session's stored mode > global default
@@ -1033,8 +1200,22 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'delete_session': {
         const deleted = sessionManager.deleteSession(message.sessionId);
         if (deleted) {
-          // Clean up session-allowed tools
+          // Clean up session-allowed tools and runner backend preferences
           sessionAllowedTools.delete(message.sessionId);
+          sessionRunnerBackends.delete(message.sessionId);
+          sessionBrowserInContainer.delete(message.sessionId);
+
+          // Clean up browser sessions
+          await browserSessionManager.destroySession(message.sessionId);
+          await containerBrowserSessionManager.destroySession(message.sessionId);
+
+          // Clean up container manager
+          const containerManager = sessionContainerManagers.get(message.sessionId);
+          if (containerManager) {
+            await containerManager.stopContainer();
+            sessionContainerManagers.delete(message.sessionId);
+          }
+
           // Unregister from git status tracking
           gitStatusProvider.unregisterSession(message.sessionId);
           response = {
@@ -1316,6 +1497,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
           const permissionMode = modeMap[sessionMode];
 
+          // Use session's runner backend if set, otherwise use global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
+
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
@@ -1324,6 +1508,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             images,
             thinkingEnabled,
             permissionMode,
+            runnerBackend,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -1648,12 +1833,16 @@ Keep it concise but comprehensive.`;
           const sessionMode = session.permissionMode ?? settingsManager.get('defaultPermissionMode');
           const permissionMode = modeMap[sessionMode];
 
+          // Use session's runner backend if set, otherwise use global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
+
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
             mcpConfigPath,
             permissionToolName,
             permissionMode,
+            runnerBackend,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {
@@ -1687,18 +1876,39 @@ Keep it concise but comprehensive.`;
         // Store WebSocket for this session (required for screencast events)
         addWebSocketToSession(message.sessionId, ws);
 
-        // Create browser session if not exists
-        if (!browserSessionManager.getController(message.sessionId)) {
-          try {
-            await browserSessionManager.createSession(message.sessionId);
-            console.log(`[BrowserSession] Created for session ${message.sessionId}`);
-          } catch (error) {
-            response = {
-              type: 'error',
-              sessionId: message.sessionId,
-              message: error instanceof Error ? error.message : 'Failed to create browser session',
-            };
-            break;
+        // Determine whether to use container browser or host browser
+        const useContainerBrowser = shouldUseContainerBrowser(message.sessionId);
+
+        if (useContainerBrowser) {
+          // Use container browser session manager
+          if (!containerBrowserSessionManager.hasSession(message.sessionId)) {
+            try {
+              const containerManager = await getOrCreateContainerManager(message.sessionId, session.workingDir);
+              await containerBrowserSessionManager.createSession(message.sessionId, containerManager);
+              console.log(`[ContainerBrowserSession] Created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'error',
+                sessionId: message.sessionId,
+                message: error instanceof Error ? error.message : 'Failed to create container browser session',
+              };
+              break;
+            }
+          }
+        } else {
+          // Use host browser session manager
+          if (!browserSessionManager.getController(message.sessionId)) {
+            try {
+              await browserSessionManager.createSession(message.sessionId);
+              console.log(`[BrowserSession] Created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'error',
+                sessionId: message.sessionId,
+                message: error instanceof Error ? error.message : 'Failed to create browser session',
+              };
+              break;
+            }
           }
         }
         // Screencast starts automatically on session creation
@@ -1706,61 +1916,96 @@ Keep it concise but comprehensive.`;
       }
 
       case 'stop_screencast': {
-        // Destroy browser session
-        await browserSessionManager.destroySession(message.sessionId);
-        console.log(`[BrowserSession] Destroyed for session ${message.sessionId}`);
+        // Destroy browser session (both managers will ignore if session doesn't exist)
+        const useContainerBrowser = shouldUseContainerBrowser(message.sessionId);
+        if (useContainerBrowser) {
+          await containerBrowserSessionManager.destroySession(message.sessionId);
+          console.log(`[ContainerBrowserSession] Destroyed for session ${message.sessionId}`);
+        } else {
+          await browserSessionManager.destroySession(message.sessionId);
+          console.log(`[BrowserSession] Destroyed for session ${message.sessionId}`);
+        }
         return;
       }
 
       case 'user_browser_click': {
-        const controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          console.log(`[BrowserSession] No active browser for click in session ${message.sessionId}`);
-          return;
-        }
-        try {
-          const page = controller.getPage();
-          if (page) {
-            await page.mouse.click(message.x, message.y);
-            console.log(`[BrowserSession] Click at (${message.x}, ${message.y})`);
+        const useContainerBrowser = containerBrowserSessionManager.hasSession(message.sessionId);
+        if (useContainerBrowser) {
+          try {
+            await containerBrowserSessionManager.click(message.sessionId, message.x, message.y);
+            console.log(`[ContainerBrowserSession] Click at (${message.x}, ${message.y})`);
+          } catch (error) {
+            console.error(`[ContainerBrowserSession] Click failed:`, error);
           }
-        } catch (error) {
-          console.error(`[BrowserSession] Click failed:`, error);
+        } else {
+          const controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            console.log(`[BrowserSession] No active browser for click in session ${message.sessionId}`);
+            return;
+          }
+          try {
+            const page = controller.getPage();
+            if (page) {
+              await page.mouse.click(message.x, message.y);
+              console.log(`[BrowserSession] Click at (${message.x}, ${message.y})`);
+            }
+          } catch (error) {
+            console.error(`[BrowserSession] Click failed:`, error);
+          }
         }
         return;
       }
 
       case 'user_browser_key_press': {
-        const controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          console.log(`[BrowserSession] No active browser for key press in session ${message.sessionId}`);
-          return;
-        }
-        try {
-          const page = controller.getPage();
-          if (page) {
-            await page.keyboard.press(message.key);
-            console.log(`[BrowserSession] Key press: ${message.key}`);
+        const useContainerBrowser = containerBrowserSessionManager.hasSession(message.sessionId);
+        if (useContainerBrowser) {
+          try {
+            await containerBrowserSessionManager.pressKey(message.sessionId, message.key);
+            console.log(`[ContainerBrowserSession] Key press: ${message.key}`);
+          } catch (error) {
+            console.error(`[ContainerBrowserSession] Key press failed:`, error);
           }
-        } catch (error) {
-          console.error(`[BrowserSession] Key press failed:`, error);
+        } else {
+          const controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            console.log(`[BrowserSession] No active browser for key press in session ${message.sessionId}`);
+            return;
+          }
+          try {
+            const page = controller.getPage();
+            if (page) {
+              await page.keyboard.press(message.key);
+              console.log(`[BrowserSession] Key press: ${message.key}`);
+            }
+          } catch (error) {
+            console.error(`[BrowserSession] Key press failed:`, error);
+          }
         }
         return;
       }
 
       case 'user_browser_scroll': {
-        const controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          console.log(`[BrowserSession] No active browser for scroll in session ${message.sessionId}`);
-          return;
-        }
-        try {
-          const page = controller.getPage();
-          if (page) {
-            await page.mouse.wheel(message.deltaX, message.deltaY);
+        const useContainerBrowser = containerBrowserSessionManager.hasSession(message.sessionId);
+        if (useContainerBrowser) {
+          try {
+            await containerBrowserSessionManager.scroll(message.sessionId, message.deltaX, message.deltaY);
+          } catch (error) {
+            console.error(`[ContainerBrowserSession] Scroll failed:`, error);
           }
-        } catch (error) {
-          console.error(`[BrowserSession] Scroll failed:`, error);
+        } else {
+          const controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            console.log(`[BrowserSession] No active browser for scroll in session ${message.sessionId}`);
+            return;
+          }
+          try {
+            const page = controller.getPage();
+            if (page) {
+              await page.mouse.wheel(message.deltaX, message.deltaY);
+            }
+          } catch (error) {
+            console.error(`[BrowserSession] Scroll failed:`, error);
+          }
         }
         return;
       }
@@ -1801,26 +2046,36 @@ Keep it concise but comprehensive.`;
       }
 
       case 'user_browser_navigate': {
-        let controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          // Auto-create browser session if not exists
+        const useContainerBrowser = containerBrowserSessionManager.hasSession(message.sessionId);
+        if (useContainerBrowser) {
           try {
-            await browserSessionManager.createSession(message.sessionId);
-            controller = browserSessionManager.getController(message.sessionId);
-            console.log(`[BrowserSession] Auto-created for navigate in session ${message.sessionId}`);
+            await containerBrowserSessionManager.navigate(message.sessionId, message.url);
+            console.log(`[ContainerBrowserSession] Navigated to ${message.url}`);
           } catch (error) {
-            console.error(`[BrowserSession] Failed to create session for navigate:`, error);
-            return;
+            console.error(`[ContainerBrowserSession] Navigate failed:`, error);
           }
-        }
-        try {
-          const page = controller?.getPage();
-          if (page) {
-            await page.goto(message.url);
-            console.log(`[BrowserSession] Navigated to ${message.url}`);
+        } else {
+          let controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            // Auto-create browser session if not exists
+            try {
+              await browserSessionManager.createSession(message.sessionId);
+              controller = browserSessionManager.getController(message.sessionId);
+              console.log(`[BrowserSession] Auto-created for navigate in session ${message.sessionId}`);
+            } catch (error) {
+              console.error(`[BrowserSession] Failed to create session for navigate:`, error);
+              return;
+            }
           }
-        } catch (error) {
-          console.error(`[BrowserSession] Navigate failed:`, error);
+          try {
+            const page = controller?.getPage();
+            if (page) {
+              await page.goto(message.url);
+              console.log(`[BrowserSession] Navigated to ${message.url}`);
+            }
+          } catch (error) {
+            console.error(`[BrowserSession] Navigate failed:`, error);
+          }
         }
         return;
       }
@@ -1880,43 +2135,102 @@ Keep it concise but comprehensive.`;
       }
 
       case 'browser_command': {
-        const controller = browserSessionManager.getController(message.sessionId);
-        if (!controller) {
-          // Auto-create browser session if not exists
+        const useContainerBrowser = shouldUseContainerBrowser(message.sessionId);
+
+        if (useContainerBrowser) {
+          // Container browser mode
+          if (!containerBrowserSessionManager.hasSession(message.sessionId)) {
+            // Auto-create container browser session
+            const session = sessionManager.getSession(message.sessionId);
+            if (!session) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: 'Session not found',
+              };
+              break;
+            }
+            try {
+              const containerManager = await getOrCreateContainerManager(message.sessionId, session.workingDir);
+              await containerBrowserSessionManager.createSession(message.sessionId, containerManager);
+              console.log(`[ContainerBrowserSession] Auto-created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to create container browser session',
+              };
+              break;
+            }
+          }
+
+          // Execute command via container browser session manager
           try {
-            await browserSessionManager.createSession(message.sessionId);
-            console.log(`[BrowserSession] Auto-created for session ${message.sessionId}`);
+            const result = await containerBrowserSessionManager.executeCommand(
+              message.sessionId,
+              message.command.name,
+              message.command as unknown as Record<string, unknown>
+            );
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: true,
+              result,
+            };
           } catch (error) {
             response = {
               type: 'browser_command_result',
               sessionId: message.sessionId,
               requestId: message.requestId,
               success: false,
-              error: error instanceof Error ? error.message : 'Failed to create browser session',
+              error: error instanceof Error ? error.message : 'Browser command failed',
             };
-            break;
           }
-        }
+        } else {
+          // Host browser mode
+          const controller = browserSessionManager.getController(message.sessionId);
+          if (!controller) {
+            // Auto-create browser session if not exists
+            try {
+              await browserSessionManager.createSession(message.sessionId);
+              console.log(`[BrowserSession] Auto-created for session ${message.sessionId}`);
+            } catch (error) {
+              response = {
+                type: 'browser_command_result',
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to create browser session',
+              };
+              break;
+            }
+          }
 
-        // Execute the browser command
-        try {
-          const ctrl = browserSessionManager.getController(message.sessionId)!;
-          const result = await executeBrowserCommand(ctrl, message.command);
-          response = {
-            type: 'browser_command_result',
-            sessionId: message.sessionId,
-            requestId: message.requestId,
-            success: true,
-            result,
-          };
-        } catch (error) {
-          response = {
-            type: 'browser_command_result',
-            sessionId: message.sessionId,
-            requestId: message.requestId,
-            success: false,
-            error: error instanceof Error ? error.message : 'Browser command failed',
-          };
+          // Execute the browser command
+          try {
+            const ctrl = browserSessionManager.getController(message.sessionId)!;
+            const result = await executeBrowserCommand(ctrl, message.command);
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: true,
+              result,
+            };
+          } catch (error) {
+            response = {
+              type: 'browser_command_result',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              success: false,
+              error: error instanceof Error ? error.message : 'Browser command failed',
+            };
+          }
         }
         break;
       }
@@ -2027,6 +2341,15 @@ Keep it concise but comprehensive.`;
     async stop() {
       // Clean up browser sessions first
       await browserSessionManager.destroyAll();
+      await containerBrowserSessionManager.destroyAll();
+
+      // Stop all container managers
+      for (const [sessionId, containerManager] of sessionContainerManagers) {
+        await containerManager.stopContainer().catch((error) => {
+          console.error(`[Server] Failed to stop container for session ${sessionId}:`, error);
+        });
+      }
+      sessionContainerManagers.clear();
 
       return new Promise((resolve) => {
         // Stop usage monitor

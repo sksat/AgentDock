@@ -149,6 +149,8 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultModel: 'claude-opus-4-5-20250514',
     defaultPermissionMode: 'ask',
     defaultThinkingEnabled: false,
+    defaultRunnerBackend: 'native',
+    defaultBrowserInContainer: true,
   });
 
   useEffect(() => {
@@ -249,6 +251,19 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
               onToggle={() => updateGlobalSetting('defaultThinkingEnabled', !displaySettings.defaultThinkingEnabled)}
               label="Enable by default"
               description="Claude will show its reasoning process (uses more tokens)"
+            />
+          </SettingCard>
+
+          {/* Runner Backend */}
+          <SettingCard
+            title="Runner Backend"
+            description="How Claude Code is executed"
+          >
+            <ToggleSwitch
+              enabled={displaySettings.defaultRunnerBackend === 'podman'}
+              onToggle={() => updateGlobalSetting('defaultRunnerBackend', displaySettings.defaultRunnerBackend === 'podman' ? 'native' : 'podman')}
+              label="Use Podman by default"
+              description="Run sessions in Podman containers for isolation (requires server setup)"
             />
           </SettingCard>
 

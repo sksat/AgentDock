@@ -100,7 +100,7 @@ describe('WelcomePage', () => {
     const sendButton = screen.getByText('Send');
     fireEvent.click(sendButton);
 
-    expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined);
+    expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined, undefined);
   });
 
   it('calls onSendMessage when pressing Enter', () => {
@@ -111,7 +111,7 @@ describe('WelcomePage', () => {
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
-    expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined);
+    expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined, undefined);
   });
 
   it('does not call onSendMessage when pressing Shift+Enter', () => {
@@ -208,7 +208,7 @@ describe('WelcomePage', () => {
       fireEvent.change(textarea, { target: { value: 'Test message' } });
       fireEvent.click(screen.getByText('Send'));
 
-      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/home/user/project1');
+      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/home/user/project1', undefined);
     });
 
     it('allows typing custom directory', () => {
@@ -224,7 +224,7 @@ describe('WelcomePage', () => {
       fireEvent.change(textarea, { target: { value: 'Test message' } });
       fireEvent.click(screen.getByText('Send'));
 
-      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/custom/path');
+      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/custom/path', undefined);
     });
 
     it('sends undefined workingDir when empty', () => {
@@ -235,7 +235,7 @@ describe('WelcomePage', () => {
       fireEvent.change(textarea, { target: { value: 'Test message' } });
       fireEvent.click(screen.getByText('Send'));
 
-      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, undefined);
+      expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, undefined, undefined);
     });
   });
 

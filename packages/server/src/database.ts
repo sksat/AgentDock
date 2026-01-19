@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 9;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -40,6 +40,9 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     4: () => migrateToV4(db),
     5: () => migrateToV5(db),
     6: () => migrateToV6(db),
+    7: () => migrateToV7(db),
+    8: () => migrateToV8(db),
+    9: () => migrateToV9(db),
   };
 
   db.transaction(() => {
@@ -57,7 +60,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
 }
 
 function migrateToV1(db: Database.Database): void {
-  // Sessions table (includes usage columns from v2 for new databases)
+  // Sessions table (includes all columns for new databases)
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -71,7 +74,9 @@ function migrateToV1(db: Database.Database): void {
       input_tokens INTEGER DEFAULT 0,
       output_tokens INTEGER DEFAULT 0,
       cache_creation_tokens INTEGER DEFAULT 0,
-      cache_read_tokens INTEGER DEFAULT 0
+      cache_read_tokens INTEGER DEFAULT 0,
+      runner_backend TEXT DEFAULT 'native',
+      browser_in_container INTEGER DEFAULT NULL
     )
   `);
 
@@ -217,6 +222,43 @@ function migrateToV6(db: Database.Database): void {
       updated_at TEXT NOT NULL
     )
   `);
+}
+
+function migrateToV7(db: Database.Database): void {
+  // Add use_container column to sessions table (legacy, converted in V8)
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('use_container')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN use_container INTEGER DEFAULT 0');
+  }
+}
+
+function migrateToV8(db: Database.Database): void {
+  // Convert use_container (INTEGER) to runner_backend (TEXT)
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  // Add runner_backend column if it doesn't exist
+  if (!columns.has('runner_backend')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN runner_backend TEXT DEFAULT 'native'");
+
+    // Convert existing use_container values to runner_backend
+    if (columns.has('use_container')) {
+      db.exec("UPDATE sessions SET runner_backend = 'podman' WHERE use_container = 1");
+    }
+  }
+}
+
+function migrateToV9(db: Database.Database): void {
+  // Add browser_in_container column to sessions table
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('browser_in_container')) {
+    // NULL means "follow default" (true when runner_backend is 'podman')
+    db.exec('ALTER TABLE sessions ADD COLUMN browser_in_container INTEGER DEFAULT NULL');
+  }
 }
 
 export type { Database };

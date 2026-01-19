@@ -4,11 +4,24 @@ import { testScenarios } from './test-scenarios.js';
 // Parse command-line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = {
+  const result: {
+    dbPath: string;
+    port: number;
+    host: string;
+    useMock: boolean;
+    containerEnabled: boolean;
+    containerImage: string;
+    browserContainerImage: string | undefined;
+  } = {
     dbPath: process.env.CLAUDE_BRIDGE_DB_PATH || './data.db',
     port: parseInt(process.env.PORT || '3001', 10),
     host: process.env.HOST || '0.0.0.0',
     useMock: process.env.USE_MOCK === 'true' || process.env.USE_MOCK === '1',
+    // Container mode is enabled by default; set CONTAINER_DISABLED=true to disable
+    containerEnabled: process.env.CONTAINER_DISABLED !== 'true' && process.env.CONTAINER_DISABLED !== '1',
+    containerImage: process.env.CONTAINER_IMAGE || 'localhost/claude-code:local',
+    // Browser container image (for browser-in-container mode), defaults to claude-browser:dev
+    browserContainerImage: process.env.BROWSER_CONTAINER_IMAGE || 'localhost/claude-browser:dev',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -37,6 +50,9 @@ function parseArgs() {
       case '--mock':
         result.useMock = true;
         break;
+      case '--no-container':
+        result.containerEnabled = false;
+        break;
     }
   }
 
@@ -51,12 +67,19 @@ const server = createServer({
   useMock: config.useMock,
   mockScenarios: config.useMock ? testScenarios : [],
   dbPath: config.dbPath,
+  containerEnabled: config.containerEnabled,
+  containerImage: config.containerImage,
+  browserContainerImage: config.browserContainerImage,
 });
 
 server.start().then(() => {
   console.log(`Claude Bridge server running at http://${config.host}:${config.port}`);
   console.log(`WebSocket endpoint: ws://${config.host}:${config.port}/ws`);
   console.log(`Database: ${config.dbPath}`);
+  console.log(`Container mode: ${config.containerEnabled ? `enabled (image: ${config.containerImage})` : 'disabled'}`);
+  if (config.containerEnabled && config.browserContainerImage) {
+    console.log(`Browser container image: ${config.browserContainerImage}`);
+  }
 });
 
 // Graceful shutdown

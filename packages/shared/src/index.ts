@@ -4,6 +4,14 @@
 
 export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
 
+/** Runner backend type - how Claude Code is executed */
+export type RunnerBackend = 'native' | 'podman';
+
+/** Check if a runner backend is container-based */
+export function isContainerBackend(backend: RunnerBackend | undefined): boolean {
+  return backend === 'podman';
+}
+
 export type ClientMessage =
   // Session management
   | CreateSessionMessage
@@ -51,6 +59,10 @@ export interface CreateSessionMessage {
   type: 'create_session';
   name?: string;
   workingDir?: string;
+  /** Runner backend to use for this session */
+  runnerBackend?: RunnerBackend;
+  /** Whether to run browser in container (default: true when runnerBackend is 'podman') */
+  browserInContainer?: boolean;
 }
 
 export interface AttachSessionMessage {
@@ -687,6 +699,10 @@ export interface SessionInfo {
   model?: string;
   /** Usage data from ccusage (optional, may not be available) */
   usage?: SessionUsageInfo;
+  /** Runner backend used for this session */
+  runnerBackend?: RunnerBackend;
+  /** Whether browser runs in container (only relevant when runnerBackend is 'podman') */
+  browserInContainer?: boolean;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';
@@ -826,6 +842,10 @@ export interface GlobalSettings {
   defaultThinkingEnabled: boolean;
   defaultModel: string;
   defaultPermissionMode: string;
+  /** Default runner backend for new sessions */
+  defaultRunnerBackend: RunnerBackend;
+  /** Default browser in container setting (default: true, follows runnerBackend by default) */
+  defaultBrowserInContainer: boolean;
 }
 
 /** Client -> Server: Request to get current settings */

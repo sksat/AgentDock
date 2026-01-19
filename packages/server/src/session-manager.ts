@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type Database from 'better-sqlite3';
-import type { SessionInfo, SessionStatus, MessageItem, PermissionMode, SlackThreadBinding } from '@agent-dock/shared';
+import type { SessionInfo, SessionStatus, MessageItem, PermissionMode, SlackThreadBinding, RunnerBackend } from '@agent-dock/shared';
 import { initDatabase } from './database.js';
 
 export interface SessionManagerOptions {
@@ -17,6 +17,10 @@ export interface CreateSessionOptions {
   name?: string;
   /** Explicit working directory. If not specified, a new directory will be auto-created. */
   workingDir?: string;
+  /** Runner backend to use for this session */
+  runnerBackend?: RunnerBackend;
+  /** Whether to run browser in container (default: follows runnerBackend) */
+  browserInContainer?: boolean;
 }
 
 interface SessionRow {
@@ -32,6 +36,8 @@ interface SessionRow {
   output_tokens: number | null;
   cache_creation_tokens: number | null;
   cache_read_tokens: number | null;
+  runner_backend: string | null;
+  browser_in_container: number | null;
 }
 
 export interface SessionUsage {
@@ -96,8 +102,8 @@ export class SessionManager {
     // Prepare statements
     this.stmts = {
       insertSession: this.db.prepare(`
-        INSERT INTO sessions (id, name, working_dir, created_at, status, claude_session_id, permission_mode, model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, name, working_dir, created_at, status, claude_session_id, permission_mode, model, runner_backend, browser_in_container)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
       getSession: this.db.prepare('SELECT * FROM sessions WHERE id = ?'),
       listSessions: this.db.prepare('SELECT * FROM sessions ORDER BY created_at DESC'),
@@ -181,6 +187,11 @@ export class SessionManager {
       claudeSessionId: row.claude_session_id ?? undefined,
       permissionMode: (row.permission_mode as PermissionMode) ?? undefined,
       model: row.model ?? undefined,
+      runnerBackend: (row.runner_backend as RunnerBackend) ?? undefined,
+      // NULL in DB means "follow default" (true when podman)
+      browserInContainer: row.browser_in_container === null
+        ? undefined
+        : row.browser_in_container === 1,
     };
   }
 
@@ -217,6 +228,8 @@ export class SessionManager {
       workingDir,
       createdAt,
       status,
+      runnerBackend: options.runnerBackend,
+      browserInContainer: options.browserInContainer,
     };
 
     // If explicit name provided, persist immediately
@@ -258,7 +271,9 @@ export class SessionManager {
       session.status,
       session.claudeSessionId ?? null,
       session.permissionMode ?? null,
-      session.model ?? null
+      session.model ?? null,
+      session.runnerBackend ?? null,
+      session.browserInContainer === undefined ? null : (session.browserInContainer ? 1 : 0)
     );
   }
 
