@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 
 // Mock ClaudeRunner
 vi.mock('../claude-runner.js', () => ({
-  ClaudeRunner: vi.fn().mockImplementation(() => {
+  ClaudeRunner: vi.fn(function() {
     const emitter = new EventEmitter();
     return {
       ...emitter,
