@@ -50,13 +50,13 @@ describe('useWebSocket', () => {
 
   beforeEach(() => {
     mockInstances = [];
-    originalWebSocket = global.WebSocket;
+    originalWebSocket = globalThis.WebSocket;
     // @ts-expect-error - Mock WebSocket for testing
-    global.WebSocket = MockWebSocket;
+    globalThis.WebSocket = MockWebSocket;
   });
 
   afterEach(() => {
-    global.WebSocket = originalWebSocket;
+    globalThis.WebSocket = originalWebSocket;
     mockInstances = [];
   });
 
