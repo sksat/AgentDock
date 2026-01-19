@@ -11,7 +11,23 @@ AgentDock は Claude Code などの AI エージェント CLI をブラウザか
 
 ## Development Workflow
 
-機能開発は基本的にブランチを切って TDD で進める。
+### Branch and PR Policy
+
+**IMPORTANT: main ブランチへの直接 push は禁止。すべての変更は PR 経由で行う。**
+
+1. **機能開発・バグ修正**
+   - ブランチを切って開発する（例: `feat/xxx`, `fix/xxx`）
+   - TDD で進める
+   - PR を作成してレビュー・マージ
+
+2. **設定変更・ドキュメント更新**
+   - main への直接 push は **しない**
+   - 小さな変更でも PR を作成する
+   - 例外: タイポ修正など、レビュー不要な軽微な変更のみ検討
+
+3. **Git Commit**
+   - コミットメッセージは Conventional Commits 形式推奨
+   - 例: `feat: add xxx`, `fix: resolve yyy`, `chore: update zzz`
 
 ## Architecture
 
