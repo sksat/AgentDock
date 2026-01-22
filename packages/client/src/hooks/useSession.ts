@@ -89,11 +89,22 @@ export interface GitStatusState {
   error?: string;
 }
 
+export interface MachineProcessInfo {
+  pid: number;
+  command: string;
+  commandShort: string;
+  ports: { port: number; protocol: 'tcp' | 'udp'; address: string; state: string }[];
+  parentPid: number | null;
+  children: MachineProcessInfo[];
+}
+
 export interface MachineState {
   /** Whether monitoring is currently active */
   isMonitoring: boolean;
   /** List of all listening ports */
   ports: number[];
+  /** Process tree with port information */
+  processTree: MachineProcessInfo | null;
   /** Error message if monitoring failed */
   error?: string;
 }
@@ -448,8 +459,8 @@ export function useSession(): UseSessionReturn {
   const machineState = useMemo(
     () =>
       activeSessionId
-        ? (sessionMachineState.get(activeSessionId) ?? { isMonitoring: false, ports: [] })
-        : { isMonitoring: false, ports: [] },
+        ? (sessionMachineState.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null })
+        : { isMonitoring: false, ports: [], processTree: null },
     [activeSessionId, sessionMachineState]
   );
 
@@ -1319,11 +1330,12 @@ export function useSession(): UseSessionReturn {
           const sessionId = message.sessionId;
           setSessionMachineState((prev) => {
             const newMap = new Map(prev);
-            const current = newMap.get(sessionId) ?? { isMonitoring: false, ports: [] };
+            const current = newMap.get(sessionId) ?? { isMonitoring: false, ports: [], processTree: null };
             newMap.set(sessionId, {
               ...current,
               isMonitoring: true,
               ports: message.summary.portList,
+              processTree: message.processTree as MachineProcessInfo | null,
               error: message.error,
             });
             return newMap;

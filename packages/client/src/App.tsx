@@ -141,6 +141,15 @@ function App() {
     setToast({ title, message, type });
   }, []);
 
+  // Auto-start/stop machine monitor when switching to/from Machine tab
+  useEffect(() => {
+    if (sessionView === 'machine' && activeSessionId) {
+      startMachineMonitor();
+    } else {
+      stopMachineMonitor();
+    }
+  }, [sessionView, activeSessionId, startMachineMonitor, stopMachineMonitor]);
+
   const { isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
     onConnect: () => {
@@ -405,8 +414,8 @@ function App() {
                 <MachineView
                   ports={machineState.ports}
                   isMonitoring={machineState.isMonitoring}
-                  onStartMonitor={startMachineMonitor}
-                  onStopMonitor={stopMachineMonitor}
+                  processTree={machineState.processTree}
+                  error={machineState.error}
                 />
               )}
               {sessionView === 'browser' && (
