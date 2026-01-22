@@ -1,7 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { UsageChart } from './UsageChart';
 import { InputArea, type PermissionMode } from './InputArea';
-import type { GlobalUsageData } from './UsageDisplay';
 import type { SessionInfo, RunnerBackend, ImageAttachment } from '@agent-dock/shared';
 
 // Detect home directory from paths (e.g., /home/user or /Users/user)
@@ -19,7 +17,6 @@ function detectHomeDir(paths: string[]): string | null {
 
 export interface WelcomePageProps {
   sessions: SessionInfo[];
-  globalUsage: GlobalUsageData | null;
   isConnected: boolean;
   onSendMessage: (message: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => void;
   onSelectSession: (sessionId: string) => void;
@@ -50,7 +47,6 @@ export interface WelcomePageProps {
  */
 export function WelcomePage({
   sessions,
-  globalUsage,
   isConnected,
   onSendMessage,
   podmanAvailable = false,
@@ -143,14 +139,6 @@ export function WelcomePage({
             />
           </div>
         </div>
-
-        {/* Usage chart - with more separation */}
-        {globalUsage && globalUsage.daily.length > 0 && (
-          <div className="w-full max-w-4xl mt-12 pt-6 border-t border-border/30">
-            <div className="text-xs text-text-secondary mb-2">Usage</div>
-            <UsageChart daily={globalUsage.daily} blocks={globalUsage.blocks} height={150} />
-          </div>
-        )}
       </div>
     </div>
   );

@@ -321,7 +321,6 @@ function App() {
               /* Welcome page when no session is selected */
               <WelcomePage
                 sessions={sessions}
-                globalUsage={globalUsage}
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}

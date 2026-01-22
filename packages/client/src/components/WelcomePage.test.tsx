@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import type { SessionInfo } from '@agent-dock/shared';
-import type { GlobalUsageData } from './UsageDisplay';
 
 describe('WelcomePage', () => {
   const mockSessions: SessionInfo[] = [
@@ -29,48 +28,8 @@ describe('WelcomePage', () => {
     },
   ];
 
-  const mockDailyUsage = {
-    date: '2025-01-13',
-    totalCost: 1.5,
-    inputTokens: 10000,
-    outputTokens: 5000,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    totalTokens: 15000,
-    modelsUsed: ['claude-sonnet-4-5-20250929'],
-    modelBreakdowns: [
-      {
-        modelName: 'claude-sonnet-4-5-20250929',
-        cost: 1.5,
-        inputTokens: 10000,
-        outputTokens: 5000,
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0,
-      },
-    ],
-  };
-
-  const mockGlobalUsage: GlobalUsageData = {
-    today: mockDailyUsage,
-    totals: {
-      totalCost: 10.0,
-      inputTokens: 100000,
-      outputTokens: 50000,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      totalTokens: 150000,
-    },
-    daily: [
-      { ...mockDailyUsage, date: '2025-01-11', totalCost: 2.0 },
-      { ...mockDailyUsage, date: '2025-01-12', totalCost: 3.5 },
-      mockDailyUsage,
-    ],
-    blocks: [],
-  };
-
   const defaultProps = {
     sessions: [] as SessionInfo[],
-    globalUsage: null,
     isConnected: true,
     onSendMessage: vi.fn(),
     onSelectSession: vi.fn(),
@@ -238,37 +197,7 @@ describe('WelcomePage', () => {
     });
   });
 
-  describe('Usage chart', () => {
-    it('displays usage chart when daily data is provided', () => {
-      render(<WelcomePage {...defaultProps} globalUsage={mockGlobalUsage} />);
-
-      expect(screen.getByText('Usage')).toBeInTheDocument();
-    });
-
-    it('does not show usage chart when globalUsage is null', () => {
-      render(<WelcomePage {...defaultProps} globalUsage={null} />);
-
-      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
-    });
-
-    it('does not show usage chart when daily array is empty', () => {
-      const emptyDailyUsage: GlobalUsageData = {
-        ...mockGlobalUsage,
-        daily: [],
-      };
-      render(<WelcomePage {...defaultProps} globalUsage={emptyDailyUsage} />);
-
-      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
-    });
-  });
-
   describe('Robustness', () => {
-    it('should not crash with null globalUsage', () => {
-      expect(() =>
-        render(<WelcomePage {...defaultProps} globalUsage={null} />)
-      ).not.toThrow();
-    });
-
     it('should not crash with empty sessions', () => {
       expect(() => render(<WelcomePage {...defaultProps} sessions={[]} />)).not.toThrow();
     });
