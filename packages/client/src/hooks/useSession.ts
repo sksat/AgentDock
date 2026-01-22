@@ -816,7 +816,7 @@ export function useSession(): UseSessionReturn {
       // Update local state to show monitoring is starting
       setSessionMachineState((prev) => {
         const newMap = new Map(prev);
-        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [] };
+        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null };
         newMap.set(activeSessionId, { ...current, isMonitoring: true });
         return newMap;
       });
@@ -831,7 +831,7 @@ export function useSession(): UseSessionReturn {
     if (activeSessionId) {
       setSessionMachineState((prev) => {
         const newMap = new Map(prev);
-        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [] };
+        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null };
         newMap.set(activeSessionId, { ...current, isMonitoring: false });
         return newMap;
       });
