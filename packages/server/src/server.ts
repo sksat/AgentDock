@@ -574,6 +574,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to machine monitor interval (for port monitoring)
   const machineMonitorIntervals = new Map<string, ReturnType<typeof setInterval>>();
 
+  // Map session ID to Claude Code process PID (for session-specific process tree monitoring)
+  const sessionClaudePids = new Map<string, number>();
+
   // Map session ID to pending permission request (for restoring on reload)
   const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
 
@@ -941,6 +944,14 @@ export function createServer(options: ServerOptions): BridgeServer {
     const timestamp = new Date().toISOString();
 
     switch (eventType) {
+      case 'started': {
+        // Store the Claude Code process PID for session-specific process tree monitoring
+        const pid = (eventData as { pid: number }).pid;
+        sessionClaudePids.set(sessionId, pid);
+        console.log(`[Server] Claude Code started for session ${sessionId} with PID ${pid}`);
+        break;
+      }
+
       case 'text': {
         const text = (eventData as { text: string }).text;
         sendToSession(sessionId, {
@@ -1132,6 +1143,8 @@ export function createServer(options: ServerOptions): BridgeServer {
 
       case 'exit': {
         const exitData = eventData as { code: number | null; signal: string | null };
+        // Clean up Claude PID
+        sessionClaudePids.delete(sessionId);
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
 
@@ -2154,21 +2167,35 @@ Keep it concise but comprehensive.`;
         // Function to send machine ports data
         const sendMachineData = async () => {
           try {
-            // For now, just get all listening ports (session-specific process tree would require knowing the Claude process PID)
+            // Get Claude Code PID for this session
+            const claudePid = sessionClaudePids.get(sessionId);
+
+            // Get all listening ports
             const portsByPid = await getListeningPorts();
-            const allPorts: number[] = [];
-            portsByPid.forEach((ports) => {
-              ports.forEach((p) => allPorts.push(p.port));
-            });
+
+            // Build session-specific process tree if we have the Claude PID
+            let processTree: MachineProcessInfo | null = null;
+            let sessionPorts: number[] = [];
+
+            if (claudePid) {
+              processTree = await buildProcessTree(claudePid, portsByPid);
+              if (processTree) {
+                // Collect ports from the session's process tree only
+                sessionPorts = collectPortsFromTree(processTree);
+              }
+            } else {
+              // No Claude PID yet - session might not be running
+              // Return empty data
+            }
 
             const machineData: MachinePortsMessage = {
               type: 'machine_ports',
               sessionId,
-              processTree: null, // TODO: Build session-specific process tree when we have Claude process PID
+              processTree,
               summary: {
-                totalProcesses: portsByPid.size,
-                totalListeningPorts: allPorts.length,
-                portList: [...new Set(allPorts)].sort((a, b) => a - b),
+                totalProcesses: processTree ? countProcesses(processTree) : 0,
+                totalListeningPorts: sessionPorts.length,
+                portList: [...new Set(sessionPorts)].sort((a, b) => a - b),
               },
             };
 
