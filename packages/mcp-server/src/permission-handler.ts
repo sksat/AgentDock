@@ -18,28 +18,19 @@ export type PermissionResult =
   | { behavior: 'allow'; updatedInput: unknown }
   | { behavior: 'deny'; message: string };
 
-export interface PermissionHandlerOptions {
-  timeout?: number; // milliseconds
-}
-
 interface PendingRequest {
   resolve: (result: PermissionResult) => void;
   reject: (error: Error) => void;
-  timeoutId: NodeJS.Timeout;
 }
 
 export class PermissionHandler {
   private ws: WebSocket | null = null;
   private url: string;
-  private options: PermissionHandlerOptions;
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private _isConnected = false;
 
-  constructor(url: string, options: PermissionHandlerOptions = {}) {
+  constructor(url: string) {
     this.url = url;
-    this.options = {
-      timeout: options.timeout ?? 60000, // 60 seconds default
-    };
   }
 
   get isConnected(): boolean {
@@ -74,7 +65,6 @@ export class PermissionHandler {
     if (this.ws) {
       // Reject all pending requests
       for (const [requestId, pending] of this.pendingRequests) {
-        clearTimeout(pending.timeoutId);
         pending.reject(new Error('Connection closed'));
         this.pendingRequests.delete(requestId);
       }
@@ -93,12 +83,7 @@ export class PermissionHandler {
     const requestId = nanoid();
 
     return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        reject(new Error('Permission request timed out'));
-      }, this.options.timeout);
-
-      this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
+      this.pendingRequests.set(requestId, { resolve, reject });
 
       // Send permission request to bridge server
       const message = {
@@ -120,7 +105,6 @@ export class PermissionHandler {
       if (message.type === 'permission_response') {
         const pending = this.pendingRequests.get(message.requestId);
         if (pending) {
-          clearTimeout(pending.timeoutId);
           this.pendingRequests.delete(message.requestId);
           pending.resolve(message.response);
         }

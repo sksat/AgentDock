@@ -1634,6 +1634,13 @@ export function createServer(options: ServerOptions): BridgeServer {
         // Clear the stored pending permission (no longer pending)
         sessionPendingPermissions.delete(message.sessionId);
 
+        // Broadcast permission_cleared to all clients attached to this session
+        sendToSession(message.sessionId, {
+          type: 'permission_cleared',
+          sessionId: message.sessionId,
+          requestId: message.requestId,
+        });
+
         // First check if this is for a mock runner
         const runner = runnerManager.getRunner(message.sessionId);
         if (runner && 'respondToPermission' in runner) {
