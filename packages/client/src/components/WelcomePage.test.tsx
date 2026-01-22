@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import type { SessionInfo } from '@agent-dock/shared';
-import type { GlobalUsageData } from './UsageDisplay';
 
 describe('WelcomePage', () => {
   const mockSessions: SessionInfo[] = [
@@ -29,48 +28,8 @@ describe('WelcomePage', () => {
     },
   ];
 
-  const mockDailyUsage = {
-    date: '2025-01-13',
-    totalCost: 1.5,
-    inputTokens: 10000,
-    outputTokens: 5000,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    totalTokens: 15000,
-    modelsUsed: ['claude-sonnet-4-5-20250929'],
-    modelBreakdowns: [
-      {
-        modelName: 'claude-sonnet-4-5-20250929',
-        cost: 1.5,
-        inputTokens: 10000,
-        outputTokens: 5000,
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0,
-      },
-    ],
-  };
-
-  const mockGlobalUsage: GlobalUsageData = {
-    today: mockDailyUsage,
-    totals: {
-      totalCost: 10.0,
-      inputTokens: 100000,
-      outputTokens: 50000,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      totalTokens: 150000,
-    },
-    daily: [
-      { ...mockDailyUsage, date: '2025-01-11', totalCost: 2.0 },
-      { ...mockDailyUsage, date: '2025-01-12', totalCost: 3.5 },
-      mockDailyUsage,
-    ],
-    blocks: [],
-  };
-
   const defaultProps = {
     sessions: [] as SessionInfo[],
-    globalUsage: null,
     isConnected: true,
     onSendMessage: vi.fn(),
     onSelectSession: vi.fn(),
@@ -97,7 +56,8 @@ describe('WelcomePage', () => {
     const textarea = screen.getByPlaceholderText('Describe your task...');
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
 
-    const sendButton = screen.getByText('Send');
+    // InputArea uses Send (Enter) title for the send button
+    const sendButton = screen.getByTitle('Send (Enter)');
     fireEvent.click(sendButton);
 
     expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined, undefined);
@@ -131,7 +91,7 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
-    fireEvent.click(screen.getByText('Send'));
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(textarea.value).toBe('');
   });
@@ -141,16 +101,15 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...');
     expect(textarea).toBeDisabled();
-
-    expect(screen.getByText('Connecting...')).toBeInTheDocument();
   });
 
   it('does not send empty message', () => {
     const onSendMessage = vi.fn();
     render(<WelcomePage {...defaultProps} onSendMessage={onSendMessage} />);
 
-    const sendButton = screen.getByText('Send');
-    fireEvent.click(sendButton);
+    // Try sending empty message via Enter
+    const textarea = screen.getByPlaceholderText('Describe your task...');
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(onSendMessage).not.toHaveBeenCalled();
   });
@@ -161,9 +120,7 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...');
     fireEvent.change(textarea, { target: { value: '   ' } });
-
-    const sendButton = screen.getByText('Send');
-    fireEvent.click(sendButton);
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(onSendMessage).not.toHaveBeenCalled();
   });
@@ -172,7 +129,7 @@ describe('WelcomePage', () => {
     it('shows working directory input', () => {
       render(<WelcomePage {...defaultProps} />);
 
-      expect(screen.getByText('Working directory')).toBeInTheDocument();
+      // Working directory selector is in status bar, identified by placeholder
       expect(screen.getByPlaceholderText('Default (new directory)')).toBeInTheDocument();
     });
 
@@ -200,14 +157,15 @@ describe('WelcomePage', () => {
       // Select a directory (click by displayed text)
       fireEvent.click(screen.getByText('~/project1'));
 
-      // Input should now have the selected value (full path)
-      expect(dirInput).toHaveValue('/home/user/project1');
+      // Input displays shortened path (~/...) but full path is used internally
+      expect(dirInput).toHaveValue('~/project1');
 
       // Send message
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
+      // Full path is sent to the server
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/home/user/project1', undefined);
     });
 
@@ -222,7 +180,7 @@ describe('WelcomePage', () => {
       // Send message
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/custom/path', undefined);
     });
@@ -233,43 +191,13 @@ describe('WelcomePage', () => {
 
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, undefined, undefined);
     });
   });
 
-  describe('Usage chart', () => {
-    it('displays usage chart when daily data is provided', () => {
-      render(<WelcomePage {...defaultProps} globalUsage={mockGlobalUsage} />);
-
-      expect(screen.getByText('Usage')).toBeInTheDocument();
-    });
-
-    it('does not show usage chart when globalUsage is null', () => {
-      render(<WelcomePage {...defaultProps} globalUsage={null} />);
-
-      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
-    });
-
-    it('does not show usage chart when daily array is empty', () => {
-      const emptyDailyUsage: GlobalUsageData = {
-        ...mockGlobalUsage,
-        daily: [],
-      };
-      render(<WelcomePage {...defaultProps} globalUsage={emptyDailyUsage} />);
-
-      expect(screen.queryByText('Usage')).not.toBeInTheDocument();
-    });
-  });
-
   describe('Robustness', () => {
-    it('should not crash with null globalUsage', () => {
-      expect(() =>
-        render(<WelcomePage {...defaultProps} globalUsage={null} />)
-      ).not.toThrow();
-    });
-
     it('should not crash with empty sessions', () => {
       expect(() => render(<WelcomePage {...defaultProps} sessions={[]} />)).not.toThrow();
     });
@@ -286,6 +214,41 @@ describe('WelcomePage', () => {
       expect(() =>
         render(<WelcomePage {...defaultProps} sessions={[partialSession]} />)
       ).not.toThrow();
+    });
+  });
+
+  describe('Feature parity (session-start mode)', () => {
+    it('should have model selection available', () => {
+      const onModelChange = vi.fn();
+      render(
+        <WelcomePage
+          {...defaultProps}
+          defaultModel="claude-sonnet-4-5-20250929"
+          onModelChange={onModelChange}
+        />
+      );
+      expect(screen.getByText('sonnet')).toBeInTheDocument();
+    });
+
+    it('should have permission mode control', () => {
+      render(
+        <WelcomePage
+          {...defaultProps}
+          permissionMode="ask"
+          onPermissionModeChange={() => {}}
+        />
+      );
+      expect(screen.getByText('Ask before edits')).toBeInTheDocument();
+    });
+
+    it('should have image attachment button', () => {
+      render(<WelcomePage {...defaultProps} />);
+      expect(screen.getByTitle('Attach image')).toBeInTheDocument();
+    });
+
+    it('should have slash commands button', () => {
+      render(<WelcomePage {...defaultProps} />);
+      expect(screen.getByTitle('Slash commands')).toBeInTheDocument();
     });
   });
 });

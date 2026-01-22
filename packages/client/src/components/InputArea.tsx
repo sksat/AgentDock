@@ -3,7 +3,10 @@ import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
 import { PermissionModeSelector } from './PermissionModeSelector';
 import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
+import { WorkingDirectorySelector } from './WorkingDirectorySelector';
+import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -11,6 +14,17 @@ export interface TokenUsage {
 }
 
 export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
+
+/**
+ * META-SPECIFICATION: Session Start UI Parity
+ * ==========================================
+ * Session start mode UI MUST have full feature parity with active session UI.
+ * Any feature added to InputArea for active sessions should be available in
+ * session start mode, and vice versa. This ensures users have a consistent
+ * experience regardless of whether they're starting a new session or
+ * interacting with an existing one.
+ */
+export type InputAreaMode = 'default' | 'session-start';
 
 export interface InputAreaProps {
   onSend: (message: string, images?: ImageAttachment[]) => void;
@@ -36,6 +50,14 @@ export interface InputAreaProps {
   onShowCost?: () => void;
   onShowConfig?: () => void;
   onShowHelp?: () => void;
+  // Session start mode
+  mode?: InputAreaMode;
+  workingDir?: string;
+  onWorkingDirChange?: (dir: string) => void;
+  recentDirectories?: string[];
+  runnerBackend?: RunnerBackend;
+  onRunnerBackendChange?: (backend: RunnerBackend) => void;
+  podmanAvailable?: boolean;
 }
 
 export function InputArea({
@@ -60,6 +82,14 @@ export function InputArea({
   onShowCost,
   onShowConfig,
   onShowHelp,
+  // Session start mode props
+  mode = 'default',
+  workingDir = '',
+  onWorkingDirChange,
+  recentDirectories = [],
+  runnerBackend = 'native',
+  onRunnerBackendChange,
+  podmanAvailable = false,
 }: InputAreaProps) {
   const [value, setValue] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -460,7 +490,10 @@ export function InputArea({
   }, [value]);
 
   return (
-    <div className="border-t border-border bg-bg-secondary px-8">
+    <div className={clsx(
+      'border-t border-border bg-bg-secondary',
+      mode === 'session-start' ? 'px-4' : 'px-8'
+    )}>
       {/* Input container with rounded border */}
       <div className={clsx(
         'my-3 rounded-lg border bg-bg-tertiary transition-colors relative',
@@ -527,12 +560,12 @@ export function InputArea({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
-          rows={1}
+          rows={mode === 'session-start' ? 6 : 1}
           className={clsx(
             'w-full resize-none px-4 py-3',
             'bg-transparent text-text-primary placeholder:text-text-secondary',
             'focus:outline-none',
-            'min-h-[44px] max-h-[200px]',
+            mode === 'session-start' ? 'min-h-[160px] max-h-[400px]' : 'min-h-[44px] max-h-[200px]',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
         />
@@ -540,7 +573,25 @@ export function InputArea({
         {/* Status bar */}
         <div className="flex items-center justify-between px-3 py-2 border-t border-border/50 text-xs text-text-secondary">
           {/* Left side - status info */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Attachment button (moved to left for session-start mode) */}
+            {mode === 'session-start' && (
+              <button
+                className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
+                title="Attach image"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                  />
+                </svg>
+              </button>
+            )}
+
             {/* Permission mode */}
             {onPermissionModeChange ? (
               <button
@@ -602,6 +653,29 @@ export function InputArea({
               )}
             </div>
 
+            {/* Session start mode: Working directory selector (compact) */}
+            {mode === 'session-start' && (
+              <div className="relative">
+                <WorkingDirectorySelector
+                  value={workingDir}
+                  onChange={onWorkingDirChange ?? (() => {})}
+                  recentDirectories={recentDirectories}
+                  disabled={disabled}
+                  className="min-w-[180px]"
+                />
+              </div>
+            )}
+
+            {/* Session start mode: Runner backend toggle (compact) */}
+            {mode === 'session-start' && podmanAvailable && (
+              <RunnerBackendToggle
+                value={runnerBackend}
+                onChange={onRunnerBackendChange ?? (() => {})}
+                podmanAvailable={podmanAvailable}
+                disabled={disabled}
+              />
+            )}
+
             {/* Token usage */}
             {tokenUsage && (
               <div className="flex items-center gap-1.5">
@@ -624,21 +698,23 @@ export function InputArea({
 
           {/* Right side - action buttons */}
           <div className="flex items-center gap-2">
-            {/* Attachment button */}
-            <button
-              className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
-              title="Attach image"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                />
-              </svg>
-            </button>
+            {/* Attachment button (only in default mode - in session-start mode it's on the left) */}
+            {mode !== 'session-start' && (
+              <button
+                className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
+                title="Attach image"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                  />
+                </svg>
+              </button>
+            )}
             {/* Hidden file input */}
             <input
               ref={fileInputRef}

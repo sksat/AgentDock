@@ -321,12 +321,17 @@ function App() {
               /* Welcome page when no session is selected */
               <WelcomePage
                 sessions={sessions}
-                globalUsage={globalUsage}
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
                 podmanAvailable={true}
                 defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
+                defaultModel={globalSettings?.defaultModel}
+                onModelChange={(model) => updateSettings({ defaultModel: model })}
+                permissionMode={(globalSettings?.defaultPermissionMode as 'ask' | 'auto-edit' | 'plan') ?? 'ask'}
+                onPermissionModeChange={(mode) => updateSettings({ defaultPermissionMode: mode })}
+                thinkingEnabled={globalSettings?.defaultThinkingEnabled ?? false}
+                onToggleThinking={() => updateSettings({ defaultThinkingEnabled: !globalSettings?.defaultThinkingEnabled })}
               />
             ) : (
           <>
