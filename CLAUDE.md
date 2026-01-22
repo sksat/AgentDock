@@ -58,6 +58,29 @@ pnpm lint       # ESLint
 
 ポートが既に使用されている場合はエラーになります。`lsof -i :5173` などで確認してください。
 
+### 複数インスタンス起動
+
+開発用と利用用を分けて起動できます：
+
+```bash
+# 開発用（ポート 3001/5173、HMR 有効）
+pnpm dev
+
+# 利用用（ポート 3002/5174、HMR/watch 無効 - Claude Code セッションが死なない）
+pnpm dev:stable
+```
+
+`dev:stable` は HMR と tsx watch を無効化するため、コード変更で AgentDock が再起動しません。
+AgentDock の開発中に AgentDock を使う場合に便利です。
+
+#### 環境変数（カスタマイズ時）
+
+| 環境変数 | 用途 | デフォルト |
+|---------|------|-----------|
+| `AGENTDOCK_PORT` | サーバーポート | 3001 |
+| `AGENTDOCK_CLIENT_PORT` | クライアントポート | 5173 |
+| `AGENTDOCK_NO_WATCH` | HMR と tsx watch を無効化 | false |
+
 ### テスト実行
 
 ```bash

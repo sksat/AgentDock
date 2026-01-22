@@ -247,7 +247,11 @@ function App() {
   return (
     <div className="h-screen flex flex-col">
       {/* Global Header */}
-      <header className="h-12 px-4 bg-bg-secondary border-b border-border flex items-center justify-between flex-shrink-0">
+      <header className={`h-12 px-4 border-b flex items-center justify-between flex-shrink-0 ${
+        import.meta.env.VITE_STABLE_MODE
+          ? 'bg-emerald-900/30 border-emerald-700'
+          : 'bg-bg-secondary border-border'
+      }`}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -258,6 +262,11 @@ function App() {
           >
             <img src="/agentdock.svg" alt="" className="h-6" />
             AgentDock
+            {import.meta.env.VITE_STABLE_MODE && (
+              <span className="px-1.5 py-0.5 text-xs font-medium bg-emerald-600 text-white rounded">
+                stable
+              </span>
+            )}
           </button>
           <span className="text-text-secondary">/</span>
           <span className="text-sm text-text-secondary">{pageTitle}</span>

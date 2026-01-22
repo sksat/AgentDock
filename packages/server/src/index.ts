@@ -14,7 +14,7 @@ function parseArgs() {
     browserContainerImage: string | undefined;
   } = {
     dbPath: process.env.CLAUDE_BRIDGE_DB_PATH || './data.db',
-    port: parseInt(process.env.PORT || '3001', 10),
+    port: parseInt(process.env.AGENTDOCK_PORT || process.env.PORT || '3001', 10),
     host: process.env.HOST || '0.0.0.0',
     useMock: process.env.USE_MOCK === 'true' || process.env.USE_MOCK === '1',
     // Container mode is enabled by default; set CONTAINER_DISABLED=true to disable
