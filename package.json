@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:once": "pnpm --filter client run dev & pnpm --filter server run dev:once",
-    "dev:stable": "AGENTDOCK_PORT=3002 AGENTDOCK_CLIENT_PORT=5174 AGENTDOCK_NO_WATCH=true pnpm --filter client run dev & AGENTDOCK_PORT=3002 pnpm --filter server run dev:once & pnpm run dev:stable:slack",
+    "dev:stable": "AGENTDOCK_PORT=3002 AGENTDOCK_CLIENT_PORT=5174 AGENTDOCK_NO_WATCH=true VITE_SERVER_PORT=3002 pnpm --filter client run dev & AGENTDOCK_PORT=3002 pnpm --filter server run dev:once & pnpm run dev:stable:slack",
     "dev:stable:slack": "AGENTDOCK_WS_URL=ws://localhost:3002/ws pnpm --filter slack-bot run dev:once",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
