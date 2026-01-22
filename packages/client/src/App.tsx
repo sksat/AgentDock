@@ -327,6 +327,12 @@ function App() {
                 onSelectSession={selectSession}
                 podmanAvailable={true}
                 defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
+                defaultModel={globalSettings?.defaultModel}
+                onModelChange={(model) => updateSettings({ defaultModel: model })}
+                permissionMode={(globalSettings?.defaultPermissionMode as 'ask' | 'auto-edit' | 'plan') ?? 'ask'}
+                onPermissionModeChange={(mode) => updateSettings({ defaultPermissionMode: mode })}
+                thinkingEnabled={globalSettings?.defaultThinkingEnabled ?? false}
+                onToggleThinking={() => updateSettings({ defaultThinkingEnabled: !globalSettings?.defaultThinkingEnabled })}
               />
             ) : (
           <>
