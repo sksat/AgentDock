@@ -38,6 +38,7 @@ interface SessionRow {
   cache_read_tokens: number | null;
   runner_backend: string | null;
   browser_in_container: number | null;
+  auto_allow_web_tools: number | null;
 }
 
 export interface SessionUsage {
@@ -82,6 +83,7 @@ export class SessionManager {
     updateClaudeSessionId: Database.Statement;
     updatePermissionMode: Database.Statement;
     updateModel: Database.Statement;
+    updateAutoAllowWebTools: Database.Statement;
     insertMessage: Database.Statement;
     getMessages: Database.Statement;
     countSessions: Database.Statement;
@@ -113,6 +115,7 @@ export class SessionManager {
       updateClaudeSessionId: this.db.prepare('UPDATE sessions SET claude_session_id = ? WHERE id = ?'),
       updatePermissionMode: this.db.prepare('UPDATE sessions SET permission_mode = ? WHERE id = ?'),
       updateModel: this.db.prepare('UPDATE sessions SET model = ? WHERE id = ?'),
+      updateAutoAllowWebTools: this.db.prepare('UPDATE sessions SET auto_allow_web_tools = ? WHERE id = ?'),
       insertMessage: this.db.prepare(`
         INSERT INTO messages (session_id, type, content, timestamp)
         VALUES (?, ?, ?, ?)
@@ -192,6 +195,10 @@ export class SessionManager {
       browserInContainer: row.browser_in_container === null
         ? undefined
         : row.browser_in_container === 1,
+      // NULL in DB means "use global setting"
+      autoAllowWebTools: row.auto_allow_web_tools === null
+        ? null
+        : row.auto_allow_web_tools === 1,
     };
   }
 
@@ -460,6 +467,23 @@ export class SessionManager {
       return true;
     }
     const result = this.stmts.updateModel.run(model, id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Set auto-allow web tools setting for a session
+   * @param value true/false to override global setting, null to use global setting
+   */
+  setAutoAllowWebTools(id: string, value: boolean | null): boolean {
+    // Handle ephemeral sessions in-memory (don't trigger persistence)
+    const ephemeral = this.ephemeralSessions.get(id);
+    if (ephemeral) {
+      ephemeral.autoAllowWebTools = value;
+      return true;
+    }
+    // Store as INTEGER: 1 for true, 0 for false, NULL for "use global"
+    const dbValue = value === null ? null : (value ? 1 : 0);
+    const result = this.stmts.updateAutoAllowWebTools.run(dbValue, id);
     return result.changes > 0;
   }
 

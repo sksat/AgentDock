@@ -498,10 +498,52 @@ describe('isAutoAllowedTool', () => {
     expect(isAutoAllowedTool('mcp__plugin_some_other__tool')).toBe(false);
   });
 
+  it('should return true for UI/internal tools (no system changes)', () => {
+    expect(isAutoAllowedTool('ExitPlanMode')).toBe(true);
+    expect(isAutoAllowedTool('TodoWrite')).toBe(true);
+    expect(isAutoAllowedTool('TaskOutput')).toBe(true);
+    expect(isAutoAllowedTool('EnterPlanMode')).toBe(true);
+  });
+
   it('should return false for other tools', () => {
     expect(isAutoAllowedTool('Bash')).toBe(false);
     expect(isAutoAllowedTool('Write')).toBe(false);
     expect(isAutoAllowedTool('Edit')).toBe(false);
     expect(isAutoAllowedTool('Read')).toBe(false);
+  });
+
+  it('should return false for file access tools', () => {
+    expect(isAutoAllowedTool('Glob')).toBe(false);
+    expect(isAutoAllowedTool('Grep')).toBe(false);
+  });
+
+  it('should return false for web tools by default', () => {
+    expect(isAutoAllowedTool('WebFetch')).toBe(false);
+    expect(isAutoAllowedTool('WebSearch')).toBe(false);
+  });
+});
+
+describe('isWebTool', () => {
+  // Need to import isWebTool from server.ts
+  let isWebTool: (toolName: string) => boolean;
+
+  beforeAll(async () => {
+    const serverModule = await import('../server.js');
+    isWebTool = serverModule.isWebTool;
+  });
+
+  it('should return true for WebFetch', () => {
+    expect(isWebTool('WebFetch')).toBe(true);
+  });
+
+  it('should return true for WebSearch', () => {
+    expect(isWebTool('WebSearch')).toBe(true);
+  });
+
+  it('should return false for other tools', () => {
+    expect(isWebTool('Bash')).toBe(false);
+    expect(isWebTool('Write')).toBe(false);
+    expect(isWebTool('Read')).toBe(false);
+    expect(isWebTool('AskUserQuestion')).toBe(false);
   });
 });

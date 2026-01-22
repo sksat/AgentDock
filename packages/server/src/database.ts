@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -43,6 +43,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     7: () => migrateToV7(db),
     8: () => migrateToV8(db),
     9: () => migrateToV9(db),
+    10: () => migrateToV10(db),
   };
 
   db.transaction(() => {
@@ -258,6 +259,17 @@ function migrateToV9(db: Database.Database): void {
   if (!columns.has('browser_in_container')) {
     // NULL means "follow default" (true when runner_backend is 'podman')
     db.exec('ALTER TABLE sessions ADD COLUMN browser_in_container INTEGER DEFAULT NULL');
+  }
+}
+
+function migrateToV10(db: Database.Database): void {
+  // Add auto_allow_web_tools column to sessions table
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('auto_allow_web_tools')) {
+    // NULL means "use global setting"
+    db.exec('ALTER TABLE sessions ADD COLUMN auto_allow_web_tools INTEGER DEFAULT NULL');
   }
 }
 

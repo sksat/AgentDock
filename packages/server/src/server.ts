@@ -326,13 +326,24 @@ export function isAgentDockTool(toolName: string): boolean {
 }
 
 /**
+ * UI/internal tools that don't require permission (no file access or system changes)
+ */
+const AUTO_ALLOWED_TOOLS = new Set([
+  'AskUserQuestion',  // UI interaction tool
+  'ExitPlanMode',     // Plan mode signal
+  'EnterPlanMode',    // Plan mode signal
+  'TodoWrite',        // Internal todo list
+  'TaskOutput',       // Task output retrieval
+]);
+
+/**
  * Check if a tool should be auto-allowed without user permission
  *
  * Auto-allowed tools are executed immediately without requiring user confirmation.
  * This is appropriate for:
  *   1. AgentDock integrated MCP tools (mcp__bridge__*) - trusted, UI-integrated tools
  *   2. Direct browser tools (browser_*) - AgentDock internal tools
- *   3. AskUserQuestion - inherently requires user interaction, not a security risk
+ *   3. UI/internal tools (AskUserQuestion, ExitPlanMode, TodoWrite, etc.)
  *
  * Security note: Only tools that are either:
  *   - Provided by AgentDock itself and designed for safe operation
@@ -348,11 +359,24 @@ export function isAutoAllowedTool(toolName: string): boolean {
   if (isBrowserTool(toolName)) {
     return true;
   }
-  // AskUserQuestion is a UI interaction tool, safe to auto-allow
-  if (toolName === 'AskUserQuestion') {
+  // UI/internal tools
+  if (AUTO_ALLOWED_TOOLS.has(toolName)) {
     return true;
   }
   return false;
+}
+
+/**
+ * Web tools that can be optionally auto-allowed via settings
+ */
+const WEB_TOOLS = new Set(['WebFetch', 'WebSearch']);
+
+/**
+ * Check if a tool is a web tool (WebFetch, WebSearch)
+ * These can be auto-allowed via global or session settings
+ */
+export function isWebTool(toolName: string): boolean {
+  return WEB_TOOLS.has(toolName);
 }
 
 /**
@@ -1912,6 +1936,22 @@ export function createServer(options: ServerOptions): BridgeServer {
             response: { behavior: 'allow', updatedInput: message.input },
           }));
           return;
+        }
+
+        // Auto-allow web tools if session or global setting allows
+        if (isWebTool(message.toolName)) {
+          const session = sessionManager.getSession(message.sessionId);
+          // Session setting takes precedence, fall back to global setting
+          const autoAllowWebTools = session?.autoAllowWebTools ?? settingsManager.get('autoAllowWebTools');
+          if (autoAllowWebTools) {
+            ws.send(JSON.stringify({
+              type: 'permission_response',
+              sessionId: message.sessionId,
+              requestId: message.requestId,
+              response: { behavior: 'allow', updatedInput: message.input },
+            }));
+            return;
+          }
         }
 
         // Check if tool is already allowed for this session

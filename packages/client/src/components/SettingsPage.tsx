@@ -151,6 +151,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultThinkingEnabled: false,
     defaultRunnerBackend: 'native',
     defaultBrowserInContainer: true,
+    autoAllowWebTools: false,
   });
 
   useEffect(() => {
