@@ -11,6 +11,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      // Expose stable mode flag to client code
+      'import.meta.env.VITE_STABLE_MODE': JSON.stringify(noWatch),
+    },
     server: {
       port: clientPort,
       hmr: noWatch ? false : undefined,
