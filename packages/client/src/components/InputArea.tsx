@@ -3,7 +3,10 @@ import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
 import { PermissionModeSelector } from './PermissionModeSelector';
 import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
+import { WorkingDirectorySelector } from './WorkingDirectorySelector';
+import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -11,6 +14,17 @@ export interface TokenUsage {
 }
 
 export type PermissionMode = 'ask' | 'auto-edit' | 'plan';
+
+/**
+ * META-SPECIFICATION: Session Start UI Parity
+ * ==========================================
+ * Session start mode UI MUST have full feature parity with active session UI.
+ * Any feature added to InputArea for active sessions should be available in
+ * session start mode, and vice versa. This ensures users have a consistent
+ * experience regardless of whether they're starting a new session or
+ * interacting with an existing one.
+ */
+export type InputAreaMode = 'default' | 'session-start';
 
 export interface InputAreaProps {
   onSend: (message: string, images?: ImageAttachment[]) => void;
@@ -36,6 +50,14 @@ export interface InputAreaProps {
   onShowCost?: () => void;
   onShowConfig?: () => void;
   onShowHelp?: () => void;
+  // Session start mode
+  mode?: InputAreaMode;
+  workingDir?: string;
+  onWorkingDirChange?: (dir: string) => void;
+  recentDirectories?: string[];
+  runnerBackend?: RunnerBackend;
+  onRunnerBackendChange?: (backend: RunnerBackend) => void;
+  podmanAvailable?: boolean;
 }
 
 export function InputArea({
@@ -60,6 +82,14 @@ export function InputArea({
   onShowCost,
   onShowConfig,
   onShowHelp,
+  // Session start mode props
+  mode = 'default',
+  workingDir = '',
+  onWorkingDirChange,
+  recentDirectories = [],
+  runnerBackend = 'native',
+  onRunnerBackendChange,
+  podmanAvailable = false,
 }: InputAreaProps) {
   const [value, setValue] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -461,6 +491,34 @@ export function InputArea({
 
   return (
     <div className="border-t border-border bg-bg-secondary px-8">
+      {/* Session start mode: Working directory and runner backend config */}
+      {mode === 'session-start' && (
+        <div className="pt-4 pb-2">
+          <div className="flex items-end gap-4">
+            {/* Working directory selector */}
+            <div className="flex-1">
+              <label className="text-sm font-medium text-text-secondary block mb-1.5">
+                Working directory
+              </label>
+              <WorkingDirectorySelector
+                value={workingDir}
+                onChange={onWorkingDirChange ?? (() => {})}
+                recentDirectories={recentDirectories}
+                disabled={disabled}
+              />
+            </div>
+
+            {/* Runner backend toggle */}
+            <RunnerBackendToggle
+              value={runnerBackend}
+              onChange={onRunnerBackendChange ?? (() => {})}
+              podmanAvailable={podmanAvailable}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Input container with rounded border */}
       <div className={clsx(
         'my-3 rounded-lg border bg-bg-tertiary transition-colors relative',

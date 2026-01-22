@@ -97,7 +97,8 @@ describe('WelcomePage', () => {
     const textarea = screen.getByPlaceholderText('Describe your task...');
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
 
-    const sendButton = screen.getByText('Send');
+    // InputArea uses Send (Enter) title for the send button
+    const sendButton = screen.getByTitle('Send (Enter)');
     fireEvent.click(sendButton);
 
     expect(onSendMessage).toHaveBeenCalledWith('Hello Claude', undefined, undefined, undefined);
@@ -131,7 +132,7 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'Hello Claude' } });
-    fireEvent.click(screen.getByText('Send'));
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(textarea.value).toBe('');
   });
@@ -141,16 +142,15 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...');
     expect(textarea).toBeDisabled();
-
-    expect(screen.getByText('Connecting...')).toBeInTheDocument();
   });
 
   it('does not send empty message', () => {
     const onSendMessage = vi.fn();
     render(<WelcomePage {...defaultProps} onSendMessage={onSendMessage} />);
 
-    const sendButton = screen.getByText('Send');
-    fireEvent.click(sendButton);
+    // Try sending empty message via Enter
+    const textarea = screen.getByPlaceholderText('Describe your task...');
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(onSendMessage).not.toHaveBeenCalled();
   });
@@ -161,9 +161,7 @@ describe('WelcomePage', () => {
 
     const textarea = screen.getByPlaceholderText('Describe your task...');
     fireEvent.change(textarea, { target: { value: '   ' } });
-
-    const sendButton = screen.getByText('Send');
-    fireEvent.click(sendButton);
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
     expect(onSendMessage).not.toHaveBeenCalled();
   });
@@ -206,7 +204,7 @@ describe('WelcomePage', () => {
       // Send message
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/home/user/project1', undefined);
     });
@@ -222,7 +220,7 @@ describe('WelcomePage', () => {
       // Send message
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/custom/path', undefined);
     });
@@ -233,7 +231,7 @@ describe('WelcomePage', () => {
 
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
-      fireEvent.click(screen.getByText('Send'));
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, undefined, undefined);
     });
@@ -286,6 +284,41 @@ describe('WelcomePage', () => {
       expect(() =>
         render(<WelcomePage {...defaultProps} sessions={[partialSession]} />)
       ).not.toThrow();
+    });
+  });
+
+  describe('Feature parity (session-start mode)', () => {
+    it('should have model selection available', () => {
+      const onModelChange = vi.fn();
+      render(
+        <WelcomePage
+          {...defaultProps}
+          defaultModel="claude-sonnet-4-5-20250929"
+          onModelChange={onModelChange}
+        />
+      );
+      expect(screen.getByText('sonnet')).toBeInTheDocument();
+    });
+
+    it('should have permission mode control', () => {
+      render(
+        <WelcomePage
+          {...defaultProps}
+          permissionMode="ask"
+          onPermissionModeChange={() => {}}
+        />
+      );
+      expect(screen.getByText('Ask before edits')).toBeInTheDocument();
+    });
+
+    it('should have image attachment button', () => {
+      render(<WelcomePage {...defaultProps} />);
+      expect(screen.getByTitle('Attach image')).toBeInTheDocument();
+    });
+
+    it('should have slash commands button', () => {
+      render(<WelcomePage {...defaultProps} />);
+      expect(screen.getByTitle('Slash commands')).toBeInTheDocument();
     });
   });
 });

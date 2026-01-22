@@ -401,3 +401,154 @@ describe('Stream input during loading', () => {
     expect(onStreamInput).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * META-SPECIFICATION: Session Start UI Parity
+ * ==========================================
+ * Session start mode UI MUST have full feature parity with active session UI.
+ * Any feature added to InputArea for active sessions should be available in
+ * session start mode, and vice versa.
+ */
+describe('InputArea session-start mode', () => {
+  describe('working directory selector', () => {
+    it('should render working directory selector in session-start mode', () => {
+      render(<InputArea mode="session-start" onSend={() => {}} />);
+      expect(screen.getByText('Working directory')).toBeInTheDocument();
+    });
+
+    it('should not render working directory selector in default mode', () => {
+      render(<InputArea onSend={() => {}} />);
+      expect(screen.queryByText('Working directory')).not.toBeInTheDocument();
+    });
+
+    it('should call onWorkingDirChange when directory is changed', () => {
+      const onWorkingDirChange = vi.fn();
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          workingDir=""
+          onWorkingDirChange={onWorkingDirChange}
+        />
+      );
+
+      const input = screen.getByPlaceholderText(/Default.*directory/);
+      fireEvent.change(input, { target: { value: '/new/path' } });
+
+      expect(onWorkingDirChange).toHaveBeenCalledWith('/new/path');
+    });
+
+    it('should show recent directories dropdown', () => {
+      const recentDirs = ['/home/user/project1', '/home/user/project2'];
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          recentDirectories={recentDirs}
+        />
+      );
+
+      const input = screen.getByPlaceholderText(/Default.*directory/);
+      fireEvent.focus(input);
+
+      expect(screen.getByText('~/project1')).toBeInTheDocument();
+      expect(screen.getByText('~/project2')).toBeInTheDocument();
+    });
+  });
+
+  describe('runner backend toggle', () => {
+    it('should render runner backend toggle when podmanAvailable is true', () => {
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          podmanAvailable={true}
+          runnerBackend="native"
+        />
+      );
+      expect(screen.getByText('native')).toBeInTheDocument();
+    });
+
+    it('should not render runner backend toggle when podmanAvailable is false', () => {
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          podmanAvailable={false}
+        />
+      );
+      expect(screen.queryByText('native')).not.toBeInTheDocument();
+      expect(screen.queryByText('podman')).not.toBeInTheDocument();
+    });
+
+    it('should toggle runner backend on click', () => {
+      const onRunnerBackendChange = vi.fn();
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          podmanAvailable={true}
+          runnerBackend="native"
+          onRunnerBackendChange={onRunnerBackendChange}
+        />
+      );
+
+      fireEvent.click(screen.getByText('native'));
+      expect(onRunnerBackendChange).toHaveBeenCalledWith('podman');
+    });
+  });
+
+  describe('feature parity', () => {
+    it('should have model selection in session-start mode', () => {
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          model="claude-sonnet-4-5-20250929"
+          onModelChange={() => {}}
+        />
+      );
+      expect(screen.getByText('sonnet')).toBeInTheDocument();
+    });
+
+    it('should have permission mode in session-start mode', () => {
+      render(
+        <InputArea
+          mode="session-start"
+          onSend={() => {}}
+          permissionMode="ask"
+          onPermissionModeChange={() => {}}
+        />
+      );
+      expect(screen.getByText('Ask before edits')).toBeInTheDocument();
+    });
+
+    it('should support image attachment in session-start mode', () => {
+      render(<InputArea mode="session-start" onSend={() => {}} />);
+      expect(screen.getByTitle('Attach image')).toBeInTheDocument();
+    });
+
+    it('should support slash commands in session-start mode', () => {
+      render(<InputArea mode="session-start" onSend={() => {}} />);
+      expect(screen.getByTitle('Slash commands')).toBeInTheDocument();
+    });
+  });
+
+  describe('default mode unchanged', () => {
+    it('should not render session-start specific UI in default mode', () => {
+      render(<InputArea onSend={() => {}} />);
+      expect(screen.queryByText('Working directory')).not.toBeInTheDocument();
+    });
+
+    it('should work normally without mode prop', () => {
+      const onSend = vi.fn();
+      render(<InputArea onSend={onSend} />);
+
+      const textarea = screen.getByPlaceholderText(/Type a message/);
+      fireEvent.change(textarea, { target: { value: 'Test' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      expect(onSend).toHaveBeenCalledWith('Test', undefined);
+    });
+  });
+});
