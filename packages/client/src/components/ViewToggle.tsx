@@ -1,4 +1,4 @@
-export type SessionView = 'stream' | 'browser';
+export type SessionView = 'stream' | 'machine' | 'browser';
 
 export interface ViewToggleProps {
   /** Currently active view */
@@ -8,7 +8,7 @@ export interface ViewToggleProps {
 }
 
 /**
- * ViewToggle provides buttons to switch between message stream and browser view.
+ * ViewToggle provides buttons to switch between message stream, machine info, and browser view.
  */
 export function ViewToggle({ currentView, onToggle }: ViewToggleProps) {
   return (
@@ -22,6 +22,16 @@ export function ViewToggle({ currentView, onToggle }: ViewToggleProps) {
         }`}
       >
         Stream
+      </button>
+      <button
+        onClick={() => onToggle('machine')}
+        className={`px-3 py-1 text-sm rounded transition-colors ${
+          currentView === 'machine'
+            ? 'bg-accent-primary text-white'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
+        }`}
+      >
+        Machine
       </button>
       <button
         onClick={() => onToggle('browser')}

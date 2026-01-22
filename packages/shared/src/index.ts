@@ -53,7 +53,10 @@ export type ClientMessage =
   | LoadThreadBindingsMessage
   // Global settings
   | GetSettingsMessage
-  | UpdateSettingsMessage;
+  | UpdateSettingsMessage
+  // Machine monitor (port monitoring)
+  | StartMachineMonitorMessage
+  | StopMachineMonitorMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -431,6 +434,8 @@ export type ServerMessage =
   | ThreadBindingSavedMessage
   // Global settings
   | SettingsMessage
+  // Machine monitor (port monitoring)
+  | MachinePortsMessage
   // Error
   | ErrorMessage;
 
@@ -884,4 +889,52 @@ export interface ThreadBindingsListMessage {
 export interface ThreadBindingSavedMessage {
   type: 'thread_binding_saved';
   binding: SlackThreadBinding;
+}
+
+// ==================== Machine Monitor Messages (Port Monitoring) ====================
+
+/** Port information for a listening socket */
+export interface MachinePortInfo {
+  port: number;
+  protocol: 'tcp' | 'udp';
+  address: string;
+  state: string;
+}
+
+/** Process information with port data */
+export interface MachineProcessInfo {
+  pid: number;
+  command: string;
+  commandShort: string;
+  ports: MachinePortInfo[];
+  parentPid: number | null;
+  children: MachineProcessInfo[];
+}
+
+/** Client -> Server: Start monitoring ports for a session */
+export interface StartMachineMonitorMessage {
+  type: 'start_machine_monitor';
+  sessionId: string;
+}
+
+/** Client -> Server: Stop monitoring ports for a session */
+export interface StopMachineMonitorMessage {
+  type: 'stop_machine_monitor';
+  sessionId: string;
+}
+
+/** Server -> Client: Port monitoring data */
+export interface MachinePortsMessage {
+  type: 'machine_ports';
+  sessionId: string;
+  /** Process tree with port information */
+  processTree: MachineProcessInfo | null;
+  /** Summary of all listening ports */
+  summary: {
+    totalProcesses: number;
+    totalListeningPorts: number;
+    portList: number[];
+  };
+  /** Error message if monitoring failed */
+  error?: string;
 }
