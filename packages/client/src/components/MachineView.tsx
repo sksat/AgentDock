@@ -63,7 +63,8 @@ function collectPortsWithProcess(node: ProcessInfo): PortWithProcess[] {
 }
 
 /**
- * MachineView displays the session's process tree and listening ports.
+ * MachineView displays the session's process tree and listening ports side by side.
+ * Process Tree on the left, Ports table on the right.
  * Used for debugging port conflicts when multiple dev servers are running.
  * Monitoring starts automatically when this view is shown.
  */
@@ -79,9 +80,10 @@ export function MachineView({
   portsWithProcess.sort((a, b) => a.port - b.port);
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary p-4 overflow-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text-primary">Session Ports</h2>
+    <div className="flex flex-col h-full bg-bg-primary overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 pb-2">
+        <h2 className="text-lg font-semibold text-text-primary">Session Monitor</h2>
         <div className="flex items-center gap-2">
           {isMonitoring && (
             <span className="flex items-center gap-1.5 text-sm text-text-secondary">
@@ -92,93 +94,87 @@ export function MachineView({
         </div>
       </div>
 
+      {/* Error banner */}
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-accent-danger/10 text-accent-danger text-sm">
+        <div className="mx-4 mb-2 p-3 rounded-lg bg-accent-danger/10 text-accent-danger text-sm">
           {error}
         </div>
       )}
 
-      {!isMonitoring ? (
-        <div className="flex-1 flex items-center justify-center text-text-secondary">
-          <p>Waiting for monitoring data...</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Summary */}
-          <div className="bg-bg-secondary rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-2">Summary</h3>
-            <div className="text-2xl font-bold text-text-primary">
-              {ports.length} <span className="text-sm font-normal text-text-secondary">listening ports</span>
-            </div>
+      {/* Content */}
+      <div className="flex-1 overflow-hidden p-4 pt-2">
+        {!isMonitoring ? (
+          <div className="flex items-center justify-center text-text-secondary h-full">
+            <p>Waiting for monitoring data...</p>
           </div>
-
-          {/* Port Table */}
-          {portsWithProcess.length > 0 && (
-            <div className="bg-bg-secondary rounded-lg p-4">
-              <h3 className="text-sm font-medium text-text-secondary mb-3">
-                Listening Ports
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-text-secondary border-b border-border">
-                      <th className="pb-2 pr-4 font-medium">Port</th>
-                      <th className="pb-2 pr-4 font-medium">Proto</th>
-                      <th className="pb-2 pr-4 font-medium">Address</th>
-                      <th className="pb-2 pr-4 font-medium">PID</th>
-                      <th className="pb-2 font-medium">Process</th>
-                    </tr>
-                  </thead>
-                  <tbody className="font-mono">
-                    {portsWithProcess.map((p) => (
-                      <tr
-                        key={`${p.port}-${p.protocol}-${p.pid}`}
-                        className="border-b border-border/50 hover:bg-bg-tertiary/30"
-                      >
-                        <td className="py-2 pr-4">
-                          <PortBadge port={p.port} />
-                        </td>
-                        <td className="py-2 pr-4 text-text-secondary uppercase">
-                          {p.protocol}
-                        </td>
-                        <td className="py-2 pr-4 text-text-secondary">
-                          {p.address}
-                        </td>
-                        <td className="py-2 pr-4 text-text-secondary">
-                          {p.pid}
-                        </td>
-                        <td className="py-2 text-text-primary" title={p.command}>
-                          {p.commandShort}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        ) : (
+          <div className="flex gap-4 h-full">
+            {/* Left: Process Tree */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <h3 className="text-sm font-medium text-text-secondary mb-2">Process Tree</h3>
+              <div className="flex-1 bg-bg-secondary rounded-lg p-4 overflow-auto">
+                {processTree ? (
+                  <ProcessTreeNode process={processTree} depth={0} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+                    <p>No process tree available</p>
+                  </div>
+                )}
               </div>
             </div>
-          )}
 
-          {/* Process Tree */}
-          {processTree && (
-            <div className="bg-bg-secondary rounded-lg p-4">
-              <h3 className="text-sm font-medium text-text-secondary mb-3">
-                Process Tree
+            {/* Right: Ports */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <h3 className="text-sm font-medium text-text-secondary mb-2">
+                Ports ({ports.length})
               </h3>
-              <ProcessTreeNode process={processTree} depth={0} />
+              <div className="flex-1 bg-bg-secondary rounded-lg p-4 overflow-auto">
+                {portsWithProcess.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-text-secondary border-b border-border">
+                        <th className="pb-2 pr-4 font-medium">Port</th>
+                        <th className="pb-2 pr-4 font-medium">Proto</th>
+                        <th className="pb-2 pr-4 font-medium">Address</th>
+                        <th className="pb-2 pr-4 font-medium">PID</th>
+                        <th className="pb-2 font-medium">Process</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                      {portsWithProcess.map((p) => (
+                        <tr
+                          key={`${p.port}-${p.protocol}-${p.pid}`}
+                          className="border-b border-border/50 hover:bg-bg-tertiary/30"
+                        >
+                          <td className="py-2 pr-4">
+                            <PortBadge port={p.port} />
+                          </td>
+                          <td className="py-2 pr-4 text-text-secondary uppercase">
+                            {p.protocol}
+                          </td>
+                          <td className="py-2 pr-4 text-text-secondary">
+                            {p.address}
+                          </td>
+                          <td className="py-2 pr-4 text-text-secondary">
+                            {p.pid}
+                          </td>
+                          <td className="py-2 text-text-primary" title={p.command}>
+                            {p.commandShort}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+                    <p>No listening ports</p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-
-          {/* Empty state */}
-          {ports.length === 0 && (
-            <div className="bg-bg-secondary rounded-lg p-8 text-center text-text-secondary">
-              <p>No listening ports in session</p>
-              <p className="text-sm mt-1">
-                Ports will appear here when dev servers start
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

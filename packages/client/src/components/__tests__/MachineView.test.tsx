@@ -30,23 +30,30 @@ describe('MachineView', () => {
       expect(screen.getByText('Monitoring')).toBeInTheDocument();
     });
 
-    it('should show summary with port count', () => {
+    it('should show port count in header', () => {
       render(<MachineView {...monitoringProps} ports={[3000, 5173, 8080]} />);
 
-      expect(screen.getByText('3')).toBeInTheDocument();
-      expect(screen.getByText('listening ports')).toBeInTheDocument();
+      expect(screen.getByText('Ports (3)')).toBeInTheDocument();
     });
 
-    it('should show empty state when no ports', () => {
+    it('should show empty states when no data', () => {
       render(<MachineView {...monitoringProps} ports={[]} />);
 
-      expect(screen.getByText('No listening ports in session')).toBeInTheDocument();
+      expect(screen.getByText('No process tree available')).toBeInTheDocument();
+      expect(screen.getByText('No listening ports')).toBeInTheDocument();
     });
 
     it('should show error message when error is set', () => {
       render(<MachineView {...monitoringProps} error="Failed to get ports" />);
 
       expect(screen.getByText('Failed to get ports')).toBeInTheDocument();
+    });
+
+    it('should show two-column layout with headers', () => {
+      render(<MachineView {...monitoringProps} />);
+
+      expect(screen.getByText('Process Tree')).toBeInTheDocument();
+      expect(screen.getByText('Ports (0)')).toBeInTheDocument();
     });
   });
 
@@ -86,7 +93,6 @@ describe('MachineView', () => {
         />
       );
 
-      expect(screen.getByText('Listening Ports')).toBeInTheDocument();
       expect(screen.getByText('Port')).toBeInTheDocument();
       expect(screen.getByText('Proto')).toBeInTheDocument();
       expect(screen.getByText('Address')).toBeInTheDocument();
