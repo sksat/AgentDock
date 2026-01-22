@@ -27,6 +27,41 @@ export interface MachineViewProps {
   error?: string;
 }
 
+/** Port with its owning process info for table display */
+interface PortWithProcess {
+  port: number;
+  protocol: 'tcp' | 'udp';
+  address: string;
+  state: string;
+  pid: number;
+  commandShort: string;
+  command: string;
+}
+
+/**
+ * Collect all ports with their process info from the tree
+ */
+function collectPortsWithProcess(node: ProcessInfo): PortWithProcess[] {
+  const result: PortWithProcess[] = [];
+
+  // Add ports from this node
+  for (const port of node.ports) {
+    result.push({
+      ...port,
+      pid: node.pid,
+      commandShort: node.commandShort,
+      command: node.command,
+    });
+  }
+
+  // Recursively collect from children
+  for (const child of node.children) {
+    result.push(...collectPortsWithProcess(child));
+  }
+
+  return result;
+}
+
 /**
  * MachineView displays the session's process tree and listening ports.
  * Used for debugging port conflicts when multiple dev servers are running.
@@ -38,14 +73,15 @@ export function MachineView({
   processTree,
   error,
 }: MachineViewProps) {
-  // Group ports into common categories
-  const devServerPorts = ports.filter(p => p >= 3000 && p < 10000);
-  const otherPorts = ports.filter(p => p < 3000 || p >= 10000);
+  // Collect all ports with process info for the table
+  const portsWithProcess = processTree ? collectPortsWithProcess(processTree) : [];
+  // Sort by port number
+  portsWithProcess.sort((a, b) => a.port - b.port);
 
   return (
     <div className="flex flex-col h-full bg-bg-primary p-4 overflow-auto">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-text-primary">Session Process Tree</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Session Ports</h2>
         <div className="flex items-center gap-2">
           {isMonitoring && (
             <span className="flex items-center gap-1.5 text-sm text-text-secondary">
@@ -76,6 +112,52 @@ export function MachineView({
             </div>
           </div>
 
+          {/* Port Table */}
+          {portsWithProcess.length > 0 && (
+            <div className="bg-bg-secondary rounded-lg p-4">
+              <h3 className="text-sm font-medium text-text-secondary mb-3">
+                Listening Ports
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-text-secondary border-b border-border">
+                      <th className="pb-2 pr-4 font-medium">Port</th>
+                      <th className="pb-2 pr-4 font-medium">Proto</th>
+                      <th className="pb-2 pr-4 font-medium">Address</th>
+                      <th className="pb-2 pr-4 font-medium">PID</th>
+                      <th className="pb-2 font-medium">Process</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono">
+                    {portsWithProcess.map((p) => (
+                      <tr
+                        key={`${p.port}-${p.protocol}-${p.pid}`}
+                        className="border-b border-border/50 hover:bg-bg-tertiary/30"
+                      >
+                        <td className="py-2 pr-4">
+                          <PortBadge port={p.port} />
+                        </td>
+                        <td className="py-2 pr-4 text-text-secondary uppercase">
+                          {p.protocol}
+                        </td>
+                        <td className="py-2 pr-4 text-text-secondary">
+                          {p.address}
+                        </td>
+                        <td className="py-2 pr-4 text-text-secondary">
+                          {p.pid}
+                        </td>
+                        <td className="py-2 text-text-primary" title={p.command}>
+                          {p.commandShort}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Process Tree */}
           {processTree && (
             <div className="bg-bg-secondary rounded-lg p-4">
@@ -83,34 +165,6 @@ export function MachineView({
                 Process Tree
               </h3>
               <ProcessTreeNode process={processTree} depth={0} />
-            </div>
-          )}
-
-          {/* Dev Server Ports (common ports like 3000-9999) */}
-          {devServerPorts.length > 0 && (
-            <div className="bg-bg-secondary rounded-lg p-4">
-              <h3 className="text-sm font-medium text-text-secondary mb-3">
-                Dev Server Ports ({devServerPorts.length})
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {devServerPorts.map((port) => (
-                  <PortBadge key={port} port={port} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Other Ports */}
-          {otherPorts.length > 0 && (
-            <div className="bg-bg-secondary rounded-lg p-4">
-              <h3 className="text-sm font-medium text-text-secondary mb-3">
-                Other Ports ({otherPorts.length})
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {otherPorts.map((port) => (
-                  <PortBadge key={port} port={port} />
-                ))}
-              </div>
             </div>
           )}
 
@@ -123,19 +177,6 @@ export function MachineView({
               </p>
             </div>
           )}
-
-          {/* Common ports legend */}
-          <div className="bg-bg-secondary rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-2">Common Ports</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-text-secondary">
-              <div>3000: React/Next.js</div>
-              <div>3001: AgentDock Server</div>
-              <div>5173: Vite</div>
-              <div>5174: Vite (alt)</div>
-              <div>8080: HTTP alt</div>
-              <div>8000: Python/Django</div>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -218,7 +259,7 @@ function PortBadge({ port }: { port: number }) {
 
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-mono text-white ${colorClass}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono text-white ${colorClass}`}
     >
       {port}
     </span>

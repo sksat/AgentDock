@@ -43,31 +43,93 @@ describe('MachineView', () => {
       expect(screen.getByText('No listening ports in session')).toBeInTheDocument();
     });
 
-    it('should display dev server ports', () => {
-      render(<MachineView {...monitoringProps} ports={[3000, 5173, 5174]} />);
-
-      expect(screen.getByText('3000')).toBeInTheDocument();
-      expect(screen.getByText('5173')).toBeInTheDocument();
-      expect(screen.getByText('5174')).toBeInTheDocument();
-    });
-
-    it('should separate dev server ports from other ports', () => {
-      render(<MachineView {...monitoringProps} ports={[22, 80, 5173]} />);
-
-      // Dev server section should exist with 5173
-      expect(screen.getByText(/Dev Server Ports/)).toBeInTheDocument();
-      expect(screen.getByText('5173')).toBeInTheDocument();
-
-      // Other ports section should exist with 22 and 80
-      expect(screen.getByText(/Other Ports/)).toBeInTheDocument();
-      expect(screen.getByText('22')).toBeInTheDocument();
-      expect(screen.getByText('80')).toBeInTheDocument();
-    });
-
     it('should show error message when error is set', () => {
       render(<MachineView {...monitoringProps} error="Failed to get ports" />);
 
       expect(screen.getByText('Failed to get ports')).toBeInTheDocument();
+    });
+  });
+
+  describe('port table', () => {
+    const processTree: ProcessInfo = {
+      pid: 100,
+      command: '/usr/bin/claude-code',
+      commandShort: 'claude-code',
+      ports: [],
+      parentPid: 1,
+      children: [
+        {
+          pid: 101,
+          command: '/usr/bin/node server.js',
+          commandShort: 'node',
+          ports: [{ port: 5173, protocol: 'tcp', address: '0.0.0.0', state: 'LISTEN' }],
+          parentPid: 100,
+          children: [],
+        },
+        {
+          pid: 102,
+          command: '/usr/bin/node another.js',
+          commandShort: 'node',
+          ports: [{ port: 3000, protocol: 'tcp', address: '127.0.0.1', state: 'LISTEN' }],
+          parentPid: 100,
+          children: [],
+        },
+      ],
+    };
+
+    it('should render port table with headers', () => {
+      render(
+        <MachineView
+          ports={[5173, 3000]}
+          isMonitoring={true}
+          processTree={processTree}
+        />
+      );
+
+      expect(screen.getByText('Listening Ports')).toBeInTheDocument();
+      expect(screen.getByText('Port')).toBeInTheDocument();
+      expect(screen.getByText('Proto')).toBeInTheDocument();
+      expect(screen.getByText('Address')).toBeInTheDocument();
+      expect(screen.getByText('PID')).toBeInTheDocument();
+      expect(screen.getByText('Process')).toBeInTheDocument();
+    });
+
+    it('should display ports in table sorted by port number', () => {
+      render(
+        <MachineView
+          ports={[5173, 3000]}
+          isMonitoring={true}
+          processTree={processTree}
+        />
+      );
+
+      // Ports should be displayed
+      expect(screen.getByText('3000')).toBeInTheDocument();
+      expect(screen.getByText('5173')).toBeInTheDocument();
+    });
+
+    it('should show port details in table', () => {
+      render(
+        <MachineView
+          ports={[5173, 3000]}
+          isMonitoring={true}
+          processTree={processTree}
+        />
+      );
+
+      // Protocol - shown in table
+      const tcpElements = screen.getAllByText('tcp');
+      expect(tcpElements.length).toBeGreaterThanOrEqual(2);
+
+      // Addresses - shown in table
+      expect(screen.getByText('0.0.0.0')).toBeInTheDocument();
+      expect(screen.getByText('127.0.0.1')).toBeInTheDocument();
+
+      // PIDs - shown in both table and process tree, so use getAllByText
+      const pid101Elements = screen.getAllByText('101');
+      expect(pid101Elements.length).toBeGreaterThanOrEqual(1);
+      const pid102Elements = screen.getAllByText('102');
+      expect(pid102Elements.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -135,15 +197,18 @@ describe('MachineView', () => {
       );
 
       // Root node should be expanded by default (depth < 2)
-      // Both child nodes should be visible
-      const nodeTexts = screen.getAllByText('node');
-      expect(nodeTexts.length).toBe(2);
+      // Both child nodes should be visible in process tree (+ in table)
+      // 'node' appears in both table (2x) and process tree (2x) = 4 total
+      const nodeTextsBefore = screen.getAllByText('node');
+      expect(nodeTextsBefore.length).toBe(4);
 
-      // Click on root node to collapse
+      // Click on root node to collapse process tree
       fireEvent.click(screen.getByText('claude-code'));
 
-      // Now only root should be visible
-      expect(screen.queryAllByText('node').length).toBe(0);
+      // Process tree nodes are collapsed, but table still shows them
+      // So now 'node' appears only in table (2x)
+      const nodeTextsAfter = screen.queryAllByText('node');
+      expect(nodeTextsAfter.length).toBe(2);
     });
   });
 
