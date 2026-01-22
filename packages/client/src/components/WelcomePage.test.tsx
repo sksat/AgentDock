@@ -170,7 +170,7 @@ describe('WelcomePage', () => {
     it('shows working directory input', () => {
       render(<WelcomePage {...defaultProps} />);
 
-      expect(screen.getByText('Working directory')).toBeInTheDocument();
+      // Working directory selector is in status bar, identified by placeholder
       expect(screen.getByPlaceholderText('Default (new directory)')).toBeInTheDocument();
     });
 
@@ -198,14 +198,15 @@ describe('WelcomePage', () => {
       // Select a directory (click by displayed text)
       fireEvent.click(screen.getByText('~/project1'));
 
-      // Input should now have the selected value (full path)
-      expect(dirInput).toHaveValue('/home/user/project1');
+      // Input displays shortened path (~/...) but full path is used internally
+      expect(dirInput).toHaveValue('~/project1');
 
       // Send message
       const textarea = screen.getByPlaceholderText('Describe your task...');
       fireEvent.change(textarea, { target: { value: 'Test message' } });
       fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
+      // Full path is sent to the server
       expect(onSendMessage).toHaveBeenCalledWith('Test message', undefined, '/home/user/project1', undefined);
     });
 

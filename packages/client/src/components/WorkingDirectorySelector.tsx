@@ -86,21 +86,32 @@ export function WorkingDirectorySelector({
     }
   }, [recentDirectories.length]);
 
+  // Format current value for display
+  const displayValue = value ? formatPathDisplay(value, homeDir) : '';
+
   return (
     <div className={clsx('relative', className)} ref={containerRef}>
       <div className="relative">
         <input
           type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={displayValue}
+          onChange={(e) => {
+            // Expand ~ when user types
+            const inputVal = e.target.value;
+            if (inputVal.startsWith('~') && homeDir) {
+              onChange(homeDir + inputVal.slice(1));
+            } else {
+              onChange(inputVal);
+            }
+          }}
           onFocus={handleFocus}
           placeholder={placeholder}
           disabled={disabled}
           className={clsx(
-            'w-full px-4 py-2 pr-10 rounded-lg',
+            'w-full px-2 py-1 pr-6 rounded-lg text-xs',
             'bg-bg-tertiary text-text-primary placeholder:text-text-secondary',
             'border border-border',
-            'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+            'focus:outline-none focus:ring-1 focus:ring-accent-primary/50',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
         />
@@ -110,12 +121,12 @@ export function WorkingDirectorySelector({
           onClick={handleToggleDropdown}
           disabled={disabled || recentDirectories.length === 0}
           className={clsx(
-            'absolute right-2 top-1/2 -translate-y-1/2 p-1',
+            'absolute right-1 top-1/2 -translate-y-1/2 p-0.5',
             'text-text-secondary hover:text-text-primary',
             (disabled || recentDirectories.length === 0) && 'opacity-50 cursor-not-allowed'
           )}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -125,7 +136,7 @@ export function WorkingDirectorySelector({
       {isDropdownOpen && recentDirectories.length > 0 && (
         <div
           role="listbox"
-          className="absolute z-10 w-full mt-1 py-1 bg-bg-secondary border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
+          className="absolute z-10 w-full min-w-[200px] mt-1 py-1 bg-bg-secondary border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
         >
           {recentDirectories.map((dir) => (
             <button
@@ -133,7 +144,7 @@ export function WorkingDirectorySelector({
               onClick={() => handleSelectDir(dir)}
               title={dir}
               className={clsx(
-                'w-full px-4 py-2 text-left text-sm',
+                'w-full px-3 py-1.5 text-left text-xs',
                 'hover:bg-bg-tertiary transition-colors',
                 value === dir ? 'text-accent-primary' : 'text-text-primary'
               )}

@@ -413,12 +413,13 @@ describe('InputArea session-start mode', () => {
   describe('working directory selector', () => {
     it('should render working directory selector in session-start mode', () => {
       render(<InputArea mode="session-start" onSend={() => {}} />);
-      expect(screen.getByText('Working directory')).toBeInTheDocument();
+      // Working directory selector is in status bar, identified by placeholder
+      expect(screen.getByPlaceholderText(/Default.*directory/)).toBeInTheDocument();
     });
 
     it('should not render working directory selector in default mode', () => {
       render(<InputArea onSend={() => {}} />);
-      expect(screen.queryByText('Working directory')).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/Default.*directory/)).not.toBeInTheDocument();
     });
 
     it('should call onWorkingDirChange when directory is changed', () => {
