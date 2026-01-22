@@ -64,7 +64,8 @@ describe('SessionManager', () => {
       const created = sessionManager.createSession({ name: 'Test' });
       const retrieved = sessionManager.getSession(created.id);
 
-      expect(retrieved).toEqual(created);
+      // Retrieved session may have additional fields from DB (e.g., autoAllowWebTools: null)
+      expect(retrieved).toEqual(expect.objectContaining(created));
     });
 
     it('should return undefined for non-existent session', () => {

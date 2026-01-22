@@ -8,6 +8,8 @@ export interface GlobalSettings {
   defaultRunnerBackend: RunnerBackend;
   /** Default browser in container setting (true means browser runs in container when podman) */
   defaultBrowserInContainer: boolean;
+  /** Auto-allow WebFetch/WebSearch tools without permission */
+  autoAllowWebTools: boolean;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
@@ -16,6 +18,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   defaultPermissionMode: 'plan',
   defaultRunnerBackend: 'native',
   defaultBrowserInContainer: true, // Default: browser follows runnerBackend
+  autoAllowWebTools: false, // Default: require permission for web tools
 };
 
 export class SettingsManager {

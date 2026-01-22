@@ -783,6 +783,8 @@ export interface SessionInfo {
   runnerBackend?: RunnerBackend;
   /** Whether browser runs in container (only relevant when runnerBackend is 'podman') */
   browserInContainer?: boolean;
+  /** Session-level override for auto-allowing WebFetch/WebSearch (null = use global setting) */
+  autoAllowWebTools?: boolean | null;
 }
 
 export type SessionStatus = 'running' | 'waiting_input' | 'waiting_permission' | 'idle';
@@ -926,6 +928,8 @@ export interface GlobalSettings {
   defaultRunnerBackend: RunnerBackend;
   /** Default browser in container setting (default: true, follows runnerBackend by default) */
   defaultBrowserInContainer: boolean;
+  /** Auto-allow WebFetch/WebSearch tools without permission (default: false) */
+  autoAllowWebTools: boolean;
 }
 
 /** Client -> Server: Request to get current settings */
