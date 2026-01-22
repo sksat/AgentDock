@@ -15,7 +15,9 @@ import type { ImageAttachment } from './components/MessageStream';
 import type { RunnerBackend } from '@agent-dock/shared';
 import './App.css';
 
-const WS_URL = import.meta.env.DEV ? 'ws://localhost:3001/ws' : `ws://${window.location.host}/ws`;
+const WS_URL = import.meta.env.DEV
+  ? `ws://localhost:${import.meta.env.VITE_SERVER_PORT || '3001'}/ws`
+  : `ws://${window.location.host}/ws`;
 
 // Format large numbers with K/M suffixes
 function formatTokens(tokens: number): string {
