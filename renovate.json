@@ -3,6 +3,7 @@
   "extends": [
     "local>sksat/renovate-config"
   ],
+  "rebaseWhen": "behind-base-branch",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 3am on friday"]
