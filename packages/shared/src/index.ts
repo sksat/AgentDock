@@ -414,6 +414,8 @@ export type ServerMessage =
   | GlobalUsageMessage
   // Permission request
   | PermissionRequestMessage
+  // Permission cleared (sync across clients)
+  | PermissionClearedMessage
   // AskUserQuestion
   | AskUserQuestionMessage
   // TodoWrite
@@ -606,6 +608,13 @@ export interface PermissionRequestMessage {
   requestId: string;
   toolName: string;
   input: unknown;
+}
+
+/** Broadcast when a permission request has been resolved (allow/deny) */
+export interface PermissionClearedMessage {
+  type: 'permission_cleared';
+  sessionId: string;
+  requestId: string;
 }
 
 export interface AskUserQuestionMessage {

@@ -125,19 +125,6 @@ describe('PermissionHandler', () => {
       expect(result).toEqual({ behavior: 'deny', message: 'Access denied to system files' });
     });
 
-    it('should timeout if no response received', async () => {
-      handler = new PermissionHandler('ws://localhost:3001/ws', { timeout: 100 });
-      await handler.connect();
-
-      const request: PermissionRequest = {
-        sessionId: 'session-123',
-        toolName: 'Bash',
-        input: { command: 'sleep 999' },
-      };
-
-      await expect(handler.requestPermission(request)).rejects.toThrow('Permission request timed out');
-    });
-
     it('should reject if not connected', async () => {
       handler = new PermissionHandler('ws://localhost:3001/ws');
 

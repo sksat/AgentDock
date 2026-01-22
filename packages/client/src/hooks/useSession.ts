@@ -1176,6 +1176,22 @@ export function useSession(): UseSessionReturn {
           break;
         }
 
+        case 'permission_cleared': {
+          // Permission was resolved (allow/deny) - clear popup for all clients
+          const sessionId = message.sessionId;
+          setSessionPendingPermission((prev) => {
+            const current = prev.get(sessionId);
+            // Only clear if the requestId matches (safety check)
+            if (current && current.requestId === message.requestId) {
+              const newMap = new Map(prev);
+              newMap.delete(sessionId);
+              return newMap;
+            }
+            return prev;
+          });
+          break;
+        }
+
         case 'ask_user_question': {
           const sessionId = message.sessionId;
           setSessionPendingQuestion((prev) => {
