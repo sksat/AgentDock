@@ -4,7 +4,7 @@ import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
 import { DiffView } from './DiffView';
-import type { TodoItem as TodoItemType } from '@agent-dock/shared';
+import { getToolDisplayName, type TodoItem as TodoItemType } from '@agent-dock/shared';
 
 export interface MessageStreamItem {
   id?: string;
@@ -566,7 +566,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
                 : 'bg-accent-warning animate-pulse'
             )}></span>
             <span className="text-base">{toolInfo.icon}</span>
-            <span className="text-text-primary font-medium">{content.toolName}</span>
+            <span className="text-text-primary font-medium">{getToolDisplayName(content.toolName)}</span>
             <span className="text-text-secondary text-sm truncate max-w-[400px]">
               {toolInfo.description}
             </span>
@@ -597,7 +597,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               : 'bg-accent-warning animate-pulse'
           )}></span>
           <span className="text-base">{toolInfo.icon}</span>
-          <span className="text-text-primary font-medium">{content.toolName}</span>
+          <span className="text-text-primary font-medium">{getToolDisplayName(content.toolName)}</span>
           <span className="text-text-secondary text-sm truncate max-w-[400px]">
             {toolInfo.description}
           </span>

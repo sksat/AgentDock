@@ -498,12 +498,14 @@ describe('ToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    // Should show tool info
-    expect(screen.getByText('mcp__plugin_playwright_playwright__browser_navigate')).toBeInTheDocument();
+    // Should show formatted tool name (getToolDisplayName converts mcp__*__* to readable form)
+    // mcp__plugin_playwright_playwright__browser_navigate -> "browser navigate"
+    expect(screen.getByText('browser navigate')).toBeInTheDocument();
+    // Description should still show playwright info
     expect(screen.getByText(/playwright:navigate/)).toBeInTheDocument();
   });
 
-  it('should display MCP tool with tool name', () => {
+  it('should display MCP tool with formatted tool name', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -519,7 +521,8 @@ describe('ToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('mcp__other__some_tool')).toBeInTheDocument();
+    // Tool name should be formatted: mcp__other__some_tool -> "some tool"
+    expect(screen.getByText('some tool')).toBeInTheDocument();
   });
 
   it('should show expanded content by default', () => {

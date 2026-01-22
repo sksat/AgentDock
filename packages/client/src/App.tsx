@@ -5,6 +5,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
 import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
+import { MachineView } from './components/MachineView';
 import { ErrorBanner } from './components/ErrorBanner';
 import { TodoPanel } from './components/TodoPanel';
 import { ViewToggle, type SessionView } from './components/ViewToggle';
@@ -112,6 +113,9 @@ function App() {
     sendBrowserBack,
     sendBrowserForward,
     sendBrowserRefresh,
+    machineState,
+    startMachineMonitor,
+    stopMachineMonitor,
     handleServerMessage,
     setSend,
     globalSettings,
@@ -136,6 +140,15 @@ function App() {
   const showToast = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     setToast({ title, message, type });
   }, []);
+
+  // Auto-start/stop machine monitor when switching to/from Machine tab
+  useEffect(() => {
+    if (sessionView === 'machine' && activeSessionId) {
+      startMachineMonitor();
+    } else {
+      stopMachineMonitor();
+    }
+  }, [sessionView, activeSessionId, startMachineMonitor, stopMachineMonitor]);
 
   const { isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
@@ -393,10 +406,19 @@ function App() {
 
             {/* Main content */}
             <main className="flex-1 flex flex-col overflow-hidden">
-              {/* Messages or Browser view based on sessionView */}
-              {sessionView === 'stream' ? (
+              {/* Messages, Machine, or Browser view based on sessionView */}
+              {sessionView === 'stream' && (
                 <MessageStream ref={messageStreamRef} messages={messages} workingDir={session?.workingDir} />
-              ) : (
+              )}
+              {sessionView === 'machine' && (
+                <MachineView
+                  ports={machineState.ports}
+                  isMonitoring={machineState.isMonitoring}
+                  processTree={machineState.processTree}
+                  error={machineState.error}
+                />
+              )}
+              {sessionView === 'browser' && (
                 <BrowserView
                   frame={screencast?.frame ?? null}
                   isActive={screencast?.active ?? false}

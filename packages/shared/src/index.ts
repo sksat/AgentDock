@@ -12,6 +12,72 @@ export function isContainerBackend(backend: RunnerBackend | undefined): boolean 
   return backend === 'podman';
 }
 
+// ==================== AgentDock Tool Name Formatting ====================
+
+/**
+ * Check if a tool name is an AgentDock integrated MCP tool (mcp__bridge__*)
+ */
+export function isAgentDockTool(toolName: string): boolean {
+  return /^mcp__bridge__/.test(toolName);
+}
+
+/**
+ * Format AgentDock integrated MCP tool names for display.
+ *
+ * AgentDock tools use the naming convention `mcp__bridge__<category>_<action>`.
+ * This function converts them to human-readable display names.
+ *
+ * Examples:
+ *   - mcp__bridge__browser_navigate -> "browser: navigate"
+ *   - mcp__bridge__browser_click -> "browser: click"
+ *   - mcp__bridge__port_monitor -> "port monitor"
+ *   - mcp__bridge__permission_prompt -> "permission prompt"
+ *
+ * @param toolName The raw tool name
+ * @returns Formatted display name, or original name if not an AgentDock tool
+ */
+export function formatAgentDockToolName(toolName: string): string {
+  if (!isAgentDockTool(toolName)) {
+    return toolName;
+  }
+
+  // Extract the part after mcp__bridge__
+  const name = toolName.replace(/^mcp__bridge__/, '');
+
+  // Handle browser tools specially: browser_navigate -> "browser: navigate"
+  if (name.startsWith('browser_')) {
+    const action = name.replace(/^browser_/, '').replace(/_/g, ' ');
+    return `browser: ${action}`;
+  }
+
+  // For other tools: port_monitor -> "port monitor"
+  return name.replace(/_/g, ' ');
+}
+
+/**
+ * Get a short display name for any MCP tool.
+ * Handles both AgentDock tools and external MCP tools.
+ *
+ * @param toolName The raw tool name
+ * @returns Short display name suitable for UI
+ */
+export function getToolDisplayName(toolName: string): string {
+  // AgentDock integrated tools
+  if (isAgentDockTool(toolName)) {
+    return formatAgentDockToolName(toolName);
+  }
+
+  // External MCP tools: mcp__plugin_xxx__tool_name -> "tool name"
+  // Use greedy match to capture everything after the LAST "__"
+  const externalMatch = toolName.match(/^mcp__.*__(.+)$/);
+  if (externalMatch) {
+    return externalMatch[1].replace(/_/g, ' ');
+  }
+
+  // Standard Claude Code tools or unknown
+  return toolName;
+}
+
 export type ClientMessage =
   // Session management
   | CreateSessionMessage
@@ -53,7 +119,10 @@ export type ClientMessage =
   | LoadThreadBindingsMessage
   // Global settings
   | GetSettingsMessage
-  | UpdateSettingsMessage;
+  | UpdateSettingsMessage
+  // Machine monitor (port monitoring)
+  | StartMachineMonitorMessage
+  | StopMachineMonitorMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -431,6 +500,8 @@ export type ServerMessage =
   | ThreadBindingSavedMessage
   // Global settings
   | SettingsMessage
+  // Machine monitor (port monitoring)
+  | MachinePortsMessage
   // Error
   | ErrorMessage;
 
@@ -884,4 +955,52 @@ export interface ThreadBindingsListMessage {
 export interface ThreadBindingSavedMessage {
   type: 'thread_binding_saved';
   binding: SlackThreadBinding;
+}
+
+// ==================== Machine Monitor Messages (Port Monitoring) ====================
+
+/** Port information for a listening socket */
+export interface MachinePortInfo {
+  port: number;
+  protocol: 'tcp' | 'udp';
+  address: string;
+  state: string;
+}
+
+/** Process information with port data */
+export interface MachineProcessInfo {
+  pid: number;
+  command: string;
+  commandShort: string;
+  ports: MachinePortInfo[];
+  parentPid: number | null;
+  children: MachineProcessInfo[];
+}
+
+/** Client -> Server: Start monitoring ports for a session */
+export interface StartMachineMonitorMessage {
+  type: 'start_machine_monitor';
+  sessionId: string;
+}
+
+/** Client -> Server: Stop monitoring ports for a session */
+export interface StopMachineMonitorMessage {
+  type: 'stop_machine_monitor';
+  sessionId: string;
+}
+
+/** Server -> Client: Port monitoring data */
+export interface MachinePortsMessage {
+  type: 'machine_ports';
+  sessionId: string;
+  /** Process tree with port information */
+  processTree: MachineProcessInfo | null;
+  /** Summary of all listening ports */
+  summary: {
+    totalProcesses: number;
+    totalListeningPorts: number;
+    portList: number[];
+  };
+  /** Error message if monitoring failed */
+  error?: string;
 }

@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { PermissionHandler } from './permission-handler.js';
 import { PlaywrightHandler } from './playwright-handler.js';
+import { PortMonitorHandler } from './port-monitor-handler.js';
 
 // Get bridge server URL from environment
 const BRIDGE_WS_URL = process.env.BRIDGE_WS_URL || 'ws://localhost:3001/ws';
@@ -447,6 +448,59 @@ server.tool(
       return { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] };
     } catch (error) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }) }] };
+    }
+  }
+);
+
+// ==================== Port Monitor Tool ====================
+// This tool helps agents identify which ports are being used by processes
+// spawned in this session, useful when multiple dev servers are running.
+
+const portMonitorHandler = new PortMonitorHandler();
+
+server.tool(
+  'port_monitor',
+  'Get the current session process tree and listening ports. ' +
+    'Use this to find out which ports dev servers (like Vite, Next.js) are using. ' +
+    'Helps avoid port confusion when multiple sessions run dev servers simultaneously.',
+  {
+    includeAllProcesses: z
+      .boolean()
+      .optional()
+      .describe('Include all processes in the tree, not just those listening on ports'),
+    portRange: z
+      .object({
+        min: z.number().int().min(1).max(65535).describe('Minimum port number'),
+        max: z.number().int().min(1).max(65535).describe('Maximum port number'),
+      })
+      .optional()
+      .describe('Filter results to only include ports within this range'),
+  },
+  async ({ includeAllProcesses, portRange }) => {
+    try {
+      const result = await portMonitorHandler.getSessionPorts({
+        includeAllProcesses,
+        portRange,
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: error instanceof Error ? error.message : 'Unknown error',
+            }),
+          },
+        ],
+      };
     }
   }
 );

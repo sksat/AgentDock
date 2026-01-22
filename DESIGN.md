@@ -584,3 +584,47 @@ describe('QuestionMessage robustness', () => {
   it('should not crash with legacy data structure', () => { ... });
 });
 ```
+
+### AgentDock 統合 MCP ツールの自動許可
+
+AgentDock が提供する MCP ツール（`mcp__bridge__*`）は、**ユーザーの許可なしに自動実行**される。
+
+**理由**:
+- AgentDock 統合 MCP ツールは AgentDock 自身が提供し、UI と密接に連携するため信頼できる
+- ブラウザ操作、ポート監視など、頻繁に実行されるツールで毎回許可を求めるのは UX が悪い
+- 外部 MCP ツール（`mcp__plugin_*`）とは明確に区別される
+
+**自動許可されるツール**:
+1. **AgentDock 統合 MCP ツール** (`mcp__bridge__*`)
+   - `mcp__bridge__browser_*`: ブラウザ操作ツール
+   - `mcp__bridge__port_monitor`: ポート監視ツール
+   - `mcp__bridge__permission_prompt`: 内部使用（パーミッション処理）
+   - 今後追加される `mcp__bridge__*` ツールも自動的に許可される
+
+2. **AskUserQuestion**: UI インタラクションツール（ユーザー操作が必須なためセキュリティリスクなし）
+
+**自動許可されないツール**:
+- **外部 MCP ツール** (`mcp__plugin_*`): 外部 MCP サーバーが提供するツール
+- **Claude Code 標準ツール** (`Bash`, `Write`, `Edit` など): ファイル操作やコマンド実行は許可が必要
+
+**実装**:
+```typescript
+// packages/server/src/server.ts
+
+// AgentDock 統合 MCP ツールの判定
+function isAgentDockTool(toolName: string): boolean {
+  return /^mcp__bridge__/.test(toolName);
+}
+
+// 自動許可ツールの判定
+function isAutoAllowedTool(toolName: string): boolean {
+  if (isAgentDockTool(toolName)) return true;
+  if (toolName === 'AskUserQuestion') return true;
+  return false;
+}
+```
+
+**セキュリティ考慮**:
+- AgentDock 統合ツールは、AgentDock 開発者が安全性を保証するものに限定
+- 新しいツールを追加する際は、自動許可が適切かどうかを慎重に検討すること
+- 外部 MCP ツールは絶対に自動許可リストに含めない

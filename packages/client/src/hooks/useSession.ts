@@ -89,6 +89,26 @@ export interface GitStatusState {
   error?: string;
 }
 
+export interface MachineProcessInfo {
+  pid: number;
+  command: string;
+  commandShort: string;
+  ports: { port: number; protocol: 'tcp' | 'udp'; address: string; state: string }[];
+  parentPid: number | null;
+  children: MachineProcessInfo[];
+}
+
+export interface MachineState {
+  /** Whether monitoring is currently active */
+  isMonitoring: boolean;
+  /** List of all listening ports */
+  ports: number[];
+  /** Process tree with port information */
+  processTree: MachineProcessInfo | null;
+  /** Error message if monitoring failed */
+  error?: string;
+}
+
 export interface UseSessionReturn {
   // Session list
   sessions: SessionInfo[];
@@ -110,6 +130,7 @@ export interface UseSessionReturn {
   screencast: ScreencastState | null;
   todoState: TodoState;
   gitStatus: GitStatusState | null;
+  machineState: MachineState;
 
   // Session management
   listSessions: () => void;
@@ -148,6 +169,10 @@ export interface UseSessionReturn {
   sendBrowserForward: () => void;
   sendBrowserRefresh: () => void;
 
+  // Machine monitor
+  startMachineMonitor: () => void;
+  stopMachineMonitor: () => void;
+
   // WebSocket integration
   handleServerMessage: (message: ServerMessage) => void;
   setSend: (send: (message: ClientMessage) => void) => void;
@@ -181,6 +206,9 @@ type SessionTodoState = Map<string, TodoState>;
 
 // Store git status per session
 type SessionGitStatus = Map<string, GitStatusState>;
+
+// Store machine state per session
+type SessionMachineState = Map<string, MachineState>;
 
 // Types for server-side message items
 interface ServerMessageItem {
@@ -295,6 +323,9 @@ export function useSession(): UseSessionReturn {
 
   // Git status stored per session
   const [sessionGitStatus, setSessionGitStatus] = useState<SessionGitStatus>(new Map());
+
+  // Machine state stored per session
+  const [sessionMachineState, setSessionMachineState] = useState<SessionMachineState>(new Map());
 
   // Active session state
   const [isLoading, setIsLoading] = useState(false);
@@ -424,6 +455,13 @@ export function useSession(): UseSessionReturn {
   const gitStatus = useMemo(
     () => (activeSessionId ? sessionGitStatus.get(activeSessionId) ?? null : null),
     [activeSessionId, sessionGitStatus]
+  );
+  const machineState = useMemo(
+    () =>
+      activeSessionId
+        ? (sessionMachineState.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null })
+        : { isMonitoring: false, ports: [], processTree: null },
+    [activeSessionId, sessionMachineState]
   );
 
   // Helper to update messages for a specific session
@@ -768,6 +806,37 @@ export function useSession(): UseSessionReturn {
     if (activeSessionId) {
       send({
         type: 'stop_screencast',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const startMachineMonitor = useCallback(() => {
+    if (activeSessionId) {
+      // Update local state to show monitoring is starting
+      setSessionMachineState((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null };
+        newMap.set(activeSessionId, { ...current, isMonitoring: true });
+        return newMap;
+      });
+      send({
+        type: 'start_machine_monitor',
+        sessionId: activeSessionId,
+      });
+    }
+  }, [activeSessionId, send]);
+
+  const stopMachineMonitor = useCallback(() => {
+    if (activeSessionId) {
+      setSessionMachineState((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(activeSessionId) ?? { isMonitoring: false, ports: [], processTree: null };
+        newMap.set(activeSessionId, { ...current, isMonitoring: false });
+        return newMap;
+      });
+      send({
+        type: 'stop_machine_monitor',
         sessionId: activeSessionId,
       });
     }
@@ -1257,6 +1326,23 @@ export function useSession(): UseSessionReturn {
           break;
         }
 
+        case 'machine_ports': {
+          const sessionId = message.sessionId;
+          setSessionMachineState((prev) => {
+            const newMap = new Map(prev);
+            const current = newMap.get(sessionId) ?? { isMonitoring: false, ports: [], processTree: null };
+            newMap.set(sessionId, {
+              ...current,
+              isMonitoring: true,
+              ports: message.summary.portList,
+              processTree: message.processTree as MachineProcessInfo | null,
+              error: message.error,
+            });
+            return newMap;
+          });
+          break;
+        }
+
         case 'system_message': {
           const sessionId = message.sessionId;
           updateSessionMessages(sessionId, (prev) => [
@@ -1392,6 +1478,7 @@ export function useSession(): UseSessionReturn {
     screencast,
     todoState,
     gitStatus,
+    machineState,
     listSessions,
     createSession,
     selectSession,
@@ -1418,6 +1505,8 @@ export function useSession(): UseSessionReturn {
     sendBrowserBack,
     sendBrowserForward,
     sendBrowserRefresh,
+    startMachineMonitor,
+    stopMachineMonitor,
     handleServerMessage,
     setSend,
     globalSettings,

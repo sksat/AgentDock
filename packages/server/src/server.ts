@@ -3,7 +3,8 @@ import { cors } from 'hono/cors';
 import { serve, type ServerType } from '@hono/node-server';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFile, readdir } from 'node:fs';
+import { exec } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir } from 'node:os';
-import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend } from '@agent-dock/shared';
+import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend, MachinePortsMessage, MachineProcessInfo, MachinePortInfo } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
@@ -109,6 +110,174 @@ function cleanupMcpConfig(sessionId: string): void {
   }
 }
 
+// ==================== Port Monitoring Utilities ====================
+
+/**
+ * Parse ss command output and return a map of PID -> PortInfo[]
+ */
+function parseSSOutput(output: string): Map<number, MachinePortInfo[]> {
+  const result = new Map<number, MachinePortInfo[]>();
+  const lines = output.split('\n');
+
+  for (const line of lines) {
+    if (line.startsWith('Netid') || line.trim() === '') {
+      continue;
+    }
+
+    const match = line.match(
+      /^(tcp|udp)\s+(\w+)\s+\d+\s+\d+\s+(\S+):(\d+)\s+\S+\s+.*pid=(\d+)/
+    );
+
+    if (match) {
+      const [, protocol, state, address, portStr, pidStr] = match;
+      const port = parseInt(portStr, 10);
+      const pid = parseInt(pidStr, 10);
+
+      const portInfo: MachinePortInfo = {
+        port,
+        protocol: protocol as 'tcp' | 'udp',
+        address,
+        state,
+      };
+
+      const existing = result.get(pid) || [];
+      existing.push(portInfo);
+      result.set(pid, existing);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Get listening ports by executing ss command
+ */
+async function getListeningPorts(): Promise<Map<number, MachinePortInfo[]>> {
+  return new Promise((resolve) => {
+    exec('ss -tulnp', (error, stdout) => {
+      if (error || !stdout) {
+        resolve(new Map());
+        return;
+      }
+      resolve(parseSSOutput(stdout));
+    });
+  });
+}
+
+/**
+ * Read process info from /proc
+ */
+async function readProcessInfo(pid: number): Promise<{ command: string; commandShort: string; ppid: number | null } | null> {
+  return new Promise((resolve) => {
+    readFile(`/proc/${pid}/cmdline`, 'utf8', (err, cmdline) => {
+      if (err) {
+        resolve(null);
+        return;
+      }
+      const command = cmdline.replace(/\0/g, ' ').trim() || `[pid ${pid}]`;
+      const commandShort = command.split(' ')[0].split('/').pop() || `pid${pid}`;
+
+      readFile(`/proc/${pid}/stat`, 'utf8', (statErr, stat) => {
+        if (statErr) {
+          resolve({ command, commandShort, ppid: null });
+          return;
+        }
+        const statMatch = stat.match(/^\d+\s+\([^)]+\)\s+\S+\s+(\d+)/);
+        const ppid = statMatch ? parseInt(statMatch[1], 10) : null;
+        resolve({ command, commandShort, ppid });
+      });
+    });
+  });
+}
+
+/**
+ * Get child PIDs of a process
+ */
+async function getChildPids(parentPid: number): Promise<number[]> {
+  return new Promise((resolve) => {
+    readdir('/proc', (err, entries) => {
+      if (err) {
+        resolve([]);
+        return;
+      }
+
+      const checkPromises = entries
+        .filter(entry => /^\d+$/.test(entry))
+        .map(entry => {
+          const pid = parseInt(entry, 10);
+          return new Promise<number | null>((res) => {
+            readFile(`/proc/${pid}/stat`, 'utf8', (statErr, stat) => {
+              if (statErr) {
+                res(null);
+                return;
+              }
+              const match = stat.match(/^\d+\s+\([^)]+\)\s+\S+\s+(\d+)/);
+              if (match && parseInt(match[1], 10) === parentPid) {
+                res(pid);
+              } else {
+                res(null);
+              }
+            });
+          });
+        });
+
+      Promise.all(checkPromises).then(results => {
+        resolve(results.filter((pid): pid is number => pid !== null));
+      });
+    });
+  });
+}
+
+/**
+ * Build process tree starting from a PID
+ */
+async function buildProcessTree(
+  pid: number,
+  portsByPid: Map<number, MachinePortInfo[]>
+): Promise<MachineProcessInfo | null> {
+  const info = await readProcessInfo(pid);
+  if (!info) {
+    return null;
+  }
+
+  const childPids = await getChildPids(pid);
+  const children: MachineProcessInfo[] = [];
+
+  for (const childPid of childPids) {
+    const childTree = await buildProcessTree(childPid, portsByPid);
+    if (childTree) {
+      children.push(childTree);
+    }
+  }
+
+  return {
+    pid,
+    command: info.command,
+    commandShort: info.commandShort,
+    ports: portsByPid.get(pid) || [],
+    parentPid: info.ppid,
+    children,
+  };
+}
+
+/**
+ * Collect all ports from a process tree
+ */
+function collectPortsFromTree(node: MachineProcessInfo): number[] {
+  const ports = node.ports.map(p => p.port);
+  for (const child of node.children) {
+    ports.push(...collectPortsFromTree(child));
+  }
+  return ports;
+}
+
+/**
+ * Count processes in a tree
+ */
+function countProcesses(node: MachineProcessInfo): number {
+  return 1 + node.children.reduce((sum, child) => sum + countProcesses(child), 0);
+}
+
 /**
  * Check if a tool name is a screenshot tool.
  * Used to track screenshot results and include filename for Slack uploads.
@@ -119,7 +288,7 @@ export function isScreenshotTool(toolName: string): boolean {
 }
 
 /**
- * Check if a tool name is an AgentDock built-in browser tool (should be auto-allowed)
+ * Check if a tool name is an AgentDock built-in browser tool
  * Matches:
  *   - mcp__bridge__browser_* (AgentDock MCP bridge browser tools)
  *   - browser_* (direct browser tools, if any)
@@ -139,15 +308,47 @@ export function isBrowserTool(toolName: string): boolean {
 }
 
 /**
+ * Check if a tool is an AgentDock integrated MCP tool (mcp__bridge__*)
+ *
+ * AgentDock integrated MCP tools are provided by the AgentDock bridge MCP server
+ * and are designed to work seamlessly with the AgentDock UI. These tools are
+ * considered trusted and are auto-allowed without user permission.
+ *
+ * Examples:
+ *   - mcp__bridge__browser_* (browser automation)
+ *   - mcp__bridge__port_monitor (port monitoring)
+ *   - mcp__bridge__permission_prompt (permission handling - internal use)
+ *
+ * Note: External MCP tools (e.g., mcp__plugin_*) are NOT auto-allowed.
+ */
+export function isAgentDockTool(toolName: string): boolean {
+  return /^mcp__bridge__/.test(toolName);
+}
+
+/**
  * Check if a tool should be auto-allowed without user permission
- * Includes:
- *   - Browser tools (isBrowserTool)
- *   - AskUserQuestion (no permission needed - it's a UI interaction tool)
+ *
+ * Auto-allowed tools are executed immediately without requiring user confirmation.
+ * This is appropriate for:
+ *   1. AgentDock integrated MCP tools (mcp__bridge__*) - trusted, UI-integrated tools
+ *   2. Direct browser tools (browser_*) - AgentDock internal tools
+ *   3. AskUserQuestion - inherently requires user interaction, not a security risk
+ *
+ * Security note: Only tools that are either:
+ *   - Provided by AgentDock itself and designed for safe operation
+ *   - UI interaction tools that require user action anyway
+ * should be added to this list. External MCP tools should never be auto-allowed.
  */
 export function isAutoAllowedTool(toolName: string): boolean {
+  // AgentDock integrated MCP tools are all auto-allowed
+  if (isAgentDockTool(toolName)) {
+    return true;
+  }
+  // Direct browser tools (browser_*) are AgentDock internal, auto-allowed
   if (isBrowserTool(toolName)) {
     return true;
   }
+  // AskUserQuestion is a UI interaction tool, safe to auto-allow
   if (toolName === 'AskUserQuestion') {
     return true;
   }
@@ -369,6 +570,12 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Map session ID to set of tools that are allowed for the entire session
   const sessionAllowedTools = new Map<string, Set<string>>();
+
+  // Map session ID to machine monitor interval (for port monitoring)
+  const machineMonitorIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+  // Map session ID to Claude Code process PID (for session-specific process tree monitoring)
+  const sessionClaudePids = new Map<string, number>();
 
   // Map session ID to pending permission request (for restoring on reload)
   const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
@@ -737,6 +944,14 @@ export function createServer(options: ServerOptions): BridgeServer {
     const timestamp = new Date().toISOString();
 
     switch (eventType) {
+      case 'started': {
+        // Store the Claude Code process PID for session-specific process tree monitoring
+        const pid = (eventData as { pid: number }).pid;
+        sessionClaudePids.set(sessionId, pid);
+        console.log(`[Server] Claude Code started for session ${sessionId} with PID ${pid}`);
+        break;
+      }
+
       case 'text': {
         const text = (eventData as { text: string }).text;
         sendToSession(sessionId, {
@@ -928,6 +1143,8 @@ export function createServer(options: ServerOptions): BridgeServer {
 
       case 'exit': {
         const exitData = eventData as { code: number | null; signal: string | null };
+        // Clean up Claude PID
+        sessionClaudePids.delete(sessionId);
         // Flush any remaining accumulated content
         flushAccumulator(sessionId);
 
@@ -1931,6 +2148,89 @@ Keep it concise but comprehensive.`;
         } else {
           await browserSessionManager.destroySession(message.sessionId);
           console.log(`[BrowserSession] Destroyed for session ${message.sessionId}`);
+        }
+        return;
+      }
+
+      case 'start_machine_monitor': {
+        const sessionId = message.sessionId;
+
+        // Stop existing monitor if any
+        const existingInterval = machineMonitorIntervals.get(sessionId);
+        if (existingInterval) {
+          clearInterval(existingInterval);
+        }
+
+        // Store WebSocket for this session
+        addWebSocketToSession(sessionId, ws);
+
+        // Function to send machine ports data
+        const sendMachineData = async () => {
+          try {
+            // Get Claude Code PID for this session
+            const claudePid = sessionClaudePids.get(sessionId);
+
+            // Get all listening ports
+            const portsByPid = await getListeningPorts();
+
+            // Build session-specific process tree if we have the Claude PID
+            let processTree: MachineProcessInfo | null = null;
+            let sessionPorts: number[] = [];
+
+            if (claudePid) {
+              processTree = await buildProcessTree(claudePid, portsByPid);
+              if (processTree) {
+                // Collect ports from the session's process tree only
+                sessionPorts = collectPortsFromTree(processTree);
+              }
+            } else {
+              // No Claude PID yet - session might not be running
+              // Return empty data
+            }
+
+            const machineData: MachinePortsMessage = {
+              type: 'machine_ports',
+              sessionId,
+              processTree,
+              summary: {
+                totalProcesses: processTree ? countProcesses(processTree) : 0,
+                totalListeningPorts: sessionPorts.length,
+                portList: [...new Set(sessionPorts)].sort((a, b) => a - b),
+              },
+            };
+
+            // Send to all clients attached to this session
+            const clients = sessionWebSockets.get(sessionId);
+            if (clients) {
+              const messageStr = JSON.stringify(machineData);
+              clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(messageStr);
+                }
+              });
+            }
+          } catch (error) {
+            console.error(`[MachineMonitor] Error getting port data:`, error);
+          }
+        };
+
+        // Send initial data immediately
+        await sendMachineData();
+
+        // Start polling every 3 seconds
+        const interval = setInterval(sendMachineData, 3000);
+        machineMonitorIntervals.set(sessionId, interval);
+        console.log(`[MachineMonitor] Started for session ${sessionId}`);
+        return;
+      }
+
+      case 'stop_machine_monitor': {
+        const sessionId = message.sessionId;
+        const existingInterval = machineMonitorIntervals.get(sessionId);
+        if (existingInterval) {
+          clearInterval(existingInterval);
+          machineMonitorIntervals.delete(sessionId);
+          console.log(`[MachineMonitor] Stopped for session ${sessionId}`);
         }
         return;
       }
