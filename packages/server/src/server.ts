@@ -288,7 +288,7 @@ export function isScreenshotTool(toolName: string): boolean {
 }
 
 /**
- * Check if a tool name is an AgentDock built-in browser tool (should be auto-allowed)
+ * Check if a tool name is an AgentDock built-in browser tool
  * Matches:
  *   - mcp__bridge__browser_* (AgentDock MCP bridge browser tools)
  *   - browser_* (direct browser tools, if any)
@@ -308,15 +308,47 @@ export function isBrowserTool(toolName: string): boolean {
 }
 
 /**
+ * Check if a tool is an AgentDock integrated MCP tool (mcp__bridge__*)
+ *
+ * AgentDock integrated MCP tools are provided by the AgentDock bridge MCP server
+ * and are designed to work seamlessly with the AgentDock UI. These tools are
+ * considered trusted and are auto-allowed without user permission.
+ *
+ * Examples:
+ *   - mcp__bridge__browser_* (browser automation)
+ *   - mcp__bridge__port_monitor (port monitoring)
+ *   - mcp__bridge__permission_prompt (permission handling - internal use)
+ *
+ * Note: External MCP tools (e.g., mcp__plugin_*) are NOT auto-allowed.
+ */
+export function isAgentDockTool(toolName: string): boolean {
+  return /^mcp__bridge__/.test(toolName);
+}
+
+/**
  * Check if a tool should be auto-allowed without user permission
- * Includes:
- *   - Browser tools (isBrowserTool)
- *   - AskUserQuestion (no permission needed - it's a UI interaction tool)
+ *
+ * Auto-allowed tools are executed immediately without requiring user confirmation.
+ * This is appropriate for:
+ *   1. AgentDock integrated MCP tools (mcp__bridge__*) - trusted, UI-integrated tools
+ *   2. Direct browser tools (browser_*) - AgentDock internal tools
+ *   3. AskUserQuestion - inherently requires user interaction, not a security risk
+ *
+ * Security note: Only tools that are either:
+ *   - Provided by AgentDock itself and designed for safe operation
+ *   - UI interaction tools that require user action anyway
+ * should be added to this list. External MCP tools should never be auto-allowed.
  */
 export function isAutoAllowedTool(toolName: string): boolean {
+  // AgentDock integrated MCP tools are all auto-allowed
+  if (isAgentDockTool(toolName)) {
+    return true;
+  }
+  // Direct browser tools (browser_*) are AgentDock internal, auto-allowed
   if (isBrowserTool(toolName)) {
     return true;
   }
+  // AskUserQuestion is a UI interaction tool, safe to auto-allow
   if (toolName === 'AskUserQuestion') {
     return true;
   }

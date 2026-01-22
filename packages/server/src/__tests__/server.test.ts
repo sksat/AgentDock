@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { createServer, isBrowserTool, isAutoAllowedTool, type BridgeServer } from '../server.js';
+import { createServer, isBrowserTool, isAgentDockTool, isAutoAllowedTool, type BridgeServer } from '../server.js';
 
 describe('BridgeServer', () => {
   let server: BridgeServer;
@@ -453,6 +453,26 @@ describe('isBrowserTool', () => {
   });
 });
 
+describe('isAgentDockTool', () => {
+  it('should return true for AgentDock integrated MCP tools (mcp__bridge__*)', () => {
+    expect(isAgentDockTool('mcp__bridge__browser_navigate')).toBe(true);
+    expect(isAgentDockTool('mcp__bridge__port_monitor')).toBe(true);
+    expect(isAgentDockTool('mcp__bridge__permission_prompt')).toBe(true);
+    expect(isAgentDockTool('mcp__bridge__some_future_tool')).toBe(true);
+  });
+
+  it('should return false for external MCP tools', () => {
+    expect(isAgentDockTool('mcp__plugin_playwright_playwright__browser_navigate')).toBe(false);
+    expect(isAgentDockTool('mcp__plugin_some_other__tool')).toBe(false);
+  });
+
+  it('should return false for non-MCP tools', () => {
+    expect(isAgentDockTool('Bash')).toBe(false);
+    expect(isAgentDockTool('Write')).toBe(false);
+    expect(isAgentDockTool('browser_navigate')).toBe(false);
+  });
+});
+
 describe('isAutoAllowedTool', () => {
   it('should return true for AskUserQuestion', () => {
     expect(isAutoAllowedTool('AskUserQuestion')).toBe(true);
@@ -462,6 +482,20 @@ describe('isAutoAllowedTool', () => {
     expect(isAutoAllowedTool('mcp__bridge__browser_navigate')).toBe(true);
     expect(isAutoAllowedTool('mcp__bridge__browser_click')).toBe(true);
     expect(isAutoAllowedTool('browser_navigate')).toBe(true);
+  });
+
+  it('should return true for all AgentDock integrated MCP tools (mcp__bridge__*)', () => {
+    // All mcp__bridge__* tools should be auto-allowed as they are AgentDock integrated
+    expect(isAutoAllowedTool('mcp__bridge__port_monitor')).toBe(true);
+    expect(isAutoAllowedTool('mcp__bridge__permission_prompt')).toBe(true);
+    expect(isAutoAllowedTool('mcp__bridge__browser_navigate')).toBe(true);
+    expect(isAutoAllowedTool('mcp__bridge__some_future_tool')).toBe(true);
+  });
+
+  it('should return false for external MCP tools', () => {
+    // External MCP tools (mcp__plugin_*) should NOT be auto-allowed
+    expect(isAutoAllowedTool('mcp__plugin_playwright_playwright__browser_navigate')).toBe(false);
+    expect(isAutoAllowedTool('mcp__plugin_some_other__tool')).toBe(false);
   });
 
   it('should return false for other tools', () => {
