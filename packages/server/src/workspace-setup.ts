@@ -96,6 +96,20 @@ export class WorkspaceSetup {
       fs.mkdirSync(worktreeDir, { recursive: true });
     }
 
+    // Verify repository path is a valid git repository
+    const gitDir = path.join(repository.path, '.git');
+    if (!fs.existsSync(gitDir)) {
+      throw new Error(`Not a git repository: ${repository.path} (.git not found)`);
+    }
+
+    // Check if .git is a file (worktree) or directory (main repo)
+    const gitStat = fs.statSync(gitDir);
+    if (!gitStat.isDirectory()) {
+      // .git is a file, meaning this is a worktree - get the actual git dir
+      const gitContent = fs.readFileSync(gitDir, 'utf-8').trim();
+      throw new Error(`Cannot create worktree from a worktree. Repository path "${repository.path}" is itself a worktree (${gitContent})`);
+    }
+
     // Create worktree
     try {
       execSync(`git worktree add "${worktreePath}" HEAD`, {
@@ -107,7 +121,7 @@ export class WorkspaceSetup {
       const stderr = error instanceof Error && 'stderr' in error
         ? (error as { stderr: Buffer }).stderr?.toString()
         : '';
-      throw new Error(`Failed to create worktree: ${stderr || (error instanceof Error ? error.message : String(error))}`);
+      throw new Error(`Failed to create worktree at "${worktreePath}" from "${repository.path}": ${stderr || (error instanceof Error ? error.message : String(error))}`);
     }
 
     return {
