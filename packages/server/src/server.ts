@@ -25,6 +25,7 @@ import { BrowserSessionManager } from './browser-session-manager.js';
 import { ContainerBrowserSessionManager } from './container-browser-session-manager.js';
 import { PersistentContainerManager } from './persistent-container-manager.js';
 import { SettingsManager } from './settings-manager.js';
+import { RepositoryManager } from './repository-manager.js';
 
 export interface ServerOptions {
   port: number;
@@ -506,6 +507,7 @@ export function createServer(options: ServerOptions): BridgeServer {
   const app = new Hono();
   const sessionManager = new SessionManager({ sessionsBaseDir, dbPath });
   const settingsManager = new SettingsManager(sessionManager.getDb());
+  const repositoryManager = new RepositoryManager({ db: sessionManager.getDb() });
 
   // Create usage monitor (if not disabled)
   const usageMonitor = disableUsageMonitor
@@ -1512,6 +1514,85 @@ export function createServer(options: ServerOptions): BridgeServer {
           type: 'settings',
           settings,
         });
+        break;
+      }
+
+      // Repository management
+      case 'list_repositories': {
+        const repositories = repositoryManager.list();
+        response = {
+          type: 'repository_list',
+          repositories,
+        };
+        break;
+      }
+
+      case 'create_repository': {
+        const repository = repositoryManager.create({
+          name: message.name,
+          path: message.path,
+          type: message.repositoryType,
+          remoteUrl: message.remoteUrl,
+          remoteProvider: message.remoteUrl?.includes('github.com') ? 'github' :
+                          message.remoteUrl?.includes('gitlab.com') ? 'gitlab' :
+                          message.remoteUrl?.includes('bitbucket.org') ? 'bitbucket' : undefined,
+          remoteBranch: message.remoteBranch,
+        });
+        response = {
+          type: 'repository_created',
+          repository,
+        };
+        // Broadcast to all clients
+        broadcastToAll({
+          type: 'repository_created',
+          repository,
+        });
+        break;
+      }
+
+      case 'update_repository': {
+        const repository = repositoryManager.update(message.id, {
+          name: message.name,
+          path: message.path,
+          type: message.repositoryType,
+          remoteUrl: message.remoteUrl,
+          remoteBranch: message.remoteBranch,
+        });
+        if (repository) {
+          response = {
+            type: 'repository_updated',
+            repository,
+          };
+          broadcastToAll({
+            type: 'repository_updated',
+            repository,
+          });
+        } else {
+          response = {
+            type: 'error',
+            message: 'Repository not found',
+          };
+        }
+        break;
+      }
+
+      case 'delete_repository': {
+        const deleted = repositoryManager.delete(message.id);
+        if (deleted) {
+          response = {
+            type: 'repository_deleted',
+            id: message.id,
+          };
+          broadcastToAll({
+            type: 'repository_deleted',
+            id: message.id,
+          });
+        } else {
+          response = {
+            type: 'error',
+            message: 'Repository not found',
+          };
+        }
         break;
       }
 
