@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 // Get project root (../../.. from packages/server/src/)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend, MachinePortsMessage, MachineProcessInfo, MachinePortInfo } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
@@ -26,6 +26,8 @@ import { ContainerBrowserSessionManager } from './container-browser-session-mana
 import { PersistentContainerManager } from './persistent-container-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { RepositoryManager } from './repository-manager.js';
+import { WorkspaceSetup } from './workspace-setup.js';
+import { nanoid } from 'nanoid';
 
 export interface ServerOptions {
   port: number;
@@ -614,6 +616,13 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Map session ID to browser in container preference (undefined means follow default)
   const sessionBrowserInContainer = new Map<string, boolean>();
+
+  // Map session ID to workspace cleanup function (for worktree removal, etc.)
+  const sessionWorkspaceCleanups = new Map<string, () => Promise<void>>();
+
+  // Workspace setup paths
+  const tmpfsBasePath = join(homedir(), '.agent-dock', 'tmpfs');
+  const workspaceCacheDir = join(homedir(), '.agent-dock', 'cache');
 
   /**
    * Determine if a session should use container browser based on settings
@@ -1350,12 +1359,63 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'create_session': {
+        let workingDir = message.workingDir;
+        let sessionId: string | undefined;
+        let cleanupFn: (() => Promise<void>) | undefined;
+
+        // If repositoryId is provided, use WorkspaceSetup to set up the workspace
+        if (message.repositoryId) {
+          const repository = repositoryManager.get(message.repositoryId);
+          if (!repository) {
+            response = {
+              type: 'error',
+              message: `Repository not found: ${message.repositoryId}`,
+            };
+            break;
+          }
+
+          // Generate session ID first (needed for worktree name)
+          sessionId = nanoid();
+
+          // Determine if container mode based on runner backend
+          const runnerBackend = message.runnerBackend ?? settingsManager.get('defaultRunnerBackend');
+          const isContainerMode = runnerBackend === 'podman';
+
+          try {
+            const result = await WorkspaceSetup.setup({
+              repository,
+              sessionId,
+              tmpfsBasePath,
+              cacheDir: workspaceCacheDir,
+              worktreeName: message.worktreeName,
+              isContainerMode,
+            });
+            workingDir = result.workingDir;
+            cleanupFn = result.cleanup;
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[Server] Failed to setup workspace for repository ${message.repositoryId}:`, errorMessage);
+            response = {
+              type: 'error',
+              message: `Failed to setup workspace: ${errorMessage}`,
+            };
+            break;
+          }
+        }
+
         const session = sessionManager.createSession({
+          id: sessionId,
           name: message.name,
-          workingDir: message.workingDir,
+          workingDir,
           runnerBackend: message.runnerBackend,
           browserInContainer: message.browserInContainer,
         });
+
+        // Store cleanup function for later
+        if (cleanupFn) {
+          sessionWorkspaceCleanups.set(session.id, cleanupFn);
+        }
+
         // Also store in runtime maps for consistent lookups
         if (message.runnerBackend !== undefined) {
           sessionRunnerBackends.set(session.id, message.runnerBackend);
@@ -1461,6 +1521,18 @@ export function createServer(options: ServerOptions): BridgeServer {
 
           // Unregister from git status tracking
           gitStatusProvider.unregisterSession(message.sessionId);
+
+          // Clean up workspace (remove worktree, etc.)
+          const workspaceCleanup = sessionWorkspaceCleanups.get(message.sessionId);
+          if (workspaceCleanup) {
+            try {
+              await workspaceCleanup();
+            } catch (error) {
+              console.error(`[Server] Failed to cleanup workspace for session ${message.sessionId}:`, error);
+            }
+            sessionWorkspaceCleanups.delete(message.sessionId);
+          }
+
           response = {
             type: 'session_deleted',
             sessionId: message.sessionId,

@@ -14,6 +14,8 @@ export interface SessionManagerOptions {
 }
 
 export interface CreateSessionOptions {
+  /** Explicit session ID (for WorkspaceSetup which needs ID before session creation) */
+  id?: string;
   name?: string;
   /** Explicit working directory. If not specified, a new directory will be auto-created. */
   workingDir?: string;
@@ -212,7 +214,7 @@ export class SessionManager {
 
   createSession(options: CreateSessionOptions = {}): SessionInfo {
     this.sessionCounter++;
-    const id = nanoid();
+    const id = options.id ?? nanoid();
 
     // Determine working directory
     let workingDir: string;
