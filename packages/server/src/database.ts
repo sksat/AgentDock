@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -44,6 +44,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     8: () => migrateToV8(db),
     9: () => migrateToV9(db),
     10: () => migrateToV10(db),
+    11: () => migrateToV11(db),
   };
 
   db.transaction(() => {
@@ -271,6 +272,29 @@ function migrateToV10(db: Database.Database): void {
     // NULL means "use global setting"
     db.exec('ALTER TABLE sessions ADD COLUMN auto_allow_web_tools INTEGER DEFAULT NULL');
   }
+}
+
+function migrateToV11(db: Database.Database): void {
+  // Add repositories table for AgentDock repository registration feature
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS repositories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      path TEXT NOT NULL,
+      type TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      remote_provider TEXT,
+      remote_url TEXT,
+      remote_branch TEXT
+    )
+  `);
+
+  // Add indexes for efficient lookups
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_repositories_name ON repositories(name);
+    CREATE INDEX IF NOT EXISTS idx_repositories_type ON repositories(type);
+  `);
 }
 
 export type { Database };

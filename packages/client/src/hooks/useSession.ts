@@ -14,6 +14,9 @@ import type {
   GlobalSettings,
   GitStatus,
   RunnerBackend,
+  Repository,
+  RepositoryType,
+  SelectedProject,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, ToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -116,6 +119,9 @@ export interface UseSessionReturn {
   session: SessionInfo | null;
   sessionsLoaded: boolean;
 
+  // Repository list
+  repositories: Repository[];
+
   // Active session state
   messages: MessageStreamItem[];
   pendingPermission: PendingPermission | null;
@@ -134,14 +140,20 @@ export interface UseSessionReturn {
 
   // Session management
   listSessions: () => void;
-  createSession: (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean) => void;
+  createSession: (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean, repositoryId?: string, worktreeName?: string) => void;
   selectSession: (sessionId: string) => void;
   deselectSession: () => void;
   deleteSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
 
+  // Repository management
+  listRepositories: () => void;
+  createRepository: (name: string, path: string, repositoryType: RepositoryType, remoteUrl?: string, remoteBranch?: string) => void;
+  updateRepository: (id: string, updates: { name?: string; path?: string; repositoryType?: RepositoryType; remoteUrl?: string; remoteBranch?: string }) => void;
+  deleteRepository: (id: string) => void;
+
   // Message handling
-  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => void;
+  sendMessage: (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => void;
   clearMessages: () => void;
   addSystemMessage: (content: SystemMessageContent) => void;
   compactSession: () => void;
@@ -301,6 +313,9 @@ export function useSession(): UseSessionReturn {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+
+  // Repository list
+  const [repositories, setRepositories] = useState<Repository[]>([]);
 
   // Messages stored per session
   const [sessionMessages, setSessionMessages] = useState<SessionMessages>(new Map());
@@ -489,9 +504,9 @@ export function useSession(): UseSessionReturn {
   }, [send]);
 
   const createSession = useCallback(
-    (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean) => {
+    (name?: string, workingDir?: string, runnerBackend?: RunnerBackend, browserInContainer?: boolean, repositoryId?: string, worktreeName?: string) => {
       setPendingSessionCreate(true);
-      send({ type: 'create_session', name, workingDir, runnerBackend, browserInContainer });
+      send({ type: 'create_session', name, workingDir, runnerBackend, browserInContainer, repositoryId, worktreeName });
     },
     [send]
   );
@@ -534,6 +549,32 @@ export function useSession(): UseSessionReturn {
     [send]
   );
 
+  // Repository management
+  const listRepositories = useCallback(() => {
+    send({ type: 'list_repositories' });
+  }, [send]);
+
+  const createRepository = useCallback(
+    (name: string, path: string, repositoryType: RepositoryType, remoteUrl?: string, remoteBranch?: string) => {
+      send({ type: 'create_repository', name, path, repositoryType, remoteUrl, remoteBranch });
+    },
+    [send]
+  );
+
+  const updateRepository = useCallback(
+    (id: string, updates: { name?: string; path?: string; repositoryType?: RepositoryType; remoteUrl?: string; remoteBranch?: string }) => {
+      send({ type: 'update_repository', id, ...updates });
+    },
+    [send]
+  );
+
+  const deleteRepository = useCallback(
+    (id: string) => {
+      send({ type: 'delete_repository', id });
+    },
+    [send]
+  );
+
   // Generate session name from first message content
   const generateSessionName = (content: string, maxLength = 40): string => {
     // Remove newlines and extra whitespace
@@ -552,7 +593,7 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => {
+    (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
@@ -560,7 +601,24 @@ export function useSession(): UseSessionReturn {
         setPendingSessionCreate(true);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
-        send({ type: 'create_session', name: sessionName, workingDir, runnerBackend });
+        // Extract workingDir and repositoryId from selectedProject
+        let workingDir: string | undefined;
+        let repositoryId: string | undefined;
+        if (selectedProject) {
+          switch (selectedProject.type) {
+            case 'repository':
+              repositoryId = selectedProject.repositoryId;
+              break;
+            case 'recent':
+              workingDir = selectedProject.path;
+              repositoryId = selectedProject.repositoryId;
+              break;
+            case 'custom':
+              workingDir = selectedProject.path;
+              break;
+          }
+        }
+        send({ type: 'create_session', name: sessionName, workingDir, runnerBackend, repositoryId });
         return;
       }
 
@@ -1455,6 +1513,25 @@ export function useSession(): UseSessionReturn {
           ]);
           break;
         }
+
+        // Repository management
+        case 'repository_list':
+          setRepositories(message.repositories);
+          break;
+
+        case 'repository_created':
+          setRepositories((prev) => [...prev, message.repository]);
+          break;
+
+        case 'repository_updated':
+          setRepositories((prev) =>
+            prev.map((r) => (r.id === message.repository.id ? message.repository : r))
+          );
+          break;
+
+        case 'repository_deleted':
+          setRepositories((prev) => prev.filter((r) => r.id !== message.id));
+          break;
       }
     },
     [activeSessionId, updateSessionMessages, send, pendingSessionCreate]
@@ -1465,6 +1542,7 @@ export function useSession(): UseSessionReturn {
     activeSessionId,
     session,
     sessionsLoaded,
+    repositories,
     messages,
     pendingPermission,
     pendingQuestion,
@@ -1485,6 +1563,10 @@ export function useSession(): UseSessionReturn {
     deselectSession,
     deleteSession,
     renameSession,
+    listRepositories,
+    createRepository,
+    updateRepository,
+    deleteRepository,
     sendMessage,
     clearMessages,
     addSystemMessage,

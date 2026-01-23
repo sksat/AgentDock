@@ -12,6 +12,55 @@ export function isContainerBackend(backend: RunnerBackend | undefined): boolean 
   return backend === 'podman';
 }
 
+// ==================== Repository Types ====================
+
+/** Repository type - how the repository is managed */
+export type RepositoryType = 'local' | 'local-git-worktree' | 'remote-git';
+
+/** Remote Git provider (for remote-git repositories) */
+export type RemoteGitProvider = 'github' | 'gitlab' | 'bitbucket' | 'other';
+
+/** Repository information */
+export interface Repository {
+  id: string;
+  name: string;
+  /** local/local-git-worktree: local path, remote-git: will be set after clone */
+  path: string;
+  type: RepositoryType;
+  createdAt: string;
+  updatedAt: string;
+  // remote-git specific fields
+  remoteProvider?: RemoteGitProvider;
+  remoteUrl?: string;
+  remoteBranch?: string;
+}
+
+// ==================== Project Selection Types ====================
+
+/**
+ * Selected project for session creation.
+ * User selects a "Project", and the actual working directory is determined automatically.
+ */
+export type SelectedProject =
+  | { type: 'repository'; repositoryId: string }
+  | { type: 'recent'; path: string; repositoryId?: string }
+  | { type: 'custom'; path: string; useGitWorktree?: boolean };
+
+/**
+ * Recent project extracted from session history.
+ * Used to show recently used projects in the project selector.
+ */
+export interface RecentProject {
+  /** Working directory path */
+  path: string;
+  /** Associated repository ID (if any) */
+  repositoryId?: string;
+  /** Repository name for display (if associated with a repository) */
+  repositoryName?: string;
+  /** Last used timestamp (ISO string) */
+  lastUsed: string;
+}
+
 // ==================== AgentDock Tool Name Formatting ====================
 
 /**
@@ -122,7 +171,12 @@ export type ClientMessage =
   | UpdateSettingsMessage
   // Machine monitor (port monitoring)
   | StartMachineMonitorMessage
-  | StopMachineMonitorMessage;
+  | StopMachineMonitorMessage
+  // Repository management
+  | ListRepositoriesMessage
+  | CreateRepositoryMessage
+  | UpdateRepositoryMessage
+  | DeleteRepositoryMessage;
 
 export interface CreateSessionMessage {
   type: 'create_session';
@@ -132,6 +186,10 @@ export interface CreateSessionMessage {
   runnerBackend?: RunnerBackend;
   /** Whether to run browser in container (default: true when runnerBackend is 'podman') */
   browserInContainer?: boolean;
+  /** Repository ID to use for this session (alternative to workingDir) */
+  repositoryId?: string;
+  /** Custom worktree name for git repositories (default: agentdock-{sessionId}) */
+  worktreeName?: string;
 }
 
 export interface AttachSessionMessage {
@@ -502,6 +560,11 @@ export type ServerMessage =
   | SettingsMessage
   // Machine monitor (port monitoring)
   | MachinePortsMessage
+  // Repository management
+  | RepositoryListMessage
+  | RepositoryCreatedMessage
+  | RepositoryUpdatedMessage
+  | RepositoryDeletedMessage
   // Error
   | ErrorMessage;
 
@@ -930,6 +993,10 @@ export interface GlobalSettings {
   defaultBrowserInContainer: boolean;
   /** Auto-allow WebFetch/WebSearch tools without permission (default: false) */
   autoAllowWebTools: boolean;
+  /** Base path for tmpfs copies (for local repository type) */
+  tmpfsBasePath: string;
+  /** Cache directory path (for remote-git repository clones) */
+  cacheDir: string;
 }
 
 /** Client -> Server: Request to get current settings */
@@ -1007,4 +1074,63 @@ export interface MachinePortsMessage {
   };
   /** Error message if monitoring failed */
   error?: string;
+}
+
+// ==================== Repository Messages ====================
+
+/** Client -> Server: Request to list all repositories */
+export interface ListRepositoriesMessage {
+  type: 'list_repositories';
+}
+
+/** Client -> Server: Request to create a repository */
+export interface CreateRepositoryMessage {
+  type: 'create_repository';
+  name: string;
+  path: string;
+  repositoryType: RepositoryType;
+  // remote-git specific
+  remoteUrl?: string;
+  remoteBranch?: string;
+}
+
+/** Client -> Server: Request to update a repository */
+export interface UpdateRepositoryMessage {
+  type: 'update_repository';
+  id: string;
+  name?: string;
+  path?: string;
+  repositoryType?: RepositoryType;
+  remoteUrl?: string;
+  remoteBranch?: string;
+}
+
+/** Client -> Server: Request to delete a repository */
+export interface DeleteRepositoryMessage {
+  type: 'delete_repository';
+  id: string;
+}
+
+/** Server -> Client: List of repositories */
+export interface RepositoryListMessage {
+  type: 'repository_list';
+  repositories: Repository[];
+}
+
+/** Server -> Client: Repository created */
+export interface RepositoryCreatedMessage {
+  type: 'repository_created';
+  repository: Repository;
+}
+
+/** Server -> Client: Repository updated */
+export interface RepositoryUpdatedMessage {
+  type: 'repository_updated';
+  repository: Repository;
+}
+
+/** Server -> Client: Repository deleted */
+export interface RepositoryDeletedMessage {
+  type: 'repository_deleted';
+  id: string;
 }

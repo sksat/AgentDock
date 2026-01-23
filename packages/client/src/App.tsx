@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { useNavigation } from './hooks/useNavigation';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, RepositoriesPage, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
 import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
 import { MachineView } from './components/MachineView';
@@ -12,7 +12,7 @@ import { ViewToggle, type SessionView } from './components/ViewToggle';
 import { GitStatusBadge } from './components/GitStatusBadge';
 import type { SidebarSession } from './components';
 import type { ImageAttachment } from './components/MessageStream';
-import type { RunnerBackend } from '@agent-dock/shared';
+import type { RunnerBackend, SelectedProject } from '@agent-dock/shared';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV
@@ -123,6 +123,11 @@ function App() {
     globalSettings,
     getSettings,
     updateSettings,
+    repositories,
+    listRepositories,
+    createRepository,
+    updateRepository,
+    deleteRepository,
   } = useSession();
 
   // Per-session thinking state (sessionId -> enabled)
@@ -167,13 +172,14 @@ function App() {
     setSend(send);
   }, [send, setSend]);
 
-  // Request session list and settings on connect
+  // Request session list, settings, and repositories on connect
   useEffect(() => {
     if (isConnected) {
       listSessions();
       getSettings();
+      listRepositories();
     }
-  }, [isConnected, listSessions, getSettings]);
+  }, [isConnected, listSessions, getSettings, listRepositories]);
 
   // Show toast when error occurs
   useEffect(() => {
@@ -216,8 +222,8 @@ function App() {
 
   // Wrapper for sendMessage that includes thinkingEnabled
   const handleSendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => {
-      sendMessage(content, images, workingDir, thinkingEnabled, runnerBackend);
+    (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, runnerBackend?: RunnerBackend) => {
+      sendMessage(content, images, selectedProject, thinkingEnabled, runnerBackend);
     },
     [sendMessage, thinkingEnabled]
   );
@@ -242,9 +248,11 @@ function App() {
     ? 'Settings'
     : currentView === 'usage'
       ? 'Usage'
-      : activeSessionId && session
-        ? session.name
-        : 'Home';
+      : currentView === 'repositories'
+        ? 'Repositories'
+        : activeSessionId && session
+          ? session.name
+          : 'Home';
 
   return (
     <div className="h-screen flex flex-col">
@@ -295,6 +303,7 @@ function App() {
           podmanAvailable={true}
           defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
           defaultBrowserInContainer={globalSettings?.defaultBrowserInContainer ?? true}
+          repositories={repositories}
         />
 
         {/* Navigation Rail - always visible */}
@@ -326,6 +335,16 @@ function App() {
           {/* Usage page */}
           {currentView === 'usage' && <UsagePage globalUsage={globalUsage} />}
 
+          {/* Repositories page */}
+          {currentView === 'repositories' && (
+            <RepositoriesPage
+              repositories={repositories}
+              onCreateRepository={createRepository}
+              onUpdateRepository={updateRepository}
+              onDeleteRepository={deleteRepository}
+            />
+          )}
+
           {/* Sessions view */}
           {currentView === 'sessions' && (
             activeSessionId === null ? (
@@ -335,6 +354,7 @@ function App() {
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
+                repositories={repositories}
                 podmanAvailable={true}
                 defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
                 defaultModel={globalSettings?.defaultModel}

@@ -628,3 +628,217 @@ function isAutoAllowedTool(toolName: string): boolean {
 - AgentDock 統合ツールは、AgentDock 開発者が安全性を保証するものに限定
 - 新しいツールを追加する際は、自動許可が適切かどうかを慎重に検討すること
 - 外部 MCP ツールは絶対に自動許可リストに含めない
+
+### リポジトリ登録機能
+
+よく使うディレクトリや Git リポジトリを事前登録し、セッション開始時に選択できる機能。リポジトリを選択してセッションを開始すると、複数セッションの同時並行開発が可能になる。
+
+#### リポジトリタイプ
+
+```
+Repository Type
+├── local              # ローカルディレクトリ（非 Git）
+├── local-git-worktree # ローカル Git リポジトリ（worktree 使用）
+└── remote-git         # リモート Git リポジトリ
+    ├── github         # GitHub (provider)
+    └── other          # その他（フル URL 指定）
+```
+
+| タイプ | 説明 | セッション開始時の動作（Native） | Container モード |
+|--------|------|----------------------------------|------------------|
+| `local` | 任意のディレクトリ | tmpfs にコピー | そのまま使用（CoW） |
+| `local-git-worktree` | ローカル Git リポジトリ | `.worktree/agentdock-{sessionId}` に worktree 作成 | そのまま使用（CoW） |
+| `remote-git` | リモート Git リポジトリ | cache に clone/fetch → worktree 作成 | そのまま使用（CoW） |
+
+#### ディレクトリ構造
+
+```
+{serverRoot}/
+└── cache/                           # キャッシュディレクトリ (gitignore)
+    └── repos/                       # リポジトリキャッシュ
+        └── {repoId}/                # remote-git: リモートからclone
+            └── .worktree/           # worktree はここに作成
+                └── agentdock-{sessionId}/
+
+/tmp/agent-dock-repos/               # tmpfs ベースパス（設定可能）
+└── {sessionId}/                     # local タイプのコピー先
+```
+
+#### WebSocket メッセージ
+
+```typescript
+// クライアント → サーバー
+| { type: 'list_repositories' }
+| { type: 'create_repository'; name: string; path: string; repositoryType: RepositoryType; remoteUrl?: string; remoteBranch?: string }
+| { type: 'update_repository'; id: string; name?: string; path?: string; repositoryType?: RepositoryType }
+| { type: 'delete_repository'; id: string }
+
+// サーバー → クライアント
+| { type: 'repository_list'; repositories: Repository[] }
+| { type: 'repository_created'; repository: Repository }
+| { type: 'repository_updated'; repository: Repository }
+| { type: 'repository_deleted'; id: string }
+```
+
+#### create_session 拡張
+
+```typescript
+interface CreateSessionMessage {
+  type: 'create_session';
+  name?: string;
+  workingDir?: string;
+  runnerBackend?: RunnerBackend;
+  browserInContainer?: boolean;
+  // リポジトリ選択
+  repositoryId?: string;      // workingDir の代わりにリポジトリを指定
+  worktreeName?: string;      // Git リポジトリ用カスタム worktree 名
+}
+```
+
+#### 設定
+
+| 設定 | デフォルト | 説明 |
+|------|-----------|------|
+| `tmpfsBasePath` | `/tmp/agent-dock-repos/` | local タイプのコピー先 |
+| `cacheDir` | `{serverRoot}/cache/` | remote-git の clone 先 |
+
+#### UI フロー
+
+**リポジトリ追加（2段階ウィザード）:**
+
+```
+Step 1: ソース選択
+┌─────────────────────────────────┐
+│ Add Repository                  │
+├─────────────────────────────────┤
+│ Where is your repository?       │
+│                                 │
+│ ┌─────────────────────────────┐ │
+│ │ 📁 Local                  > │ │
+│ │ Use a directory or git      │ │
+│ │ repository on this machine  │ │
+│ └─────────────────────────────┘ │
+│ ┌─────────────────────────────┐ │
+│ │ ☁️ Remote                  > │ │
+│ │ Clone from GitHub, GitLab,  │ │
+│ │ or other git hosting        │ │
+│ └─────────────────────────────┘ │
+└─────────────────────────────────┘
+
+Step 2a: Local → 詳細入力
+┌─────────────────────────────────┐
+│ ← Local Repository              │
+├─────────────────────────────────┤
+│ Type:                           │
+│ ○ Directory (tmpfs copy)        │
+│ ● Git Repository (worktree)     │
+│                                 │
+│ Path: /home/user/project        │
+│ Name: My Project                │
+│                                 │
+│              [Cancel] [Add]     │
+└─────────────────────────────────┘
+
+Step 2b: Remote → 詳細入力
+┌─────────────────────────────────┐
+│ ← Remote Repository             │
+├─────────────────────────────────┤
+│ Repository:                     │
+│ [🐙 GitHub] [🌐 Other]          │
+│ [owner/repo                   ] │
+│ (フル URL も貼り付け可能)       │
+│                                 │
+│ Name: repo (auto-detected)      │
+│ Branch: main (optional)         │
+│                                 │
+│              [Cancel] [Add]     │
+└─────────────────────────────────┘
+```
+
+**remote-git の入力形式:**
+- `owner/repo` 形式（GitHub ボタンを選択）
+- フル URL 貼り付け: `https://github.com/owner/repo.git` → 自動で GitHub 検出
+- SSH URL: `git@github.com:owner/repo.git` → 自動で GitHub 検出
+- その他の provider: `https://git.example.com/repo.git` → "Other" として保存
+
+#### Project 選択（セッション作成 UI）
+
+セッション作成時、ユーザーは「Working Directory」ではなく「**Project**」を選択する。
+プロジェクトを選択すると、実際の作業ディレクトリ（workingDir）はバックエンドで自動決定される。
+
+**概念の整理:**
+- **Project**: ユーザーが選択する対象（リポジトリ、最近のプロジェクト、カスタムパス）
+- **Working Directory**: 実際のセッションの作業ディレクトリ（自動生成される場合あり）
+
+**SelectedProject 型:**
+
+```typescript
+type SelectedProject =
+  | { type: 'repository'; repositoryId: string }
+  | { type: 'recent'; path: string; repositoryId?: string }
+  | { type: 'custom'; path: string; useGitWorktree?: boolean };
+```
+
+**選択肢:**
+
+1. **登録済みリポジトリ** - Repositories ページで事前登録したリポジトリ
+2. **Recent Project** - 最近のセッションで使ったプロジェクト
+   - repositoryId がある場合: リポジトリ名を表示
+   - repositoryId がない場合: workingDir を表示
+3. **カスタムパス** - 直接入力
+   - Git ディレクトリの場合: local vs local-git-worktree を選択可能
+   - 非 Git ディレクトリの場合: そのまま使用
+
+**カスタムパスでの Git 判定:**
+- サーバー側でパスが Git リポジトリかどうかを検証
+- Git リポジトリの場合、UI で「Use git worktree」オプションを表示
+- 選択に応じて local（tmpfs コピー）か local-git-worktree（worktree 作成）に分岐
+
+**UI フロー (InputArea session-start mode):**
+
+```
+┌─────────────────────────────────────────────────┐
+│ [Project: ▼ Select project...              ]    │
+│                                                 │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ REPOSITORIES                                │ │
+│ │   📁 my-project (Local)                     │ │
+│ │   🔀 claude-bridge (Git Worktree)           │ │
+│ │   ☁️ anthropics/claude-code (Remote)        │ │
+│ │                                             │ │
+│ │ RECENT                                      │ │
+│ │   📁 ~/work/other-project                   │ │
+│ │   🔀 my-project (from repo)                 │ │
+│ │                                             │ │
+│ │ ─────────────────────────────────────────── │ │
+│ │   ✏️ Custom path...                         │ │
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+**カスタムパス入力時（Git リポジトリの場合）:**
+
+```
+┌─────────────────────────────────────────────────┐
+│ Path: /home/user/my-git-repo                    │
+│                                                 │
+│ ⚠️ Git repository detected                      │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ○ Copy to tmpfs (isolated, slower)          │ │
+│ │ ● Use git worktree (parallel development)   │ │
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+**RecentProject 型:**
+
+```typescript
+interface RecentProject {
+  path: string;              // workingDir
+  repositoryId?: string;     // 紐づくリポジトリ（あれば）
+  repositoryName?: string;   // リポジトリ名（表示用）
+  lastUsed: string;          // 最終使用日時
+}
+```
+
+Recent Project はセッション履歴から自動抽出される（クライアント側で計算）。

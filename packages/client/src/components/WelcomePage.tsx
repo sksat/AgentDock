@@ -1,25 +1,14 @@
 import { useState, useCallback, useMemo } from 'react';
 import { InputArea, type PermissionMode } from './InputArea';
-import type { SessionInfo, RunnerBackend, ImageAttachment } from '@agent-dock/shared';
-
-// Detect home directory from paths (e.g., /home/user or /Users/user)
-function detectHomeDir(paths: string[]): string | null {
-  for (const path of paths) {
-    // Linux: /home/<user>/...
-    const linuxMatch = path.match(/^(\/home\/[^/]+)/);
-    if (linuxMatch) return linuxMatch[1];
-    // macOS: /Users/<user>/...
-    const macMatch = path.match(/^(\/Users\/[^/]+)/);
-    if (macMatch) return macMatch[1];
-  }
-  return null;
-}
+import type { SessionInfo, RunnerBackend, ImageAttachment, Repository, SelectedProject, RecentProject } from '@agent-dock/shared';
 
 export interface WelcomePageProps {
   sessions: SessionInfo[];
   isConnected: boolean;
-  onSendMessage: (message: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => void;
+  onSendMessage: (message: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, runnerBackend?: RunnerBackend) => void;
   onSelectSession: (sessionId: string) => void;
+  /** Registered repositories for project selection */
+  repositories?: Repository[];
   /** Whether Podman is available on the server */
   podmanAvailable?: boolean;
   /** Default runner backend (from global settings) */
@@ -49,6 +38,7 @@ export function WelcomePage({
   sessions,
   isConnected,
   onSendMessage,
+  repositories = [],
   podmanAvailable = false,
   defaultRunnerBackend = 'native',
   defaultModel,
@@ -58,52 +48,40 @@ export function WelcomePage({
   thinkingEnabled = false,
   onToggleThinking,
 }: WelcomePageProps) {
-  const [workingDir, setWorkingDir] = useState('');
+  const [selectedProject, setSelectedProject] = useState<SelectedProject | null>(null);
   const [runnerBackend, setRunnerBackend] = useState<RunnerBackend>(defaultRunnerBackend);
 
-  // Extract unique recent directories from sessions
-  const recentDirectories = useMemo(() => {
-    const dirs = new Map<string, string>(); // path -> most recent createdAt
+  // Extract recent projects from sessions
+  const recentProjects = useMemo((): RecentProject[] => {
+    const projectMap = new Map<string, RecentProject>();
     for (const session of sessions) {
-      const existing = dirs.get(session.workingDir);
-      if (!existing || session.createdAt > existing) {
-        dirs.set(session.workingDir, session.createdAt);
+      if (!session.workingDir) continue;
+      const existing = projectMap.get(session.workingDir);
+      if (!existing || session.createdAt > existing.lastUsed) {
+        // Find associated repository if any
+        const repo = repositories.find((r) => r.path === session.workingDir);
+        projectMap.set(session.workingDir, {
+          path: session.workingDir,
+          repositoryId: repo?.id,
+          repositoryName: repo?.name,
+          lastUsed: session.createdAt,
+        });
       }
     }
     // Sort by most recent usage
-    return Array.from(dirs.entries())
-      .sort((a, b) => b[1].localeCompare(a[1]))
-      .map(([path]) => path)
+    return Array.from(projectMap.values())
+      .sort((a, b) => b.lastUsed.localeCompare(a.lastUsed))
       .slice(0, 10);
-  }, [sessions]);
-
-  // Detect home directory from recent directories
-  const homeDir = useMemo(() => detectHomeDir(recentDirectories), [recentDirectories]);
-
-  // Expand ~ to home directory in path
-  const expandPath = useCallback(
-    (path: string): string => {
-      if (!homeDir) return path;
-      if (path.startsWith('~/')) {
-        return homeDir + path.slice(1);
-      }
-      if (path === '~') {
-        return homeDir;
-      }
-      return path;
-    },
-    [homeDir]
-  );
+  }, [sessions, repositories]);
 
   // Handle send message from InputArea
   const handleSend = useCallback(
     (message: string, images?: ImageAttachment[]) => {
       if (message && isConnected) {
-        const expandedDir = workingDir ? expandPath(workingDir) : undefined;
-        onSendMessage(message, images, expandedDir || undefined, podmanAvailable ? runnerBackend : undefined);
+        onSendMessage(message, images, selectedProject, podmanAvailable ? runnerBackend : undefined);
       }
     },
-    [isConnected, onSendMessage, workingDir, expandPath, podmanAvailable, runnerBackend]
+    [isConnected, onSendMessage, selectedProject, podmanAvailable, runnerBackend]
   );
 
   return (
@@ -118,15 +96,16 @@ export function WelcomePage({
           </div>
 
           {/* InputArea in session-start mode */}
-          <div className="rounded-xl border border-border bg-bg-secondary overflow-hidden shadow-sm">
+          <div className="rounded-xl border border-border bg-bg-secondary shadow-sm">
             <InputArea
               mode="session-start"
               onSend={handleSend}
               disabled={!isConnected}
               placeholder="Describe your task..."
-              workingDir={workingDir}
-              onWorkingDirChange={setWorkingDir}
-              recentDirectories={recentDirectories}
+              selectedProject={selectedProject}
+              onProjectChange={setSelectedProject}
+              repositories={repositories}
+              recentProjects={recentProjects}
               runnerBackend={runnerBackend}
               onRunnerBackendChange={setRunnerBackend}
               podmanAvailable={podmanAvailable}
