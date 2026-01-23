@@ -840,6 +840,8 @@ describe('Read tool output formatting', () => {
     minimalSpaces: '    46→source "$HOME/.cargo/env"\n    47→',
     // Actual Claude Code Read tool output (copy-pasted from real usage)
     actualClaudeOutput: '    63→// cat -n format pattern: leading spaces, line number, tab or →, content\n    64→const CAT_LINE_PATTERN = /^\\s*(\\d+)[\\t→](.*)$/;\n    65→',
+    // Output with system-reminder tags (Claude Code adds these)
+    withSystemReminder: '     1→const foo = 1;\n     2→const bar = 2;\n\n<system-reminder>\nSome reminder content here.\n</system-reminder>',
   };
 
   it('should parse tab-separated format (standard cat -n)', () => {
@@ -953,6 +955,31 @@ describe('Read tool output formatting', () => {
     expect(screen.getByText('65')).toBeInTheDocument();
     // Content should be separated from line numbers
     expect(screen.getByText(/cat -n format pattern/)).toBeInTheDocument();
+  });
+
+  it('should strip system-reminder tags from output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.withSystemReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Line numbers should be parsed correctly
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+    // system-reminder content should not be visible
+    expect(screen.queryByText(/Some reminder content/)).not.toBeInTheDocument();
   });
 
   it('should fallback to pre for non-cat-n format output', () => {
