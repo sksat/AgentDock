@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import clsx from 'clsx';
 import type { Repository, RepositoryType } from '@agent-dock/shared';
 
@@ -42,6 +42,16 @@ function RepositoryTypeLabel({ type }: { type: RepositoryType }) {
   }
 }
 
+function getRemoteDisplayPath(repository: Repository): string {
+  if (!repository.remoteUrl) return '';
+  const parsed = parseRemoteUrl(repository.remoteUrl);
+  // For 'other' provider, show the full URL
+  if (parsed.provider === 'other') {
+    return repository.remoteUrl;
+  }
+  return parsed.repoPath;
+}
+
 function RepositoryCard({ repository, onEdit, onDelete }: RepositoryCardProps) {
   return (
     <div className="bg-bg-secondary border border-border rounded-lg p-4 hover:border-border-hover transition-colors">
@@ -56,7 +66,7 @@ function RepositoryCard({ repository, onEdit, onDelete }: RepositoryCardProps) {
               <RepositoryTypeLabel type={repository.type} />
             </div>
             <p className="text-sm text-text-secondary truncate">
-              {repository.type === 'remote-git' ? repository.remoteUrl : repository.path}
+              {repository.type === 'remote-git' ? getRemoteDisplayPath(repository) : repository.path}
             </p>
           </div>
         </div>
@@ -101,48 +111,156 @@ interface RepositoryFormData {
   remoteBranch?: string;
 }
 
-const REPOSITORY_TYPE_OPTIONS: { id: RepositoryType; name: string; description: string }[] = [
-  { id: 'local', name: 'Local Directory', description: 'Copy to tmpfs for isolation' },
-  { id: 'local-git-worktree', name: 'Local Git Repository', description: 'Use git worktree for parallel development' },
-  { id: 'remote-git', name: 'Remote Git Repository', description: 'Clone from GitHub/GitLab' },
+type WizardStep = 'source' | 'details';
+type SourceType = 'local' | 'remote';
+
+const SOURCE_OPTIONS: { id: SourceType; name: string; description: string; icon: React.ReactNode }[] = [
+  {
+    id: 'local',
+    name: 'Local',
+    description: 'Use a directory or git repository on this machine',
+    icon: (
+      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+      </svg>
+    ),
+  },
+  {
+    id: 'remote',
+    name: 'Remote',
+    description: 'Clone from GitHub, GitLab, or other git hosting',
+    icon: (
+      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+      </svg>
+    ),
+  },
 ];
 
-function detectProvider(url: string): 'github' | 'gitlab' | 'bitbucket' | 'other' {
-  if (url.includes('github.com')) return 'github';
-  if (url.includes('gitlab.com')) return 'gitlab';
-  if (url.includes('bitbucket.org')) return 'bitbucket';
-  return 'other';
+const LOCAL_TYPE_OPTIONS: { id: RepositoryType; name: string; description: string }[] = [
+  { id: 'local', name: 'Directory', description: 'Copy to tmpfs for isolation' },
+  { id: 'local-git-worktree', name: 'Git Repository', description: 'Use git worktree for parallel development' },
+];
+
+interface ParsedRemoteUrl {
+  provider: 'github' | 'gitlab' | 'bitbucket' | 'other';
+  repoPath: string;  // owner/repo or group/subgroup/repo for GitLab
+  name: string;      // Just the repo name
 }
 
-function extractRepoName(url: string): string {
-  // Extract repository name from URL
-  // https://github.com/owner/repo.git -> repo
-  // git@github.com:owner/repo.git -> repo
-  const match = url.match(/\/([^/]+?)(\.git)?$/) || url.match(/:([^/]+?)(\.git)?$/);
-  if (match) {
-    return match[1];
+function parseRemoteUrl(input: string): ParsedRemoteUrl {
+  // Try to detect full URL format first
+  // https://github.com/owner/repo.git
+  // git@github.com:owner/repo.git
+  // https://gitlab.com/group/subgroup/repo.git
+  // https://custom-git.example.com/repo.git (other)
+
+  let provider: ParsedRemoteUrl['provider'] = 'github';  // default for bare owner/repo
+  let repoPath = input.trim();
+
+  // Remove .git suffix if present
+  const originalPath = repoPath;
+  repoPath = repoPath.replace(/\.git$/, '');
+
+  // Check for known provider URLs
+  const knownHttpsMatch = repoPath.match(/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)\/(.+)$/);
+  const knownSshMatch = repoPath.match(/^git@(github\.com|gitlab\.com|bitbucket\.org):(.+)$/);
+
+  // Check for any other URL format
+  const otherHttpsMatch = repoPath.match(/^https?:\/\/[^/]+\/(.+)$/);
+  const otherSshMatch = repoPath.match(/^git@[^:]+:(.+)$/);
+
+  if (knownHttpsMatch) {
+    const host = knownHttpsMatch[1];
+    repoPath = knownHttpsMatch[2];
+    if (host === 'github.com') provider = 'github';
+    else if (host === 'gitlab.com') provider = 'gitlab';
+    else if (host === 'bitbucket.org') provider = 'bitbucket';
+  } else if (knownSshMatch) {
+    const host = knownSshMatch[1];
+    repoPath = knownSshMatch[2];
+    if (host === 'github.com') provider = 'github';
+    else if (host === 'gitlab.com') provider = 'gitlab';
+    else if (host === 'bitbucket.org') provider = 'bitbucket';
+  } else if (otherHttpsMatch || otherSshMatch) {
+    // Unknown provider - keep the full URL as the path
+    provider = 'other';
+    repoPath = originalPath;  // Keep original with .git if present
   }
-  return '';
+
+  // Extract just the repo name (last segment, without .git)
+  const cleanPath = repoPath.replace(/\.git$/, '');
+  const segments = cleanPath.split('/').filter(Boolean);
+  const name = segments.length > 0 ? segments[segments.length - 1] : '';
+
+  return { provider, repoPath, name };
+}
+
+function getProviderBaseUrl(provider: ParsedRemoteUrl['provider']): string {
+  switch (provider) {
+    case 'github': return 'https://github.com';
+    case 'gitlab': return 'https://gitlab.com';
+    case 'bitbucket': return 'https://bitbucket.org';
+    default: return '';
+  }
 }
 
 function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: RepositoryModalProps) {
+  // Wizard state
+  const [step, setStep] = useState<WizardStep>(isEditing ? 'details' : 'source');
+  const [sourceType, setSourceType] = useState<SourceType>(
+    initialData?.type === 'remote-git' ? 'remote' : 'local'
+  );
+
+  // Form fields
   const [name, setName] = useState(initialData?.name ?? '');
   const [nameManuallySet, setNameManuallySet] = useState(!!initialData?.name);
   const [path, setPath] = useState(initialData?.path ?? '');
   const [repositoryType, setRepositoryType] = useState<RepositoryType>(initialData?.type ?? 'local');
-  const [remoteUrl, setRemoteUrl] = useState(initialData?.remoteUrl ?? '');
+  const [remoteProvider, setRemoteProvider] = useState<ParsedRemoteUrl['provider']>(
+    (initialData?.remoteProvider as ParsedRemoteUrl['provider']) ?? 'github'
+  );
+  const [remoteRepoPath, setRemoteRepoPath] = useState(initialData?.remoteUrl ?? '');
   const [remoteBranch, setRemoteBranch] = useState(initialData?.remoteBranch ?? '');
 
-  const handleRemoteUrlChange = useCallback((url: string) => {
-    setRemoteUrl(url);
-    // Auto-fill name from URL if not manually set
-    if (!nameManuallySet && repositoryType === 'remote-git') {
-      const extracted = extractRepoName(url);
-      if (extracted) {
-        setName(extracted);
-      }
+  // Reset form when modal opens with new data
+  useEffect(() => {
+    if (isOpen) {
+      setStep(isEditing ? 'details' : 'source');
+      setSourceType(initialData?.type === 'remote-git' ? 'remote' : 'local');
+      setName(initialData?.name ?? '');
+      setNameManuallySet(!!initialData?.name);
+      setPath(initialData?.path ?? '');
+      setRepositoryType(initialData?.type ?? 'local');
+      setRemoteProvider((initialData?.remoteProvider as ParsedRemoteUrl['provider']) ?? 'github');
+      setRemoteRepoPath(initialData?.remoteUrl ?? '');
+      setRemoteBranch(initialData?.remoteBranch ?? '');
     }
-  }, [nameManuallySet, repositoryType]);
+  }, [isOpen, initialData, isEditing]);
+
+  const handleSourceSelect = useCallback((source: SourceType) => {
+    setSourceType(source);
+    if (source === 'remote') {
+      setRepositoryType('remote-git');
+    } else {
+      setRepositoryType('local');
+    }
+    setStep('details');
+  }, []);
+
+  const handleBack = useCallback(() => {
+    setStep('source');
+  }, []);
+
+  const handleRemoteInputChange = useCallback((input: string) => {
+    const parsed = parseRemoteUrl(input);
+    setRemoteRepoPath(parsed.repoPath);
+    setRemoteProvider(parsed.provider);
+    // Auto-fill name from input if not manually set
+    if (!nameManuallySet && parsed.name) {
+      setName(parsed.name);
+    }
+  }, [nameManuallySet]);
 
   const handleNameChange = useCallback((newName: string) => {
     setName(newName);
@@ -151,14 +269,28 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    // For remote-git, construct full URL from provider + path
+    // For 'other' provider, the repoPath is already the full URL
+    let fullRemoteUrl: string | undefined;
+    if (repositoryType === 'remote-git') {
+      if (remoteProvider === 'other') {
+        fullRemoteUrl = remoteRepoPath;  // Already a full URL
+      } else {
+        fullRemoteUrl = `${getProviderBaseUrl(remoteProvider)}/${remoteRepoPath}`;
+      }
+    }
     onSubmit({
       name,
       path: repositoryType === 'remote-git' ? '' : path,
       repositoryType,
-      remoteUrl: repositoryType === 'remote-git' ? remoteUrl : undefined,
+      remoteUrl: fullRemoteUrl,
       remoteBranch: repositoryType === 'remote-git' && remoteBranch ? remoteBranch : undefined,
     });
-  }, [name, path, repositoryType, remoteUrl, remoteBranch, onSubmit]);
+  }, [name, path, repositoryType, remoteProvider, remoteRepoPath, remoteBranch, onSubmit]);
+
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   if (!isOpen) return null;
 
@@ -166,11 +298,23 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-bg-primary border border-border rounded-xl shadow-xl w-full max-w-md mx-4">
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-text-primary">
-            {isEditing ? 'Edit Repository' : 'Add Repository'}
-          </h2>
+          <div className="flex items-center gap-2">
+            {step === 'details' && !isEditing && (
+              <button
+                onClick={handleBack}
+                className="p-1 text-text-secondary hover:text-text-primary rounded transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <h2 className="text-lg font-semibold text-text-primary">
+              {isEditing ? 'Edit Repository' : step === 'source' ? 'Add Repository' : sourceType === 'local' ? 'Local Repository' : 'Remote Repository'}
+            </h2>
+          </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 text-text-secondary hover:text-text-primary rounded transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,98 +323,163 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Name - show after URL for remote-git */}
-          {repositoryType !== 'remote-git' && (
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1">Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="My Project"
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                required
-              />
-            </div>
-          )}
-
-          {/* Type Selection */}
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
-            <div className="space-y-2">
-              {REPOSITORY_TYPE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setRepositoryType(option.id)}
-                  className={clsx(
-                    'w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between',
-                    repositoryType === option.id
-                      ? 'bg-accent-primary/10 border border-accent-primary/30'
-                      : 'bg-bg-tertiary hover:bg-bg-tertiary/80 border border-transparent'
-                  )}
-                >
-                  <div className="flex flex-col">
-                    <span className={clsx(
-                      'font-medium text-sm',
-                      repositoryType === option.id ? 'text-accent-primary' : 'text-text-primary'
-                    )}>
-                      {option.name}
-                    </span>
-                    <span className="text-xs text-text-secondary">{option.description}</span>
-                  </div>
-                  {repositoryType === option.id && (
-                    <svg className="w-5 h-5 text-accent-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
+        {/* Step 1: Source Selection */}
+        {step === 'source' && (
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-text-secondary mb-4">
+              Where is your repository located?
+            </p>
+            {SOURCE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handleSourceSelect(option.id)}
+                className="w-full px-4 py-4 text-left rounded-lg transition-colors flex items-center gap-4 bg-bg-tertiary hover:bg-bg-tertiary/80 border border-transparent hover:border-border"
+              >
+                <div className="text-text-secondary">
+                  {option.icon}
+                </div>
+                <div className="flex-1">
+                  <span className="font-medium text-text-primary block">{option.name}</span>
+                  <span className="text-sm text-text-secondary">{option.description}</span>
+                </div>
+                <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
           </div>
+        )}
 
-          {/* Path (for local types) */}
-          {repositoryType !== 'remote-git' && (
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1">Local Path</label>
-              <input
-                type="text"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/home/user/projects/my-project"
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                required
-              />
-              <p className="text-xs text-text-secondary mt-1">
-                {repositoryType === 'local'
-                  ? 'Directory will be copied to tmpfs for each session'
-                  : 'Git repository where worktrees will be created'
-                }
-              </p>
-            </div>
-          )}
-
-          {/* Remote URL (for remote-git) */}
-          {repositoryType === 'remote-git' && (
-            <>
+        {/* Step 2: Details Form */}
+        {step === 'details' && (
+          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            {/* Local: Type Selection (Directory vs Git) */}
+            {sourceType === 'local' && (
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">Repository URL</label>
+                <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
+                <div className="space-y-2">
+                  {LOCAL_TYPE_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setRepositoryType(option.id)}
+                      className={clsx(
+                        'w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between',
+                        repositoryType === option.id
+                          ? 'bg-accent-primary/10 border border-accent-primary/30'
+                          : 'bg-bg-tertiary hover:bg-bg-tertiary/80 border border-transparent'
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className={clsx(
+                          'font-medium text-sm',
+                          repositoryType === option.id ? 'text-accent-primary' : 'text-text-primary'
+                        )}>
+                          {option.name}
+                        </span>
+                        <span className="text-xs text-text-secondary">{option.description}</span>
+                      </div>
+                      {repositoryType === option.id && (
+                        <svg className="w-5 h-5 text-accent-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Local: Path */}
+            {sourceType === 'local' && (
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Path</label>
                 <input
                   type="text"
-                  value={remoteUrl}
-                  onChange={(e) => handleRemoteUrlChange(e.target.value)}
-                  placeholder="https://github.com/owner/repo.git"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="/home/user/projects/my-project"
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                  required
+                  autoFocus
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  {repositoryType === 'local'
+                    ? 'Directory will be copied to tmpfs for each session'
+                    : 'Git repository where worktrees will be created'
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Local: Name */}
+            {sourceType === 'local' && (
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="My Project"
                   className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
                   required
                 />
-                {remoteUrl && (
-                  <p className="text-xs text-text-secondary mt-1">
-                    Provider: {detectProvider(remoteUrl)}
-                  </p>
+              </div>
+            )}
+
+            {/* Remote: Provider + Path */}
+            {sourceType === 'remote' && (
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Repository</label>
+                {remoteProvider === 'other' ? (
+                  <>
+                    <input
+                      type="text"
+                      value={remoteRepoPath}
+                      onChange={(e) => handleRemoteInputChange(e.target.value)}
+                      placeholder="https://git.example.com/owner/repo.git"
+                      className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                      required
+                      autoFocus
+                    />
+                    <p className="text-xs text-text-secondary mt-1">
+                      Enter the full git URL for your repository
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <select
+                        value={remoteProvider}
+                        onChange={(e) => setRemoteProvider(e.target.value as ParsedRemoteUrl['provider'])}
+                        className="px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                      >
+                        <option value="github">GitHub</option>
+                        <option value="gitlab">GitLab</option>
+                        <option value="bitbucket">Bitbucket</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={remoteRepoPath}
+                        onChange={(e) => handleRemoteInputChange(e.target.value)}
+                        placeholder="owner/repo"
+                        className="flex-1 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <p className="text-xs text-text-secondary mt-1">
+                      You can also paste a full URL (https or ssh)
+                    </p>
+                  </>
                 )}
               </div>
-              {/* Name (auto-filled from URL) */}
+            )}
+
+            {/* Remote: Name (auto-filled from URL) */}
+            {sourceType === 'remote' && (
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">
                   Name {name && !nameManuallySet && <span className="text-text-secondary">(auto-detected)</span>}
@@ -284,6 +493,10 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
                   required
                 />
               </div>
+            )}
+
+            {/* Remote: Branch */}
+            {sourceType === 'remote' && (
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">
                   Branch <span className="text-text-secondary">(optional)</span>
@@ -296,26 +509,26 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
                   className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
                 />
               </div>
-            </>
-          )}
+            )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 transition-colors"
-            >
-              {isEditing ? 'Save' : 'Add'}
-            </button>
-          </div>
-        </form>
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 transition-colors"
+              >
+                {isEditing ? 'Save' : 'Add'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
