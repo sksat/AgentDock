@@ -114,12 +114,40 @@ function detectProvider(url: string): 'github' | 'gitlab' | 'bitbucket' | 'other
   return 'other';
 }
 
+function extractRepoName(url: string): string {
+  // Extract repository name from URL
+  // https://github.com/owner/repo.git -> repo
+  // git@github.com:owner/repo.git -> repo
+  const match = url.match(/\/([^/]+?)(\.git)?$/) || url.match(/:([^/]+?)(\.git)?$/);
+  if (match) {
+    return match[1];
+  }
+  return '';
+}
+
 function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: RepositoryModalProps) {
   const [name, setName] = useState(initialData?.name ?? '');
+  const [nameManuallySet, setNameManuallySet] = useState(!!initialData?.name);
   const [path, setPath] = useState(initialData?.path ?? '');
   const [repositoryType, setRepositoryType] = useState<RepositoryType>(initialData?.type ?? 'local');
   const [remoteUrl, setRemoteUrl] = useState(initialData?.remoteUrl ?? '');
   const [remoteBranch, setRemoteBranch] = useState(initialData?.remoteBranch ?? '');
+
+  const handleRemoteUrlChange = useCallback((url: string) => {
+    setRemoteUrl(url);
+    // Auto-fill name from URL if not manually set
+    if (!nameManuallySet && repositoryType === 'remote-git') {
+      const extracted = extractRepoName(url);
+      if (extracted) {
+        setName(extracted);
+      }
+    }
+  }, [nameManuallySet, repositoryType]);
+
+  const handleNameChange = useCallback((newName: string) => {
+    setName(newName);
+    setNameManuallySet(true);
+  }, []);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -152,18 +180,20 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Project"
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-              required
-            />
-          </div>
+          {/* Name - show after URL for remote-git */}
+          {repositoryType !== 'remote-git' && (
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="My Project"
+                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                required
+              />
+            </div>
+          )}
 
           {/* Type Selection */}
           <div>
@@ -229,7 +259,7 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
                 <input
                   type="text"
                   value={remoteUrl}
-                  onChange={(e) => setRemoteUrl(e.target.value)}
+                  onChange={(e) => handleRemoteUrlChange(e.target.value)}
                   placeholder="https://github.com/owner/repo.git"
                   className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
                   required
@@ -239,6 +269,20 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
                     Provider: {detectProvider(remoteUrl)}
                   </p>
                 )}
+              </div>
+              {/* Name (auto-filled from URL) */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">
+                  Name {name && !nameManuallySet && <span className="text-text-secondary">(auto-detected)</span>}
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="Repository name"
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                  required
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">
