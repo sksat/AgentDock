@@ -169,9 +169,11 @@ describe('container-config', () => {
       // Check that mounts match actual filesystem state
       const gitconfigMount = config.extraMounts.find((m) => m.source.includes('.gitconfig'));
       const claudeMount = config.extraMounts.find((m) => m.source.includes('.claude'));
+      const ghMount = config.extraMounts.find((m) => m.source.includes('.config/gh'));
 
       const gitconfigExists = pathExists(expandPath('~/.gitconfig'));
       const claudeExists = pathExists(expandPath('~/.claude'));
+      const ghExists = pathExists(expandPath('~/.config/gh'));
 
       // Mounts should only be present if the corresponding file/directory exists
       if (gitconfigExists) {
@@ -186,6 +188,16 @@ describe('container-config', () => {
         expect(claudeMount?.options).toBe('rw');
       } else {
         expect(claudeMount).toBeUndefined();
+      }
+
+      // gh-cli config should be mounted read-only if it exists
+      if (ghExists) {
+        expect(ghMount).toBeDefined();
+        expect(ghMount?.source).toBe('~/.config/gh');
+        expect(ghMount?.target).toBe('/home/node/.config/gh');
+        expect(ghMount?.options).toBe('ro');
+      } else {
+        expect(ghMount).toBeUndefined();
       }
     });
 
