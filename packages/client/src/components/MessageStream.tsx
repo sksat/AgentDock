@@ -68,33 +68,61 @@ interface ParsedLine {
   content: string;
 }
 
-// Tags added by Claude Code that should be stripped from tool output
+// Known Claude Code metadata tags
 const CLAUDE_CODE_TAGS = [
   'system-reminder',
   'persisted-output',
   // Add more tags as discovered
-];
+] as const;
+
+type ClaudeCodeTag = typeof CLAUDE_CODE_TAGS[number];
+
+interface ParsedTags {
+  /** Output with tags removed */
+  cleanOutput: string;
+  /** Map of tag name to array of tag contents */
+  tags: Map<ClaudeCodeTag, string[]>;
+}
 
 /**
- * Strip Claude Code metadata tags from tool output.
- * These tags are added by Claude Code for internal purposes and should not be displayed.
+ * Parse Claude Code metadata tags from tool output.
+ * Returns both the clean output (with tags removed) and a map of extracted tags.
+ * Each tool can decide whether to use the tags or display them.
  */
-function stripClaudeCodeTags(output: string): string {
-  let result = output;
+function parseClaudeCodeTags(output: string): ParsedTags {
+  const tags = new Map<ClaudeCodeTag, string[]>();
+  let cleanOutput = output;
+
   for (const tag of CLAUDE_CODE_TAGS) {
-    // Match both self-closing and paired tags
-    result = result.replace(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'), '');
-    result = result.replace(new RegExp(`<${tag}\\s*/?>`, 'g'), '');
+    const contents: string[] = [];
+
+    // Extract paired tags
+    const pairedRegex = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g');
+    let match;
+    while ((match = pairedRegex.exec(output)) !== null) {
+      contents.push(match[1]);
+    }
+    cleanOutput = cleanOutput.replace(pairedRegex, '');
+
+    // Extract self-closing tags (no content)
+    cleanOutput = cleanOutput.replace(new RegExp(`<${tag}\\s*/?>`, 'g'), '');
+
+    if (contents.length > 0) {
+      tags.set(tag, contents);
+    }
   }
-  return result.trim();
+
+  return { cleanOutput: cleanOutput.trim(), tags };
 }
 
 /**
  * Parse Read tool output in cat -n format.
  * Returns array of parsed lines if all lines match the pattern, null otherwise.
+ * Note: Claude Code metadata tags are stripped - the Read tool doesn't need them.
  */
 function parseReadOutput(output: string): ParsedLine[] | null {
-  const cleanOutput = stripClaudeCodeTags(output);
+  // Strip Claude Code metadata tags - Read tool displays file content only
+  const { cleanOutput } = parseClaudeCodeTags(output);
 
   const lines = cleanOutput.split('\n');
   const parsed: ParsedLine[] = [];
