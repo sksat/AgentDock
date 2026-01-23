@@ -828,7 +828,21 @@ describe('AssistantMessage Markdown rendering', () => {
 });
 
 describe('Read tool output formatting', () => {
-  it('should parse and display cat -n format with line numbers', () => {
+  // Real Claude Code Read tool output format samples for regression testing
+  const REAL_OUTPUT_SAMPLES = {
+    // Format: "   1\tcode" (spaces + line number + tab + content)
+    tabSeparator: '     1\tconst foo = 1;\n     2\tconst bar = 2;',
+    // Format: "   1→code" (spaces + line number + → + content)
+    arrowSeparator: '     1→const foo = 1;\n     2→const bar = 2;',
+    // Format without leading spaces: "1→code"
+    noLeadingSpaces: '1→const foo = 1;\n2→const bar = 2;',
+    // Format with minimal spaces: " 46→code"
+    minimalSpaces: '    46→source "$HOME/.cargo/env"\n    47→',
+    // Actual Claude Code Read tool output (copy-pasted from real usage)
+    actualClaudeOutput: '    63→// cat -n format pattern: leading spaces, line number, tab or →, content\n    64→const CAT_LINE_PATTERN = /^\\s*(\\d+)[\\t→](.*)$/;\n    65→',
+  };
+
+  it('should parse tab-separated format (standard cat -n)', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -836,7 +850,7 @@ describe('Read tool output formatting', () => {
           toolName: 'Read',
           toolUseId: 'read-1',
           input: { file_path: '/path/to/file.ts' },
-          output: '   1\tconst foo = 1;\n   2\tconst bar = 2;',
+          output: REAL_OUTPUT_SAMPLES.tabSeparator,
           isComplete: true,
           isError: false,
         },
@@ -852,7 +866,7 @@ describe('Read tool output formatting', () => {
     expect(screen.getByText('const bar = 2;')).toBeInTheDocument();
   });
 
-  it('should handle line numbers with → separator', () => {
+  it('should parse arrow-separated format with leading spaces', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -860,7 +874,7 @@ describe('Read tool output formatting', () => {
           toolName: 'Read',
           toolUseId: 'read-1',
           input: { file_path: '/path/to/file.ts' },
-          output: '   1→const foo = 1;\n   2→const bar = 2;',
+          output: REAL_OUTPUT_SAMPLES.arrowSeparator,
           isComplete: true,
           isError: false,
         },
@@ -871,6 +885,74 @@ describe('Read tool output formatting', () => {
 
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+  });
+
+  it('should parse arrow-separated format without leading spaces', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.noLeadingSpaces,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+  });
+
+  it('should parse real bashrc output format', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '~/.bashrc' },
+          output: REAL_OUTPUT_SAMPLES.minimalSpaces,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('46')).toBeInTheDocument();
+    expect(screen.getByText('47')).toBeInTheDocument();
+    expect(screen.getByText('source "$HOME/.cargo/env"')).toBeInTheDocument();
+  });
+
+  it('should parse actual Claude Code Read tool output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/MessageStream.tsx', offset: 63, limit: 3 },
+          output: REAL_OUTPUT_SAMPLES.actualClaudeOutput,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('63')).toBeInTheDocument();
+    expect(screen.getByText('64')).toBeInTheDocument();
+    expect(screen.getByText('65')).toBeInTheDocument();
+    // Content should be separated from line numbers
+    expect(screen.getByText(/cat -n format pattern/)).toBeInTheDocument();
   });
 
   it('should fallback to pre for non-cat-n format output', () => {

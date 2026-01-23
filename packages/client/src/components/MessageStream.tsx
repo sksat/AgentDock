@@ -99,7 +99,11 @@ function parseReadOutput(output: string): ParsedLine[] | null {
  * Read tool output component with line number formatting
  */
 function ReadToolOutput({ output, isError }: { output: string; isError: boolean }) {
-  const parsedLines = useMemo(() => parseReadOutput(output), [output]);
+  const parsedLines = useMemo(() => {
+    const result = parseReadOutput(output);
+    console.log('ReadToolOutput debug:', { output: output.substring(0, 100), parsed: result?.length ?? 'null' });
+    return result;
+  }, [output]);
 
   if (isError || !parsedLines) {
     // Error or unparseable output: use plain pre display
