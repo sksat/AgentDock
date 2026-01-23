@@ -922,4 +922,396 @@ describe('useSession', () => {
       expect(result.current.pendingPermission).toBeNull();
     });
   });
+
+  describe('Session-bound isLoading state', () => {
+    it('should NOT reset isLoading when result arrives for different session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Make session-1 running (simulate user message)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_status_changed',
+          sessionId: 'session-1',
+          status: 'running',
+        });
+      });
+
+      // isLoading should be true for active session
+      expect(result.current.isLoading).toBe(true);
+
+      // Receive result for session-2 (different session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'result',
+          sessionId: 'session-2',
+          result: 'Result for session 2',
+        });
+      });
+
+      // isLoading should STILL be true (session-1 is still running)
+      expect(result.current.isLoading).toBe(true);
+    });
+
+    it('should NOT reset isLoading when error arrives for different session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Make session-1 running
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_status_changed',
+          sessionId: 'session-1',
+          status: 'running',
+        });
+      });
+
+      // isLoading should be true for active session
+      expect(result.current.isLoading).toBe(true);
+
+      // Receive error for session-2 (different session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'error',
+          sessionId: 'session-2',
+          message: 'Error in session 2',
+        });
+      });
+
+      // isLoading should STILL be true (session-1 is still running)
+      expect(result.current.isLoading).toBe(true);
+    });
+
+    it('should maintain separate isLoading state per session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions with different statuses
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'running' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1 (running)
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Simulate attach to get isRunning state
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          isRunning: true,
+        });
+      });
+
+      // isLoading should be true for session-1
+      expect(result.current.isLoading).toBe(true);
+
+      // Switch to session-2 (idle)
+      act(() => {
+        result.current.selectSession('session-2');
+      });
+
+      // Simulate attach
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-2',
+          history: [],
+          isRunning: false,
+        });
+      });
+
+      // isLoading should be false for session-2
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('should restore correct isLoading when switching back to running session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'running' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1 and attach
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          isRunning: true,
+        });
+      });
+
+      // isLoading should be true
+      expect(result.current.isLoading).toBe(true);
+
+      // Switch to session-2
+      act(() => {
+        result.current.selectSession('session-2');
+      });
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-2',
+          history: [],
+          isRunning: false,
+        });
+      });
+
+      // isLoading should be false for session-2
+      expect(result.current.isLoading).toBe(false);
+
+      // Switch back to session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          isRunning: true,
+        });
+      });
+
+      // isLoading should be true again for session-1
+      expect(result.current.isLoading).toBe(true);
+    });
+
+    it('should reset isLoading when result arrives for the SAME session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Make session-1 running
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_status_changed',
+          sessionId: 'session-1',
+          status: 'running',
+        });
+      });
+
+      expect(result.current.isLoading).toBe(true);
+
+      // Receive result for session-1 (same session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'result',
+          sessionId: 'session-1',
+          result: 'Result for session 1',
+        });
+      });
+
+      // isLoading should be false now
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('should reset isLoading when creating new empty session while another is running', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup mock send function
+      act(() => {
+        result.current.setSend(() => {});
+      });
+
+      // Setup: Create a running session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'running' },
+          ],
+        });
+      });
+
+      // Select and attach to session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          isRunning: true,
+        });
+      });
+
+      // isLoading should be true for session-1
+      expect(result.current.isLoading).toBe(true);
+
+      // Create a new empty session (via sidebar + button)
+      act(() => {
+        result.current.createSession('New Session');
+      });
+
+      // Simulate server response for new session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_created',
+          session: { id: 'session-2', name: 'New Session', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+        });
+      });
+
+      // isLoading should be reset to false for the new empty session
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.activeSessionId).toBe('session-2');
+    });
+  });
+
+  describe('Session-bound systemInfo state', () => {
+    it('should NOT update systemInfo when system_info arrives for different session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Set systemInfo for session-1
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'system_info',
+          sessionId: 'session-1',
+          model: 'claude-sonnet',
+          cwd: '/path/to/session1',
+        });
+      });
+
+      expect(result.current.systemInfo?.model).toBe('claude-sonnet');
+      expect(result.current.systemInfo?.cwd).toBe('/path/to/session1');
+
+      // Receive system_info for session-2 (different session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'system_info',
+          sessionId: 'session-2',
+          model: 'claude-opus',
+          cwd: '/path/to/session2',
+        });
+      });
+
+      // systemInfo should NOT be updated (still showing session-1 info)
+      expect(result.current.systemInfo?.model).toBe('claude-sonnet');
+      expect(result.current.systemInfo?.cwd).toBe('/path/to/session1');
+    });
+
+    it('should update systemInfo when system_info arrives for the SAME session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Set initial systemInfo for session-1
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'system_info',
+          sessionId: 'session-1',
+          model: 'claude-sonnet',
+          permissionMode: 'ask',
+        });
+      });
+
+      expect(result.current.systemInfo?.model).toBe('claude-sonnet');
+
+      // Update systemInfo for session-1 (same session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'system_info',
+          sessionId: 'session-1',
+          model: 'claude-opus',
+          permissionMode: 'auto-edit',
+        });
+      });
+
+      // systemInfo should be updated
+      expect(result.current.systemInfo?.model).toBe('claude-opus');
+      expect(result.current.systemInfo?.permissionMode).toBe('auto-edit');
+    });
+  });
 });

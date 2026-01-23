@@ -1013,6 +1013,12 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
             setError(null);
+            // Reset isLoading only if creating empty session (not when sending message with new session)
+            // pendingMessage is set when creating session via sendMessage
+            if (!pendingMessage) {
+              setIsLoading(false);
+              setLoadingReason(null);
+            }
           }
           break;
         }
@@ -1284,8 +1290,11 @@ export function useSession(): UseSessionReturn {
         }
 
         case 'result':
-          setIsLoading(false);
-          setLoadingReason(null);
+          // Only update isLoading for the active session
+          if (message.sessionId === activeSessionId) {
+            setIsLoading(false);
+            setLoadingReason(null);
+          }
           break;
 
         case 'permission_request': {
@@ -1362,12 +1371,15 @@ export function useSession(): UseSessionReturn {
         }
 
         case 'system_info':
-          setSystemInfo({
-            model: message.model,
-            permissionMode: message.permissionMode,
-            cwd: message.cwd,
-            tools: message.tools,
-          });
+          // Only update systemInfo for the active session
+          if (message.sessionId === activeSessionId) {
+            setSystemInfo({
+              model: message.model,
+              permissionMode: message.permissionMode,
+              cwd: message.cwd,
+              tools: message.tools,
+            });
+          }
           break;
 
         case 'git_status': {
@@ -1445,9 +1457,12 @@ export function useSession(): UseSessionReturn {
           break;
 
         case 'error':
-          setError(message.message);
-          setIsLoading(false);
-          setLoadingReason(null);
+          // Only update isLoading/error for the active session
+          if (message.sessionId === activeSessionId) {
+            setError(message.message);
+            setIsLoading(false);
+            setLoadingReason(null);
+          }
           break;
 
         case 'screencast_frame': {
@@ -1534,7 +1549,7 @@ export function useSession(): UseSessionReturn {
           break;
       }
     },
-    [activeSessionId, updateSessionMessages, send, pendingSessionCreate]
+    [activeSessionId, updateSessionMessages, send, pendingSessionCreate, pendingMessage]
   );
 
   return {
