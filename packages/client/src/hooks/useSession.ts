@@ -1365,12 +1365,15 @@ export function useSession(): UseSessionReturn {
         }
 
         case 'system_info':
-          setSystemInfo({
-            model: message.model,
-            permissionMode: message.permissionMode,
-            cwd: message.cwd,
-            tools: message.tools,
-          });
+          // Only update systemInfo for the active session
+          if (message.sessionId === activeSessionId) {
+            setSystemInfo({
+              model: message.model,
+              permissionMode: message.permissionMode,
+              cwd: message.cwd,
+              tools: message.tools,
+            });
+          }
           break;
 
         case 'git_status': {
