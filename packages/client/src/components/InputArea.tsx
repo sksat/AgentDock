@@ -3,10 +3,10 @@ import clsx from 'clsx';
 import { ModelSelector } from './ModelSelector';
 import { PermissionModeSelector } from './PermissionModeSelector';
 import { SlashCommandSuggestions, getFilteredCommands, type SlashCommand } from './SlashCommandSuggestions';
-import { WorkingDirectorySelector } from './WorkingDirectorySelector';
+import { ProjectSelector } from './ProjectSelector';
 import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
-import type { RunnerBackend } from '@agent-dock/shared';
+import type { RunnerBackend, Repository, SelectedProject, RecentProject } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -52,9 +52,14 @@ export interface InputAreaProps {
   onShowHelp?: () => void;
   // Session start mode
   mode?: InputAreaMode;
-  workingDir?: string;
-  onWorkingDirChange?: (dir: string) => void;
-  recentDirectories?: string[];
+  /** Selected project for session creation */
+  selectedProject?: SelectedProject | null;
+  /** Callback when project selection changes */
+  onProjectChange?: (project: SelectedProject | null) => void;
+  /** Registered repositories for project selection */
+  repositories?: Repository[];
+  /** Recent projects from session history */
+  recentProjects?: RecentProject[];
   runnerBackend?: RunnerBackend;
   onRunnerBackendChange?: (backend: RunnerBackend) => void;
   podmanAvailable?: boolean;
@@ -84,9 +89,10 @@ export function InputArea({
   onShowHelp,
   // Session start mode props
   mode = 'default',
-  workingDir = '',
-  onWorkingDirChange,
-  recentDirectories = [],
+  selectedProject = null,
+  onProjectChange,
+  repositories = [],
+  recentProjects = [],
   runnerBackend = 'native',
   onRunnerBackendChange,
   podmanAvailable = false,
@@ -572,15 +578,16 @@ export function InputArea({
 
         {/* Status bar - two rows in session-start mode */}
         <div className="border-t border-border/50 text-xs text-text-secondary">
-          {/* Row 1: Session-start only items (working directory, runner backend) */}
+          {/* Row 1: Session-start only items (project selector, runner backend) */}
           {mode === 'session-start' && (
             <div className="flex items-center gap-3 px-3 pt-1.5 pb-0.5">
-              {/* Working directory selector */}
+              {/* Project selector */}
               <div className="relative">
-                <WorkingDirectorySelector
-                  value={workingDir}
-                  onChange={onWorkingDirChange ?? (() => {})}
-                  recentDirectories={recentDirectories}
+                <ProjectSelector
+                  selectedProject={selectedProject ?? null}
+                  onChange={onProjectChange ?? (() => {})}
+                  repositories={repositories}
+                  recentProjects={recentProjects}
                   disabled={disabled}
                   className="min-w-[180px]"
                 />

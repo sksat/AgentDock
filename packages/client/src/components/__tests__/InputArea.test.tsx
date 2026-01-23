@@ -410,50 +410,57 @@ describe('Stream input during loading', () => {
  * session start mode, and vice versa.
  */
 describe('InputArea session-start mode', () => {
-  describe('working directory selector', () => {
-    it('should render working directory selector in session-start mode', () => {
+  describe('project selector', () => {
+    it('should render project selector in session-start mode', () => {
       render(<InputArea mode="session-start" onSend={() => {}} />);
-      // Working directory selector is in status bar, identified by placeholder
-      expect(screen.getByPlaceholderText(/Default.*directory/)).toBeInTheDocument();
+      // Project selector shows "Select project..." placeholder
+      expect(screen.getByText(/Select project/)).toBeInTheDocument();
     });
 
-    it('should not render working directory selector in default mode', () => {
+    it('should not render project selector in default mode', () => {
       render(<InputArea onSend={() => {}} />);
-      expect(screen.queryByPlaceholderText(/Default.*directory/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Select project/)).not.toBeInTheDocument();
     });
 
-    it('should call onWorkingDirChange when directory is changed', () => {
-      const onWorkingDirChange = vi.fn();
+    it('should call onProjectChange when project is selected', () => {
+      const onProjectChange = vi.fn();
+      const repositories = [
+        { id: 'repo-1', name: 'Test Repo', path: '/home/user/test', type: 'local-git-worktree' as const, createdAt: '', updatedAt: '' }
+      ];
       render(
         <InputArea
           mode="session-start"
           onSend={() => {}}
-          workingDir=""
-          onWorkingDirChange={onWorkingDirChange}
+          repositories={repositories}
+          onProjectChange={onProjectChange}
         />
       );
 
-      const input = screen.getByPlaceholderText(/Default.*directory/);
-      fireEvent.change(input, { target: { value: '/new/path' } });
+      // Open dropdown and select repository
+      fireEvent.click(screen.getByText(/Select project/));
+      fireEvent.click(screen.getByText('Test Repo'));
 
-      expect(onWorkingDirChange).toHaveBeenCalledWith('/new/path');
+      expect(onProjectChange).toHaveBeenCalledWith({ type: 'repository', repositoryId: 'repo-1' });
     });
 
-    it('should show recent directories dropdown', () => {
-      const recentDirs = ['/home/user/project1', '/home/user/project2'];
+    it('should show repositories in dropdown', () => {
+      const repositories = [
+        { id: 'repo-1', name: 'Project 1', path: '/home/user/proj1', type: 'local' as const, createdAt: '', updatedAt: '' },
+        { id: 'repo-2', name: 'Project 2', path: '/home/user/proj2', type: 'local-git-worktree' as const, createdAt: '', updatedAt: '' },
+      ];
       render(
         <InputArea
           mode="session-start"
           onSend={() => {}}
-          recentDirectories={recentDirs}
+          repositories={repositories}
         />
       );
 
-      const input = screen.getByPlaceholderText(/Default.*directory/);
-      fireEvent.focus(input);
+      // Open dropdown
+      fireEvent.click(screen.getByText(/Select project/));
 
-      expect(screen.getByText('~/project1')).toBeInTheDocument();
-      expect(screen.getByText('~/project2')).toBeInTheDocument();
+      expect(screen.getByText('Project 1')).toBeInTheDocument();
+      expect(screen.getByText('Project 2')).toBeInTheDocument();
     });
   });
 

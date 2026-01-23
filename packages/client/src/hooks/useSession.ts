@@ -16,6 +16,7 @@ import type {
   RunnerBackend,
   Repository,
   RepositoryType,
+  SelectedProject,
 } from '@agent-dock/shared';
 import type { MessageStreamItem, ToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
@@ -152,7 +153,7 @@ export interface UseSessionReturn {
   deleteRepository: (id: string) => void;
 
   // Message handling
-  sendMessage: (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => void;
+  sendMessage: (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => void;
   clearMessages: () => void;
   addSystemMessage: (content: SystemMessageContent) => void;
   compactSession: () => void;
@@ -592,7 +593,7 @@ export function useSession(): UseSessionReturn {
 
   // Message sending
   const sendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => {
+    (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, thinkingEnabled?: boolean, runnerBackend?: RunnerBackend) => {
       if (!activeSessionId) {
         // No session yet - create one and store the message to send after creation
         // TODO: Store images with pending message
@@ -600,7 +601,24 @@ export function useSession(): UseSessionReturn {
         setPendingSessionCreate(true);
         setIsLoading(true);
         const sessionName = generateSessionName(content);
-        send({ type: 'create_session', name: sessionName, workingDir, runnerBackend });
+        // Extract workingDir and repositoryId from selectedProject
+        let workingDir: string | undefined;
+        let repositoryId: string | undefined;
+        if (selectedProject) {
+          switch (selectedProject.type) {
+            case 'repository':
+              repositoryId = selectedProject.repositoryId;
+              break;
+            case 'recent':
+              workingDir = selectedProject.path;
+              repositoryId = selectedProject.repositoryId;
+              break;
+            case 'custom':
+              workingDir = selectedProject.path;
+              break;
+          }
+        }
+        send({ type: 'create_session', name: sessionName, workingDir, runnerBackend, repositoryId });
         return;
       }
 

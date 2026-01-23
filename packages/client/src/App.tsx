@@ -12,7 +12,7 @@ import { ViewToggle, type SessionView } from './components/ViewToggle';
 import { GitStatusBadge } from './components/GitStatusBadge';
 import type { SidebarSession } from './components';
 import type { ImageAttachment } from './components/MessageStream';
-import type { RunnerBackend } from '@agent-dock/shared';
+import type { RunnerBackend, SelectedProject } from '@agent-dock/shared';
 import './App.css';
 
 const WS_URL = import.meta.env.DEV
@@ -222,8 +222,8 @@ function App() {
 
   // Wrapper for sendMessage that includes thinkingEnabled
   const handleSendMessage = useCallback(
-    (content: string, images?: ImageAttachment[], workingDir?: string, runnerBackend?: RunnerBackend) => {
-      sendMessage(content, images, workingDir, thinkingEnabled, runnerBackend);
+    (content: string, images?: ImageAttachment[], selectedProject?: SelectedProject | null, runnerBackend?: RunnerBackend) => {
+      sendMessage(content, images, selectedProject, thinkingEnabled, runnerBackend);
     },
     [sendMessage, thinkingEnabled]
   );
@@ -354,6 +354,7 @@ function App() {
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
                 onSelectSession={selectSession}
+                repositories={repositories}
                 podmanAvailable={true}
                 defaultRunnerBackend={globalSettings?.defaultRunnerBackend ?? 'native'}
                 defaultModel={globalSettings?.defaultModel}
