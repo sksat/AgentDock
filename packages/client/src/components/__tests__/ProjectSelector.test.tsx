@@ -351,15 +351,15 @@ describe('ProjectSelector', () => {
       );
 
       // Open dropdown and click custom path
-      fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByText(/Select project/i));
       fireEvent.click(screen.getByText(/Custom path/i));
 
-      // Press Escape
-      const input = screen.getByRole('textbox');
-      fireEvent.keyDown(input, { key: 'Escape' });
+      // Find the custom path input (placeholder is different from search input)
+      const customInput = screen.getByPlaceholderText('/path/to/project');
+      fireEvent.keyDown(customInput, { key: 'Escape' });
 
-      // Should be back to normal mode (no textbox)
-      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      // Should be back to normal mode (custom path input gone, but search input visible)
+      expect(screen.queryByPlaceholderText('/path/to/project')).not.toBeInTheDocument();
     });
   });
 
@@ -523,6 +523,232 @@ describe('ProjectSelector', () => {
 
       fireEvent.click(screen.getByRole('button'));
       expect(screen.getByText('/var/www/project')).toBeInTheDocument();
+    });
+  });
+
+  describe('Search functionality', () => {
+    it('should show search input at top of dropdown', () => {
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'Repo 1' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={() => {}}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Search input should be visible in dropdown
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      expect(searchInput).toBeInTheDocument();
+    });
+
+    it('should filter repositories by search term', () => {
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'My Project' }),
+        createMockRepository({ id: 'repo-2', name: 'Another Repo' }),
+        createMockRepository({ id: 'repo-3', name: 'Test App' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={() => {}}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // All repos should be visible initially
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+      expect(screen.getByText('Another Repo')).toBeInTheDocument();
+      expect(screen.getByText('Test App')).toBeInTheDocument();
+
+      // Search for "Project"
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: 'Project' } });
+
+      // Only matching repos should be visible
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+      expect(screen.queryByText('Another Repo')).not.toBeInTheDocument();
+      expect(screen.queryByText('Test App')).not.toBeInTheDocument();
+    });
+
+    it('should filter recent projects by search term', () => {
+      const recents = [
+        createMockRecentProject({ path: '/home/user/frontend-app' }),
+        createMockRecentProject({ path: '/home/user/backend-api' }),
+        createMockRecentProject({ path: '/home/user/mobile-app' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={() => {}}
+          repositories={[]}
+          recentProjects={recents}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Search for "app"
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: 'app' } });
+
+      // Only matching projects should be visible
+      expect(screen.getByText('~/frontend-app')).toBeInTheDocument();
+      expect(screen.getByText('~/mobile-app')).toBeInTheDocument();
+      expect(screen.queryByText('~/backend-api')).not.toBeInTheDocument();
+    });
+
+    it('should filter case-insensitively', () => {
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'MyProject' }),
+        createMockRepository({ id: 'repo-2', name: 'myproject-v2' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={() => {}}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Search with different case
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: 'MYPROJECT' } });
+
+      // Both should match
+      expect(screen.getByText('MyProject')).toBeInTheDocument();
+      expect(screen.getByText('myproject-v2')).toBeInTheDocument();
+    });
+
+    it('should treat path-like input as custom path option', () => {
+      const onChange = vi.fn();
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'My Project' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={onChange}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Enter a path in search
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: '/home/user/new-project' } });
+
+      // Should show option to use as custom path
+      expect(screen.getByText(/Use.*\/home\/user\/new-project/i)).toBeInTheDocument();
+    });
+
+    it('should select custom path when Enter is pressed on path input', () => {
+      const onChange = vi.fn();
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={onChange}
+          repositories={[]}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Enter a path and press Enter
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: '/my/custom/path' } });
+      fireEvent.keyDown(searchInput, { key: 'Enter' });
+
+      expect(onChange).toHaveBeenCalledWith({ type: 'custom', path: '/my/custom/path' });
+    });
+
+    it('should show "No matches" when search has no results', () => {
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'My Project' }),
+      ];
+
+      render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={() => {}}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      // Search for something that doesn't exist
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: 'xyz123' } });
+
+      // Should show no matches message
+      expect(screen.getByText(/no.*match/i)).toBeInTheDocument();
+    });
+
+    it('should clear search when dropdown closes and reopens', () => {
+      const onChange = vi.fn();
+      const repos = [
+        createMockRepository({ id: 'repo-1', name: 'Project Alpha' }),
+        createMockRepository({ id: 'repo-2', name: 'Project Beta' }),
+      ];
+
+      const { rerender } = render(
+        <ProjectSelector
+          selectedProject={null}
+          onChange={onChange}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      // Open dropdown and search
+      fireEvent.click(screen.getByText(/Select project/i));
+      const searchInput = screen.getByPlaceholderText(/search/i);
+      fireEvent.change(searchInput, { target: { value: 'Alpha' } });
+
+      // Only Alpha should be visible
+      expect(screen.getByText('Project Alpha')).toBeInTheDocument();
+      expect(screen.queryByText('Project Beta')).not.toBeInTheDocument();
+
+      // Select Project Alpha to close the dropdown
+      fireEvent.click(screen.getByText('Project Alpha'));
+
+      // Rerender with selected project (simulating controlled component)
+      rerender(
+        <ProjectSelector
+          selectedProject={{ type: 'repository', repositoryId: 'repo-1' }}
+          onChange={onChange}
+          repositories={repos}
+          recentProjects={[]}
+        />
+      );
+
+      // Reopen dropdown by clicking the button showing "Project Alpha"
+      fireEvent.click(screen.getByText('Project Alpha'));
+
+      // Both repos should be visible again (search was cleared)
+      expect(screen.getByText('Project Beta')).toBeInTheDocument();
     });
   });
 });

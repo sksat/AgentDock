@@ -65,6 +65,11 @@ export interface ProjectSelectorProps {
   className?: string;
 }
 
+// Check if input looks like a path
+function isPathLike(input: string): boolean {
+  return input.startsWith('/') || input.startsWith('~') || input.startsWith('./');
+}
+
 export function ProjectSelector({
   selectedProject,
   onChange,
@@ -76,8 +81,10 @@ export function ProjectSelector({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCustomPathMode, setIsCustomPathMode] = useState(false);
   const [customPathInput, setCustomPathInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Guard against null/undefined data
   const repositories = useMemo(() => {
@@ -99,12 +106,42 @@ export function ProjectSelector({
     return detectHomeDir(allPaths);
   }, [repositories, recentProjects]);
 
+  // Filter repositories and recent projects by search query
+  const filteredRepositories = useMemo(() => {
+    if (!searchQuery.trim()) return repositories;
+    const query = searchQuery.toLowerCase();
+    return repositories.filter((r) =>
+      r.name.toLowerCase().includes(query) || r.path.toLowerCase().includes(query)
+    );
+  }, [repositories, searchQuery]);
+
+  const filteredRecentProjects = useMemo(() => {
+    if (!searchQuery.trim()) return recentProjects;
+    const query = searchQuery.toLowerCase();
+    return recentProjects.filter((r) => {
+      const displayPath = formatPathDisplay(r.path, homeDir);
+      return (
+        displayPath.toLowerCase().includes(query) ||
+        r.path.toLowerCase().includes(query) ||
+        (r.repositoryName?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [recentProjects, searchQuery, homeDir]);
+
+  // Check if search has no matches (excluding path-like input which becomes custom path)
+  const hasNoMatches = useMemo(() => {
+    if (!searchQuery.trim()) return false;
+    if (isPathLike(searchQuery)) return false;
+    return filteredRepositories.length === 0 && filteredRecentProjects.length === 0;
+  }, [searchQuery, filteredRepositories, filteredRecentProjects]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsDropdownOpen(false);
         setIsCustomPathMode(false);
+        setSearchQuery('');
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -117,6 +154,14 @@ export function ProjectSelector({
       inputRef.current.focus();
     }
   }, [isCustomPathMode]);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isDropdownOpen && !isCustomPathMode && searchInputRef.current) {
+      // Small delay to ensure dropdown is rendered
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [isDropdownOpen, isCustomPathMode]);
 
   // Get display text for selected project
   const getSelectedDisplayText = useCallback((): string => {
@@ -146,6 +191,7 @@ export function ProjectSelector({
     (repo: Repository) => {
       onChange({ type: 'repository', repositoryId: repo.id });
       setIsDropdownOpen(false);
+      setSearchQuery('');
     },
     [onChange]
   );
@@ -158,6 +204,7 @@ export function ProjectSelector({
         : { type: 'recent', path: recent.path };
       onChange(project);
       setIsDropdownOpen(false);
+      setSearchQuery('');
     },
     [onChange]
   );
@@ -170,6 +217,7 @@ export function ProjectSelector({
     setIsCustomPathMode(false);
     setCustomPathInput('');
     setIsDropdownOpen(false);
+    setSearchQuery('');
   }, [customPathInput, onChange]);
 
   // Handle custom path input key events
@@ -188,7 +236,13 @@ export function ProjectSelector({
   // Toggle dropdown
   const handleToggleDropdown = useCallback(() => {
     if (!disabled) {
-      setIsDropdownOpen((prev) => !prev);
+      setIsDropdownOpen((prev) => {
+        const willOpen = !prev;
+        if (!willOpen) {
+          setSearchQuery('');
+        }
+        return willOpen;
+      });
       setIsCustomPathMode(false);
     }
   }, [disabled]);
@@ -196,7 +250,33 @@ export function ProjectSelector({
   // Enter custom path mode
   const handleEnterCustomPathMode = useCallback(() => {
     setIsCustomPathMode(true);
+    setSearchQuery('');
   }, []);
+
+  // Handle search input key events
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && isPathLike(searchQuery.trim())) {
+        e.preventDefault();
+        onChange({ type: 'custom', path: searchQuery.trim() });
+        setSearchQuery('');
+        setIsDropdownOpen(false);
+      } else if (e.key === 'Escape') {
+        setSearchQuery('');
+        setIsDropdownOpen(false);
+      }
+    },
+    [searchQuery, onChange]
+  );
+
+  // Handle custom path option click from search
+  const handleSelectCustomPathFromSearch = useCallback(() => {
+    if (searchQuery.trim()) {
+      onChange({ type: 'custom', path: searchQuery.trim() });
+      setSearchQuery('');
+      setIsDropdownOpen(false);
+    }
+  }, [searchQuery, onChange]);
 
   return (
     <div className={clsx('relative', className)} ref={containerRef}>
@@ -241,87 +321,140 @@ export function ProjectSelector({
       {isDropdownOpen && !isCustomPathMode && (
         <div
           role="listbox"
-          className="absolute z-10 w-full min-w-[240px] mt-1 py-1 bg-bg-secondary border border-border rounded-lg shadow-lg max-h-80 overflow-y-auto"
+          className="absolute z-10 w-full min-w-[320px] mt-1 bg-bg-secondary border border-border rounded-lg shadow-lg max-h-96 flex flex-col"
         >
-          {/* Repositories section */}
-          {repositories.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
-                REPOSITORIES
-              </div>
-              {repositories.map((repo) => (
-                <button
-                  key={repo.id}
-                  onClick={() => handleSelectRepository(repo)}
-                  className={clsx(
-                    'w-full px-3 py-1.5 text-left text-xs flex items-center gap-2',
-                    'hover:bg-bg-tertiary transition-colors',
-                    selectedProject?.type === 'repository' && selectedProject.repositoryId === repo.id
-                      ? 'text-accent-primary'
-                      : 'text-text-primary'
-                  )}
-                >
-                  <span className="text-text-secondary">{getRepositoryIcon(repo.type)}</span>
-                  <span className="truncate">{repo.name}</span>
-                </button>
-              ))}
-            </>
-          )}
-
-          {/* Recent projects section */}
-          {recentProjects.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
-                RECENT
-              </div>
-              {recentProjects.map((recent, index) => (
-                <button
-                  key={`${recent.path}-${index}`}
-                  onClick={() => handleSelectRecent(recent)}
-                  className={clsx(
-                    'w-full px-3 py-1.5 text-left text-xs flex items-center gap-2',
-                    'hover:bg-bg-tertiary transition-colors',
-                    selectedProject?.type === 'recent' && selectedProject.path === recent.path
-                      ? 'text-accent-primary'
-                      : 'text-text-primary'
-                  )}
-                >
-                  <span className="text-text-secondary">
-                    {recent.repositoryId ? (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="truncate">
-                    {recent.repositoryName ?? formatPathDisplay(recent.path, homeDir)}
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
-
-          {/* Separator */}
-          {(repositories.length > 0 || recentProjects.length > 0) && (
-            <div className="my-1 border-t border-border" />
-          )}
-
-          {/* Custom path option */}
-          <button
-            onClick={handleEnterCustomPathMode}
-            className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-bg-tertiary transition-colors text-text-primary"
-          >
-            <span className="text-text-secondary">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          {/* Search input */}
+          <div className="p-2 border-b border-border/50">
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-            </span>
-            <span>Custom path...</span>
-          </button>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search repository or enter path..."
+                className={clsx(
+                  'w-full pl-8 pr-3 py-1.5 rounded-md text-sm',
+                  'bg-bg-tertiary text-text-primary placeholder:text-text-secondary',
+                  'border border-border focus:border-accent-primary',
+                  'focus:outline-none focus:ring-1 focus:ring-accent-primary/50'
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="overflow-y-auto flex-1 py-1">
+            {/* Use as custom path option (when input looks like a path) */}
+            {isPathLike(searchQuery.trim()) && (
+              <>
+                <button
+                  onClick={handleSelectCustomPathFromSearch}
+                  className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-bg-tertiary transition-colors text-accent-primary"
+                >
+                  <span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </span>
+                  <span>Use {searchQuery.trim()}</span>
+                </button>
+                <div className="my-1 border-t border-border" />
+              </>
+            )}
+
+            {/* No matches message */}
+            {hasNoMatches && (
+              <div className="px-3 py-4 text-sm text-text-secondary text-center">
+                No matches found
+              </div>
+            )}
+
+            {/* Repositories section */}
+            {filteredRepositories.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
+                  REPOSITORIES
+                </div>
+                {filteredRepositories.map((repo) => (
+                  <button
+                    key={repo.id}
+                    onClick={() => handleSelectRepository(repo)}
+                    className={clsx(
+                      'w-full px-3 py-1.5 text-left text-sm flex items-center gap-2',
+                      'hover:bg-bg-tertiary transition-colors',
+                      selectedProject?.type === 'repository' && selectedProject.repositoryId === repo.id
+                        ? 'text-accent-primary'
+                        : 'text-text-primary'
+                    )}
+                  >
+                    <span className="text-text-secondary">{getRepositoryIcon(repo.type)}</span>
+                    <span className="truncate">{repo.name}</span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* Recent projects section */}
+            {filteredRecentProjects.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
+                  RECENT
+                </div>
+                {filteredRecentProjects.map((recent, index) => (
+                  <button
+                    key={`${recent.path}-${index}`}
+                    onClick={() => handleSelectRecent(recent)}
+                    className={clsx(
+                      'w-full px-3 py-1.5 text-left text-sm flex items-center gap-2',
+                      'hover:bg-bg-tertiary transition-colors',
+                      selectedProject?.type === 'recent' && selectedProject.path === recent.path
+                        ? 'text-accent-primary'
+                        : 'text-text-primary'
+                    )}
+                  >
+                    <span className="text-text-secondary">
+                      {recent.repositoryId ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="truncate">
+                      {recent.repositoryName ?? formatPathDisplay(recent.path, homeDir)}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* Separator before custom path (when not searching or no path-like input) */}
+            {!searchQuery.trim() && (filteredRepositories.length > 0 || filteredRecentProjects.length > 0) && (
+              <div className="my-1 border-t border-border" />
+            )}
+
+            {/* Custom path option (only when not searching or not path-like) */}
+            {!isPathLike(searchQuery.trim()) && !hasNoMatches && (
+              <button
+                onClick={handleEnterCustomPathMode}
+                className="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-bg-tertiary transition-colors text-text-primary"
+              >
+                <span className="text-text-secondary">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </span>
+                <span>Custom path...</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
