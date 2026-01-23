@@ -96,7 +96,7 @@ export function WelcomePage({
           </div>
 
           {/* InputArea in session-start mode */}
-          <div className="rounded-xl border border-border bg-bg-secondary overflow-hidden shadow-sm">
+          <div className="rounded-xl border border-border bg-bg-secondary shadow-sm">
             <InputArea
               mode="session-start"
               onSend={handleSend}
