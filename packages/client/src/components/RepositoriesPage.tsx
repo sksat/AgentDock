@@ -432,66 +432,55 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
             {sourceType === 'remote' && (
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">Repository</label>
-                {remoteProvider === 'other' ? (
-                  <>
-                    <input
-                      type="text"
-                      value={remoteRepoPath}
-                      onChange={(e) => handleRemoteInputChange(e.target.value)}
-                      placeholder="https://git.example.com/owner/repo.git"
-                      className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                      required
-                      autoFocus
-                    />
-                    <p className="text-xs text-text-secondary mt-1">
-                      Enter the full git URL for your repository
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    {/* Provider Selection */}
-                    <div className="flex gap-2 mb-3">
-                      <button
-                        type="button"
-                        onClick={() => setRemoteProvider('github')}
-                        className={clsx(
-                          'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
-                          remoteProvider === 'github'
-                            ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary'
-                            : 'bg-bg-tertiary border-transparent text-text-primary hover:border-border'
-                        )}
-                      >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                        </svg>
-                        GitHub
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRemoteProvider('other')}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors bg-bg-tertiary border-transparent text-text-primary hover:border-border"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                        </svg>
-                        Other
-                      </button>
-                    </div>
-                    {/* Repository Path */}
-                    <input
-                      type="text"
-                      value={remoteRepoPath}
-                      onChange={(e) => handleRemoteInputChange(e.target.value)}
-                      placeholder="owner/repo"
-                      className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                      required
-                      autoFocus
-                    />
-                    <p className="text-xs text-text-secondary mt-1">
-                      You can also paste a full URL (https or ssh)
-                    </p>
-                  </>
-                )}
+                {/* Provider Selection - always visible */}
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setRemoteProvider('github')}
+                    className={clsx(
+                      'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
+                      remoteProvider === 'github'
+                        ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary'
+                        : 'bg-bg-tertiary border-transparent text-text-primary hover:border-border'
+                    )}
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>
+                    GitHub
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemoteProvider('other')}
+                    className={clsx(
+                      'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
+                      remoteProvider === 'other'
+                        ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary'
+                        : 'bg-bg-tertiary border-transparent text-text-primary hover:border-border'
+                    )}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    Other
+                  </button>
+                </div>
+                {/* Repository Path */}
+                <input
+                  type="text"
+                  value={remoteRepoPath}
+                  onChange={(e) => handleRemoteInputChange(e.target.value)}
+                  placeholder={remoteProvider === 'other' ? 'https://git.example.com/owner/repo.git' : 'owner/repo'}
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                  required
+                  autoFocus
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  {remoteProvider === 'other'
+                    ? 'Enter the full git URL for your repository'
+                    : 'You can also paste a full URL (https or ssh)'
+                  }
+                </p>
               </div>
             )}
 
