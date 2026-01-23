@@ -63,6 +63,10 @@ export interface InputAreaProps {
   runnerBackend?: RunnerBackend;
   onRunnerBackendChange?: (backend: RunnerBackend) => void;
   podmanAvailable?: boolean;
+  /** Default value for the input (used to restore input on error) */
+  defaultValue?: string;
+  /** Callback when input value changes */
+  onValueChange?: (value: string) => void;
 }
 
 export function InputArea({
@@ -96,8 +100,11 @@ export function InputArea({
   runnerBackend = 'native',
   onRunnerBackendChange,
   podmanAvailable = false,
+  defaultValue,
+  onValueChange,
 }: InputAreaProps) {
-  const [value, setValue] = useState('');
+  // Use defaultValue as initial value; to reset with new defaultValue, use key prop on InputArea
+  const [value, setValue] = useState(defaultValue ?? '');
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showPermissionModeSelector, setShowPermissionModeSelector] = useState(false);
   const [showSlashCommands, setShowSlashCommands] = useState(false);
@@ -222,6 +229,7 @@ export function InputArea({
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
+    onValueChange?.(newValue);
 
     // Detect slash command at the start
     if (newValue.startsWith('/') && !newValue.includes(' ')) {
@@ -235,7 +243,7 @@ export function InputArea({
     } else {
       setShowSlashCommands(false);
     }
-  }, []);
+  }, [onValueChange]);
 
   // Handle image file processing
   const processImageFile = useCallback((file: File): Promise<ImageAttachment | null> => {

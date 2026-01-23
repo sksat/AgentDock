@@ -25,6 +25,10 @@ export interface WelcomePageProps {
   thinkingEnabled?: boolean;
   /** Callback when thinking is toggled */
   onToggleThinking?: () => void;
+  /** Default value for input (used to restore input on error) */
+  defaultValue?: string;
+  /** Callback when input value changes */
+  onValueChange?: (value: string) => void;
 }
 
 /**
@@ -47,6 +51,8 @@ export function WelcomePage({
   onPermissionModeChange,
   thinkingEnabled = false,
   onToggleThinking,
+  defaultValue,
+  onValueChange,
 }: WelcomePageProps) {
   const [selectedProject, setSelectedProject] = useState<SelectedProject | null>(null);
   const [runnerBackend, setRunnerBackend] = useState<RunnerBackend>(defaultRunnerBackend);
@@ -115,6 +121,8 @@ export function WelcomePage({
               onPermissionModeChange={onPermissionModeChange}
               thinkingEnabled={thinkingEnabled}
               onToggleThinking={onToggleThinking}
+              defaultValue={defaultValue}
+              onValueChange={onValueChange}
             />
           </div>
         </div>
