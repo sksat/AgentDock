@@ -1538,11 +1538,7 @@ export function createServer(options: ServerOptions): BridgeServer {
                           message.remoteUrl?.includes('bitbucket.org') ? 'bitbucket' : undefined,
           remoteBranch: message.remoteBranch,
         });
-        response = {
-          type: 'repository_created',
-          repository,
-        };
-        // Broadcast to all clients
+        // Broadcast to all clients (including the requester)
         broadcastToAll({
           type: 'repository_created',
           repository,
@@ -1559,10 +1555,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           remoteBranch: message.remoteBranch,
         });
         if (repository) {
-          response = {
-            type: 'repository_updated',
-            repository,
-          };
+          // Broadcast to all clients (including the requester)
           broadcastToAll({
             type: 'repository_updated',
             repository,
@@ -1579,10 +1572,7 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'delete_repository': {
         const deleted = repositoryManager.delete(message.id);
         if (deleted) {
-          response = {
-            type: 'repository_deleted',
-            id: message.id,
-          };
+          // Broadcast to all clients (including the requester)
           broadcastToAll({
             type: 'repository_deleted',
             id: message.id,
