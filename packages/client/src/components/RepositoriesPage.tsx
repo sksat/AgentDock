@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import clsx from 'clsx';
 import type { Repository, RepositoryType } from '@agent-dock/shared';
 
@@ -223,20 +223,8 @@ function RepositoryModal({ isOpen, onClose, onSubmit, initialData, isEditing }: 
   const [remoteRepoPath, setRemoteRepoPath] = useState(initialData?.remoteUrl ?? '');
   const [remoteBranch, setRemoteBranch] = useState(initialData?.remoteBranch ?? '');
 
-  // Reset form when modal opens with new data
-  useEffect(() => {
-    if (isOpen) {
-      setStep(isEditing ? 'details' : 'source');
-      setSourceType(initialData?.type === 'remote-git' ? 'remote' : 'local');
-      setName(initialData?.name ?? '');
-      setNameManuallySet(!!initialData?.name);
-      setPath(initialData?.path ?? '');
-      setRepositoryType(initialData?.type ?? 'local');
-      setRemoteProvider((initialData?.remoteProvider as ParsedRemoteUrl['provider']) ?? 'github');
-      setRemoteRepoPath(initialData?.remoteUrl ?? '');
-      setRemoteBranch(initialData?.remoteBranch ?? '');
-    }
-  }, [isOpen, initialData, isEditing]);
+  // Note: Form reset is handled via key prop on RepositoryModal
+  // Each time the modal opens, a new key causes React to remount with fresh state
 
   const handleSourceSelect = useCallback((source: SourceType) => {
     setSourceType(source);
@@ -555,14 +543,17 @@ export function RepositoriesPage({
 }: RepositoriesPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRepository, setEditingRepository] = useState<Repository | null>(null);
+  const [modalKey, setModalKey] = useState(0);
 
   const handleAdd = useCallback(() => {
     setEditingRepository(null);
+    setModalKey((k) => k + 1);
     setIsModalOpen(true);
   }, []);
 
   const handleEdit = useCallback((repository: Repository) => {
     setEditingRepository(repository);
+    setModalKey((k) => k + 1);
     setIsModalOpen(true);
   }, []);
 
@@ -635,6 +626,7 @@ export function RepositoriesPage({
       </div>
 
       <RepositoryModal
+        key={modalKey}
         isOpen={isModalOpen}
         onClose={handleModalClose}
         onSubmit={handleModalSubmit}
