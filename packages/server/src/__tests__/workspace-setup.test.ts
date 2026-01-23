@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { WorkspaceSetup, type WorkspaceResult } from '../workspace-setup';
-import type { Repository } from '@anthropic/agent-dock-shared';
+import type { Repository } from '@agent-dock/shared';
 
 // Mock child_process
 vi.mock('child_process', () => ({

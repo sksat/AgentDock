@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import type { Repository } from '@anthropic/agent-dock-shared';
+import type { Repository } from '@agent-dock/shared';
 
 export interface WorkspaceResult {
   /** The working directory path for the session */

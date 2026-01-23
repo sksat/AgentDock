@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { Repository, RepositoryType, RemoteGitProvider } from '@anthropic/agent-dock-shared';
+import type { Repository, RepositoryType, RemoteGitProvider } from '@agent-dock/shared';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
