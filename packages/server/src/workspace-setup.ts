@@ -97,10 +97,18 @@ export class WorkspaceSetup {
     }
 
     // Create worktree
-    execSync(`git worktree add "${worktreePath}" HEAD`, {
-      cwd: repository.path,
-      stdio: 'pipe',
-    });
+    try {
+      execSync(`git worktree add "${worktreePath}" HEAD`, {
+        cwd: repository.path,
+        stdio: 'pipe',
+      });
+    } catch (error) {
+      // Extract error message from git
+      const stderr = error instanceof Error && 'stderr' in error
+        ? (error as { stderr: Buffer }).stderr?.toString()
+        : '';
+      throw new Error(`Failed to create worktree: ${stderr || (error instanceof Error ? error.message : String(error))}`);
+    }
 
     return {
       workingDir: worktreePath,
@@ -141,10 +149,17 @@ export class WorkspaceSetup {
         fs.mkdirSync(reposDir, { recursive: true });
       }
 
-      execSync(`git clone "${repository.remoteUrl}" "${cacheRepoDir}"`, {
-        cwd: reposDir,
-        stdio: 'pipe',
-      });
+      try {
+        execSync(`git clone "${repository.remoteUrl}" "${cacheRepoDir}"`, {
+          cwd: reposDir,
+          stdio: 'pipe',
+        });
+      } catch (error) {
+        const stderr = error instanceof Error && 'stderr' in error
+          ? (error as { stderr: Buffer }).stderr?.toString()
+          : '';
+        throw new Error(`Failed to clone repository: ${stderr || (error instanceof Error ? error.message : String(error))}`);
+      }
     } else {
       // Fetch latest changes
       execSync('git fetch --all', {
@@ -167,10 +182,17 @@ export class WorkspaceSetup {
       fs.mkdirSync(worktreeDir, { recursive: true });
     }
 
-    execSync(`git worktree add "${worktreePath}" HEAD`, {
-      cwd: cacheRepoDir,
-      stdio: 'pipe',
-    });
+    try {
+      execSync(`git worktree add "${worktreePath}" HEAD`, {
+        cwd: cacheRepoDir,
+        stdio: 'pipe',
+      });
+    } catch (error) {
+      const stderr = error instanceof Error && 'stderr' in error
+        ? (error as { stderr: Buffer }).stderr?.toString()
+        : '';
+      throw new Error(`Failed to create worktree: ${stderr || (error instanceof Error ? error.message : String(error))}`);
+    }
 
     return {
       workingDir: worktreePath,
