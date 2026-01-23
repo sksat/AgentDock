@@ -628,3 +628,77 @@ function isAutoAllowedTool(toolName: string): boolean {
 - AgentDock 統合ツールは、AgentDock 開発者が安全性を保証するものに限定
 - 新しいツールを追加する際は、自動許可が適切かどうかを慎重に検討すること
 - 外部 MCP ツールは絶対に自動許可リストに含めない
+
+### リポジトリ登録機能
+
+よく使うディレクトリや Git リポジトリを事前登録し、セッション開始時に選択できる機能。リポジトリを選択してセッションを開始すると、複数セッションの同時並行開発が可能になる。
+
+#### リポジトリタイプ
+
+```
+Repository Type
+├── local              # ローカルディレクトリ（非 Git）
+├── local-git-worktree # ローカル Git リポジトリ（worktree 使用）
+└── remote-git         # リモート Git リポジトリ
+    ├── github         # GitHub (provider)
+    ├── gitlab         # GitLab (provider) - 将来
+    └── ...            # その他 (provider) - 将来
+```
+
+| タイプ | 説明 | セッション開始時の動作（Native） | Container モード |
+|--------|------|----------------------------------|------------------|
+| `local` | 任意のディレクトリ | tmpfs にコピー | そのまま使用（CoW） |
+| `local-git-worktree` | ローカル Git リポジトリ | `.worktree/agentdock-{sessionId}` に worktree 作成 | そのまま使用（CoW） |
+| `remote-git` | リモート Git リポジトリ | cache に clone/fetch → worktree 作成 | そのまま使用（CoW） |
+
+#### ディレクトリ構造
+
+```
+{serverRoot}/
+└── cache/                           # キャッシュディレクトリ (gitignore)
+    └── repos/                       # リポジトリキャッシュ
+        └── {repoId}/                # remote-git: リモートからclone
+            └── .worktree/           # worktree はここに作成
+                └── agentdock-{sessionId}/
+
+/tmp/agent-dock-repos/               # tmpfs ベースパス（設定可能）
+└── {sessionId}/                     # local タイプのコピー先
+```
+
+#### WebSocket メッセージ
+
+```typescript
+// クライアント → サーバー
+| { type: 'list_repositories' }
+| { type: 'create_repository'; name: string; path: string; repositoryType: RepositoryType; remoteUrl?: string; remoteBranch?: string }
+| { type: 'update_repository'; id: string; name?: string; path?: string; repositoryType?: RepositoryType }
+| { type: 'delete_repository'; id: string }
+
+// サーバー → クライアント
+| { type: 'repository_list'; repositories: Repository[] }
+| { type: 'repository_created'; repository: Repository }
+| { type: 'repository_updated'; repository: Repository }
+| { type: 'repository_deleted'; id: string }
+```
+
+#### create_session 拡張
+
+```typescript
+interface CreateSessionMessage {
+  type: 'create_session';
+  name?: string;
+  workingDir?: string;
+  runnerBackend?: RunnerBackend;
+  browserInContainer?: boolean;
+  // リポジトリ選択
+  repositoryId?: string;      // workingDir の代わりにリポジトリを指定
+  worktreeName?: string;      // Git リポジトリ用カスタム worktree 名
+}
+```
+
+#### 設定
+
+| 設定 | デフォルト | 説明 |
+|------|-----------|------|
+| `tmpfsBasePath` | `/tmp/agent-dock-repos/` | local タイプのコピー先 |
+| `cacheDir` | `{serverRoot}/cache/` | remote-git の clone 先 |
