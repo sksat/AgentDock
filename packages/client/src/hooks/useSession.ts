@@ -1284,8 +1284,11 @@ export function useSession(): UseSessionReturn {
         }
 
         case 'result':
-          setIsLoading(false);
-          setLoadingReason(null);
+          // Only update isLoading for the active session
+          if (message.sessionId === activeSessionId) {
+            setIsLoading(false);
+            setLoadingReason(null);
+          }
           break;
 
         case 'permission_request': {
@@ -1445,9 +1448,12 @@ export function useSession(): UseSessionReturn {
           break;
 
         case 'error':
-          setError(message.message);
-          setIsLoading(false);
-          setLoadingReason(null);
+          // Only update isLoading/error for the active session
+          if (message.sessionId === activeSessionId) {
+            setError(message.message);
+            setIsLoading(false);
+            setLoadingReason(null);
+          }
           break;
 
         case 'screencast_frame': {
