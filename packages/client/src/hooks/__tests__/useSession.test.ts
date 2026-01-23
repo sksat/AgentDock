@@ -1167,6 +1167,58 @@ describe('useSession', () => {
       // isLoading should be false now
       expect(result.current.isLoading).toBe(false);
     });
+
+    it('should reset isLoading when creating new empty session while another is running', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup mock send function
+      act(() => {
+        result.current.setSend(() => {});
+      });
+
+      // Setup: Create a running session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'running' },
+          ],
+        });
+      });
+
+      // Select and attach to session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          isRunning: true,
+        });
+      });
+
+      // isLoading should be true for session-1
+      expect(result.current.isLoading).toBe(true);
+
+      // Create a new empty session (via sidebar + button)
+      act(() => {
+        result.current.createSession('New Session');
+      });
+
+      // Simulate server response for new session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_created',
+          session: { id: 'session-2', name: 'New Session', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+        });
+      });
+
+      // isLoading should be reset to false for the new empty session
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.activeSessionId).toBe('session-2');
+    });
   });
 
   describe('Session-bound systemInfo state', () => {

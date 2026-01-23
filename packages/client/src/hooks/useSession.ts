@@ -1013,6 +1013,12 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
             setError(null);
+            // Reset isLoading only if creating empty session (not when sending message with new session)
+            // pendingMessage is set when creating session via sendMessage
+            if (!pendingMessage) {
+              setIsLoading(false);
+              setLoadingReason(null);
+            }
           }
           break;
         }
@@ -1543,7 +1549,7 @@ export function useSession(): UseSessionReturn {
           break;
       }
     },
-    [activeSessionId, updateSessionMessages, send, pendingSessionCreate]
+    [activeSessionId, updateSessionMessages, send, pendingSessionCreate, pendingMessage]
   );
 
   return {
