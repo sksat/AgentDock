@@ -152,6 +152,8 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     defaultRunnerBackend: 'native',
     defaultBrowserInContainer: true,
     autoAllowWebTools: false,
+    tmpfsBasePath: '/tmp/agent-dock-repos/',
+    cacheDir: '',
   });
 
   useEffect(() => {

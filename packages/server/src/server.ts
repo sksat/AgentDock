@@ -1336,7 +1336,7 @@ export function createServer(options: ServerOptions): BridgeServer {
 
   // Handle WebSocket messages
   async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<void> {
-    let response: ServerMessage;
+    let response: ServerMessage | undefined;
 
     switch (message.type) {
       case 'list_sessions': {
@@ -2661,7 +2661,10 @@ Keep it concise but comprehensive.`;
       }
     }
 
-    ws.send(JSON.stringify(response));
+    // Only send response if one was assigned (some operations use broadcast only)
+    if (response) {
+      ws.send(JSON.stringify(response));
+    }
   }
 
   return {
