@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type NavView = 'sessions' | 'usage' | 'settings';
+export type NavView = 'sessions' | 'repositories' | 'usage' | 'settings';
 
 /**
- * Hook for managing navigation between main views (Sessions, Usage, Settings).
+ * Hook for managing navigation between main views (Sessions, Repositories, Usage, Settings).
  * Handles URL-based routing and browser history integration.
  */
 // Extract view from URL pathname
@@ -11,6 +11,7 @@ function getViewFromUrl(): NavView {
   const path = window.location.pathname;
   if (path === '/settings') return 'settings';
   if (path === '/usage') return 'usage';
+  if (path === '/repositories') return 'repositories';
   // '/' or '/session/:id' -> sessions view
   return 'sessions';
 }
