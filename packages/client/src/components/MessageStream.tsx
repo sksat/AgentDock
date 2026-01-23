@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import clsx from 'clsx';
 import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
@@ -58,6 +58,80 @@ export interface TodoUpdateContent {
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
   workingDir?: string;
+}
+
+// cat -n format pattern: leading spaces, line number, tab or →, content
+const CAT_LINE_PATTERN = /^\s*(\d+)[\t→](.*)$/;
+
+interface ParsedLine {
+  lineNumber: number;
+  content: string;
+}
+
+/**
+ * Parse Read tool output in cat -n format.
+ * Returns array of parsed lines if all lines match the pattern, null otherwise.
+ */
+function parseReadOutput(output: string): ParsedLine[] | null {
+  const lines = output.split('\n');
+  const parsed: ParsedLine[] = [];
+
+  for (const line of lines) {
+    const match = line.match(CAT_LINE_PATTERN);
+    if (match) {
+      parsed.push({
+        lineNumber: parseInt(match[1], 10),
+        content: match[2],
+      });
+    } else if (line.trim() === '') {
+      // Allow empty lines (trailing newline)
+      continue;
+    } else {
+      // Non-matching line found, return null to fallback to plain display
+      return null;
+    }
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+/**
+ * Read tool output component with line number formatting
+ */
+function ReadToolOutput({ output, isError }: { output: string; isError: boolean }) {
+  const parsedLines = useMemo(() => parseReadOutput(output), [output]);
+
+  if (isError || !parsedLines) {
+    // Error or unparseable output: use plain pre display
+    return (
+      <pre className={clsx(
+        'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+        isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+      )}>
+        {output}
+      </pre>
+    );
+  }
+
+  // Line number table format
+  return (
+    <div className="bg-bg-secondary max-h-96 overflow-auto">
+      <table className="w-full text-sm font-mono">
+        <tbody>
+          {parsedLines.map(({ lineNumber, content }, index) => (
+            <tr key={index} className="hover:bg-bg-tertiary">
+              <td className="select-none text-right px-3 py-0.5 text-text-secondary w-12 border-r border-border">
+                {lineNumber}
+              </td>
+              <td className="px-3 py-0.5 text-text-primary whitespace-pre">
+                {content || ' '}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /**
@@ -493,17 +567,15 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
     // Read tool - show output only (input info is already in header)
     if (content.toolName === 'Read') {
       return (
-        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
           <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
             Output
             {!content.isComplete && <span className="text-accent-warning">...</span>}
           </div>
-          <pre className={clsx(
-            'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-          )}>
-            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-          </pre>
+          <ReadToolOutput
+            output={content.output || (content.isComplete ? '(no output)' : 'Running...')}
+            isError={content.isError ?? false}
+          />
         </div>
       );
     }

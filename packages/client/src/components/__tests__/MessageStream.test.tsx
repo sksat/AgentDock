@@ -826,3 +826,140 @@ describe('AssistantMessage Markdown rendering', () => {
     }, { timeout: 2000 });
   });
 });
+
+describe('Read tool output formatting', () => {
+  it('should parse and display cat -n format with line numbers', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: '   1\tconst foo = 1;\n   2\tconst bar = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Line numbers should be displayed separately
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+    expect(screen.getByText('const bar = 2;')).toBeInTheDocument();
+  });
+
+  it('should handle line numbers with → separator', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: '   1→const foo = 1;\n   2→const bar = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+  });
+
+  it('should fallback to pre for non-cat-n format output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: 'Some plain text output',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('Some plain text output')).toBeInTheDocument();
+    // Should use <pre> element for non-parsed output
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    expect(preElement?.textContent).toContain('Some plain text output');
+  });
+
+  it('should display error output in red with pre element', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/nonexistent' },
+          output: 'File not found',
+          isComplete: true,
+          isError: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    expect(preElement).toHaveClass('text-accent-danger');
+  });
+
+  it('should handle offset line numbers (not starting from 1)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts', offset: 100 },
+          output: ' 100\tconst x = 1;\n 101\tconst y = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByText('101')).toBeInTheDocument();
+    expect(screen.getByText('const x = 1;')).toBeInTheDocument();
+  });
+
+  it('should handle empty lines in output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: '   1\tconst x = 1;\n   2\t\n   3\tconst y = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+});
