@@ -68,13 +68,33 @@ interface ParsedLine {
   content: string;
 }
 
+// Tags added by Claude Code that should be stripped from tool output
+const CLAUDE_CODE_TAGS = [
+  'system-reminder',
+  'persisted-output',
+  // Add more tags as discovered
+];
+
+/**
+ * Strip Claude Code metadata tags from tool output.
+ * These tags are added by Claude Code for internal purposes and should not be displayed.
+ */
+function stripClaudeCodeTags(output: string): string {
+  let result = output;
+  for (const tag of CLAUDE_CODE_TAGS) {
+    // Match both self-closing and paired tags
+    result = result.replace(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'), '');
+    result = result.replace(new RegExp(`<${tag}\\s*/?>`, 'g'), '');
+  }
+  return result.trim();
+}
+
 /**
  * Parse Read tool output in cat -n format.
  * Returns array of parsed lines if all lines match the pattern, null otherwise.
  */
 function parseReadOutput(output: string): ParsedLine[] | null {
-  // Strip <system-reminder> tags and their content (added by Claude Code)
-  const cleanOutput = output.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+  const cleanOutput = stripClaudeCodeTags(output);
 
   const lines = cleanOutput.split('\n');
   const parsed: ParsedLine[] = [];

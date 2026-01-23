@@ -842,6 +842,10 @@ describe('Read tool output formatting', () => {
     actualClaudeOutput: '    63→// cat -n format pattern: leading spaces, line number, tab or →, content\n    64→const CAT_LINE_PATTERN = /^\\s*(\\d+)[\\t→](.*)$/;\n    65→',
     // Output with system-reminder tags (Claude Code adds these)
     withSystemReminder: '     1→const foo = 1;\n     2→const bar = 2;\n\n<system-reminder>\nSome reminder content here.\n</system-reminder>',
+    // Output with persisted-output tags (Bash tool uses these)
+    withPersistedOutput: '     1→echo "hello"\n     2→\n<persisted-output>\nPrevious command output...\n</persisted-output>',
+    // Output with multiple different tags
+    withMultipleTags: '     1→code\n<system-reminder>reminder</system-reminder>\n<persisted-output>output</persisted-output>',
   };
 
   it('should parse tab-separated format (standard cat -n)', () => {
@@ -980,6 +984,51 @@ describe('Read tool output formatting', () => {
     expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
     // system-reminder content should not be visible
     expect(screen.queryByText(/Some reminder content/)).not.toBeInTheDocument();
+  });
+
+  it('should strip persisted-output tags from output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.withPersistedOutput,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('echo "hello"')).toBeInTheDocument();
+    expect(screen.queryByText(/Previous command output/)).not.toBeInTheDocument();
+  });
+
+  it('should strip multiple different Claude Code tags', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.withMultipleTags,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('code')).toBeInTheDocument();
+    expect(screen.queryByText(/reminder/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/output/)).not.toBeInTheDocument();
   });
 
   it('should fallback to pre for non-cat-n format output', () => {
