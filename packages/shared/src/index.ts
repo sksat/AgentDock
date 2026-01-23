@@ -35,6 +35,32 @@ export interface Repository {
   remoteBranch?: string;
 }
 
+// ==================== Project Selection Types ====================
+
+/**
+ * Selected project for session creation.
+ * User selects a "Project", and the actual working directory is determined automatically.
+ */
+export type SelectedProject =
+  | { type: 'repository'; repositoryId: string }
+  | { type: 'recent'; path: string; repositoryId?: string }
+  | { type: 'custom'; path: string; useGitWorktree?: boolean };
+
+/**
+ * Recent project extracted from session history.
+ * Used to show recently used projects in the project selector.
+ */
+export interface RecentProject {
+  /** Working directory path */
+  path: string;
+  /** Associated repository ID (if any) */
+  repositoryId?: string;
+  /** Repository name for display (if associated with a repository) */
+  repositoryName?: string;
+  /** Last used timestamp (ISO string) */
+  lastUsed: string;
+}
+
 // ==================== AgentDock Tool Name Formatting ====================
 
 /**

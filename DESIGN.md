@@ -760,3 +760,85 @@ Step 2b: Remote → 詳細入力
 - フル URL 貼り付け: `https://github.com/owner/repo.git` → 自動で GitHub 検出
 - SSH URL: `git@github.com:owner/repo.git` → 自動で GitHub 検出
 - その他の provider: `https://git.example.com/repo.git` → "Other" として保存
+
+#### Project 選択（セッション作成 UI）
+
+セッション作成時、ユーザーは「Working Directory」ではなく「**Project**」を選択する。
+プロジェクトを選択すると、実際の作業ディレクトリ（workingDir）はバックエンドで自動決定される。
+
+**概念の整理:**
+- **Project**: ユーザーが選択する対象（リポジトリ、最近のプロジェクト、カスタムパス）
+- **Working Directory**: 実際のセッションの作業ディレクトリ（自動生成される場合あり）
+
+**SelectedProject 型:**
+
+```typescript
+type SelectedProject =
+  | { type: 'repository'; repositoryId: string }
+  | { type: 'recent'; path: string; repositoryId?: string }
+  | { type: 'custom'; path: string; useGitWorktree?: boolean };
+```
+
+**選択肢:**
+
+1. **登録済みリポジトリ** - Repositories ページで事前登録したリポジトリ
+2. **Recent Project** - 最近のセッションで使ったプロジェクト
+   - repositoryId がある場合: リポジトリ名を表示
+   - repositoryId がない場合: workingDir を表示
+3. **カスタムパス** - 直接入力
+   - Git ディレクトリの場合: local vs local-git-worktree を選択可能
+   - 非 Git ディレクトリの場合: そのまま使用
+
+**カスタムパスでの Git 判定:**
+- サーバー側でパスが Git リポジトリかどうかを検証
+- Git リポジトリの場合、UI で「Use git worktree」オプションを表示
+- 選択に応じて local（tmpfs コピー）か local-git-worktree（worktree 作成）に分岐
+
+**UI フロー (InputArea session-start mode):**
+
+```
+┌─────────────────────────────────────────────────┐
+│ [Project: ▼ Select project...              ]    │
+│                                                 │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ REPOSITORIES                                │ │
+│ │   📁 my-project (Local)                     │ │
+│ │   🔀 claude-bridge (Git Worktree)           │ │
+│ │   ☁️ anthropics/claude-code (Remote)        │ │
+│ │                                             │ │
+│ │ RECENT                                      │ │
+│ │   📁 ~/work/other-project                   │ │
+│ │   🔀 my-project (from repo)                 │ │
+│ │                                             │ │
+│ │ ─────────────────────────────────────────── │ │
+│ │   ✏️ Custom path...                         │ │
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+**カスタムパス入力時（Git リポジトリの場合）:**
+
+```
+┌─────────────────────────────────────────────────┐
+│ Path: /home/user/my-git-repo                    │
+│                                                 │
+│ ⚠️ Git repository detected                      │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ○ Copy to tmpfs (isolated, slower)          │ │
+│ │ ● Use git worktree (parallel development)   │ │
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+**RecentProject 型:**
+
+```typescript
+interface RecentProject {
+  path: string;              // workingDir
+  repositoryId?: string;     // 紐づくリポジトリ（あれば）
+  repositoryName?: string;   // リポジトリ名（表示用）
+  lastUsed: string;          // 最終使用日時
+}
+```
+
+Recent Project はセッション履歴から自動抽出される（クライアント側で計算）。
