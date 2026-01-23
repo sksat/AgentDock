@@ -570,91 +570,12 @@ export function InputArea({
           )}
         />
 
-        {/* Status bar */}
-        <div className="flex items-center justify-between px-3 py-2 border-t border-border/50 text-xs text-text-secondary">
-          {/* Left side - status info */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Attachment button (moved to left for session-start mode) */}
-            {mode === 'session-start' && (
-              <button
-                className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
-                title="Attach image"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                  />
-                </svg>
-              </button>
-            )}
-
-            {/* Permission mode */}
-            {onPermissionModeChange ? (
-              <button
-                onClick={cyclePermissionMode}
-                className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
-                aria-label={formatPermissionMode(permissionMode)}
-              >
-                <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
-                <span>{formatPermissionMode(permissionMode)}</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
-                <span>{formatPermissionMode(permissionMode)}</span>
-              </div>
-            )}
-
-            {/* Model info */}
-            <div className="relative">
-              {model ? (
-                onModelChange ? (
-                  <button
-                    onClick={() => setShowModelSelector(!showModelSelector)}
-                    className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
-                    aria-label={formatModel(model) ?? model}
-                  >
-                    <span className="text-text-secondary">&lt;/&gt;</span>
-                    <span>
-                      {formatModel(model)}
-                      {sessionId && ` (${formatSessionId(sessionId)})`}
-                    </span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-text-secondary">&lt;/&gt;</span>
-                    <span>
-                      {formatModel(model)}
-                      {sessionId && ` (${formatSessionId(sessionId)})`}
-                    </span>
-                  </div>
-                )
-              ) : onModelChange ? (
-                <button
-                  onClick={() => setShowModelSelector(!showModelSelector)}
-                  className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
-                  aria-label="Select model"
-                >
-                  <span className="text-text-secondary">&lt;/&gt;</span>
-                  <span>Select model</span>
-                </button>
-              ) : null}
-              {onModelChange && (
-                <ModelSelector
-                  currentModel={model ?? ''}
-                  onSelectModel={handleModelSelect}
-                  isOpen={showModelSelector}
-                  onClose={() => setShowModelSelector(false)}
-                />
-              )}
-            </div>
-
-            {/* Session start mode: Working directory selector (compact) */}
-            {mode === 'session-start' && (
+        {/* Status bar - two rows in session-start mode */}
+        <div className="border-t border-border/50 text-xs text-text-secondary">
+          {/* Row 1: Session-start only items (working directory, runner backend) */}
+          {mode === 'session-start' && (
+            <div className="flex items-center gap-3 px-3 pt-1.5 pb-0.5">
+              {/* Working directory selector */}
               <div className="relative">
                 <WorkingDirectorySelector
                   value={workingDir}
@@ -664,42 +585,24 @@ export function InputArea({
                   className="min-w-[180px]"
                 />
               </div>
-            )}
 
-            {/* Session start mode: Runner backend toggle (compact) */}
-            {mode === 'session-start' && podmanAvailable && (
-              <RunnerBackendToggle
-                value={runnerBackend}
-                onChange={onRunnerBackendChange ?? (() => {})}
-                podmanAvailable={podmanAvailable}
-                disabled={disabled}
-              />
-            )}
+              {/* Runner backend toggle */}
+              {podmanAvailable && (
+                <RunnerBackendToggle
+                  value={runnerBackend}
+                  onChange={onRunnerBackendChange ?? (() => {})}
+                  podmanAvailable={podmanAvailable}
+                  disabled={disabled}
+                />
+              )}
+            </div>
+          )}
 
-            {/* Token usage */}
-            {tokenUsage && (
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
-                  <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <span>{(tokenUsage.inputTokens + tokenUsage.outputTokens).toLocaleString()} tokens</span>
-              </div>
-            )}
-
-            {/* Thinking mode indicator */}
-            {thinkingEnabled && (
-              <div className="flex items-center gap-1.5 text-accent-warning">
-                <span>💭</span>
-                <span>Thinking</span>
-              </div>
-            )}
-          </div>
-
-          {/* Right side - action buttons */}
-          <div className="flex items-center gap-2">
-            {/* Attachment button (only in default mode - in session-start mode it's on the left) */}
-            {mode !== 'session-start' && (
+          {/* Row 2: Always-needed items */}
+          <div className={`flex items-center justify-between px-3 ${mode === 'session-start' ? 'pt-0.5 pb-1.5' : 'py-2'}`}>
+            {/* Left side - status info */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Attachment button */}
               <button
                 className="p-1.5 rounded hover:bg-bg-secondary transition-colors"
                 title="Attach image"
@@ -714,59 +617,143 @@ export function InputArea({
                   />
                 </svg>
               </button>
-            )}
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
 
-            {/* Slash command button */}
-            <button
-              className="p-1.5 rounded hover:bg-bg-secondary transition-colors text-lg font-light"
-              title="Slash commands"
-              onClick={handleSlashButtonClick}
-            >
-              /
-            </button>
+              {/* Permission mode */}
+              {onPermissionModeChange ? (
+                <button
+                  onClick={cyclePermissionMode}
+                  className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                  aria-label={formatPermissionMode(permissionMode)}
+                >
+                  <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
+                  <span>{formatPermissionMode(permissionMode)}</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className={getModeIconColor(permissionMode)}>{getModeIcon(permissionMode)}</span>
+                  <span>{formatPermissionMode(permissionMode)}</span>
+                </div>
+              )}
 
-            {/* Send/Stop button */}
-            {isLoading ? (
-              <button
-                onClick={onInterrupt}
-                className="p-1.5 rounded bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30 transition-colors"
-                title="Stop"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={disabled || (!value.trim() && attachedImages.length === 0) || value.trim().startsWith('/')}
-                className={clsx(
-                  'p-1.5 rounded transition-colors',
-                  (value.trim() || attachedImages.length > 0) && !disabled && !value.trim().startsWith('/')
-                    ? 'bg-accent-primary text-white hover:bg-accent-primary/90'
-                    : 'bg-bg-secondary text-text-secondary'
-                )}
-                title="Send (Enter)"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19V5m0 0l-7 7m7-7l7 7"
+              {/* Model info */}
+              <div className="relative">
+                {model ? (
+                  onModelChange ? (
+                    <button
+                      onClick={() => setShowModelSelector(!showModelSelector)}
+                      className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                      aria-label={formatModel(model) ?? model}
+                    >
+                      <span className="text-text-secondary">&lt;/&gt;</span>
+                      <span>
+                        {formatModel(model)}
+                        {sessionId && ` (${formatSessionId(sessionId)})`}
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-text-secondary">&lt;/&gt;</span>
+                      <span>
+                        {formatModel(model)}
+                        {sessionId && ` (${formatSessionId(sessionId)})`}
+                      </span>
+                    </div>
+                  )
+                ) : onModelChange ? (
+                  <button
+                    onClick={() => setShowModelSelector(!showModelSelector)}
+                    className="flex items-center gap-1.5 hover:bg-bg-tertiary px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+                    aria-label="Select model"
+                  >
+                    <span className="text-text-secondary">&lt;/&gt;</span>
+                    <span>Select model</span>
+                  </button>
+                ) : null}
+                {onModelChange && (
+                  <ModelSelector
+                    currentModel={model ?? ''}
+                    onSelectModel={handleModelSelect}
+                    isOpen={showModelSelector}
+                    onClose={() => setShowModelSelector(false)}
                   />
-                </svg>
+                )}
+              </div>
+
+              {/* Token usage */}
+              {tokenUsage && (
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
+                    <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span>{(tokenUsage.inputTokens + tokenUsage.outputTokens).toLocaleString()} tokens</span>
+                </div>
+              )}
+
+              {/* Thinking mode indicator */}
+              {thinkingEnabled && (
+                <div className="flex items-center gap-1.5 text-accent-warning">
+                  <span>💭</span>
+                  <span>Thinking</span>
+                </div>
+              )}
+            </div>
+
+            {/* Right side - action buttons */}
+            <div className="flex items-center gap-2">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {/* Slash command button */}
+              <button
+                className="p-1.5 rounded hover:bg-bg-secondary transition-colors text-lg font-light"
+                title="Slash commands"
+                onClick={handleSlashButtonClick}
+              >
+                /
               </button>
-            )}
+
+              {/* Send/Stop button */}
+              {isLoading ? (
+                <button
+                  onClick={onInterrupt}
+                  className="p-1.5 rounded bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30 transition-colors"
+                  title="Stop"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={disabled || (!value.trim() && attachedImages.length === 0) || value.trim().startsWith('/')}
+                  className={clsx(
+                    'p-1.5 rounded transition-colors',
+                    (value.trim() || attachedImages.length > 0) && !disabled && !value.trim().startsWith('/')
+                      ? 'bg-accent-primary text-white hover:bg-accent-primary/90'
+                      : 'bg-bg-secondary text-text-secondary'
+                  )}
+                  title="Send (Enter)"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 19V5m0 0l-7 7m7-7l7 7"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -105,30 +105,10 @@ export function NewSessionModal({
       >
         <h2 className="text-lg font-semibold mb-4">New Session</h2>
 
-        {/* Session Name */}
-        <div className="mb-4">
-          <label htmlFor="session-name" className="block text-sm font-medium text-text-secondary mb-1">
-            Name (optional)
-          </label>
-          <input
-            id="session-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="New Session"
-            autoFocus
-            className={clsx(
-              'w-full px-3 py-2 rounded-lg',
-              'bg-bg-primary text-text-primary',
-              'border border-border',
-              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary',
-              'placeholder:text-text-secondary/50'
-            )}
-          />
-        </div>
+        {/* === Session-specific Settings === */}
 
         {/* Working Directory */}
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-medium text-text-secondary mb-3">
             Working Directory
           </label>
@@ -366,7 +346,7 @@ export function NewSessionModal({
 
         {/* Browser in Container (only shown when Podman is selected) */}
         {podmanAvailable && runnerBackend === 'podman' && (
-          <div className="mb-6">
+          <div className="mb-4">
             <button
               type="button"
               onClick={() => setBrowserInContainer(!browserInContainer)}
@@ -392,6 +372,32 @@ export function NewSessionModal({
             </button>
           </div>
         )}
+
+        {/* === General Settings === */}
+
+        {/* Separator */}
+        <div className="border-t border-border my-4" />
+
+        {/* Session Name */}
+        <div className="mb-4">
+          <label htmlFor="session-name" className="block text-sm font-medium text-text-secondary mb-1">
+            Session Name <span className="text-text-secondary/70">(optional)</span>
+          </label>
+          <input
+            id="session-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Auto-generated from first message"
+            className={clsx(
+              'w-full px-3 py-2 rounded-lg',
+              'bg-bg-primary text-text-primary',
+              'border border-border',
+              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary',
+              'placeholder:text-text-secondary/50'
+            )}
+          />
+        </div>
 
         {/* Buttons */}
         <div className="flex justify-end gap-3">
