@@ -1393,9 +1393,11 @@ export function createServer(options: ServerOptions): BridgeServer {
             workingDir = result.workingDir;
             cleanupFn = result.cleanup;
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[Server] Failed to setup workspace for repository ${message.repositoryId}:`, errorMessage);
             response = {
               type: 'error',
-              message: `Failed to setup workspace: ${error instanceof Error ? error.message : String(error)}`,
+              message: `Failed to setup workspace: ${errorMessage}`,
             };
             break;
           }
