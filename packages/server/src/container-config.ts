@@ -134,6 +134,14 @@ export function createDefaultContainerConfig(
         options: 'rw',
       });
     }
+    // gh-cli authentication (optional)
+    if (pathExists('~/.config/gh')) {
+      defaultMounts.push({
+        source: '~/.config/gh',
+        target: '/home/node/.config/gh',
+        options: 'ro',
+      });
+    }
   }
 
   // Merge extraMounts: default mounts + user-provided mounts
