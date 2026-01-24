@@ -25,6 +25,22 @@ export interface StartSessionOptions {
   permissionMode?: ClaudePermissionMode;
   /** Runner backend to use for this session */
   runnerBackend?: RunnerBackend;
+  /**
+   * Run browser inside the container (Issue #78: same-container mode).
+   * When true, uses the browser container runner factory instead of the
+   * regular container runner factory.
+   */
+  browserInContainer?: boolean;
+  /**
+   * Bridge port for browser-in-container mode (Issue #78).
+   * Each session should use a unique port to avoid conflicts.
+   */
+  bridgePort?: number;
+  /**
+   * Container ID for exec mode (Issue #78: same-container mode).
+   * If provided, uses `podman exec` on this container instead of `podman run`.
+   */
+  containerId?: string;
   onEvent: RunnerEventHandler;
 }
 
@@ -56,6 +72,7 @@ export class RunnerManager {
   private eventHandlers: Map<string, RunnerEventHandler> = new Map();
   private runnerFactory: RunnerFactory;
   private containerRunnerFactory: RunnerFactory | null = null;
+  private browserContainerRunnerFactory: RunnerFactory | null = null;
 
   constructor(runnerFactory: RunnerFactory = defaultRunnerFactory) {
     this.runnerFactory = runnerFactory;
@@ -75,6 +92,15 @@ export class RunnerManager {
     this.containerRunnerFactory = factory;
   }
 
+  /**
+   * Set the browser container runner factory (Issue #78: same-container mode).
+   * Used when browserInContainer is true - runs Claude and browser bridge
+   * in the same container so they share localhost.
+   */
+  setBrowserContainerRunnerFactory(factory: RunnerFactory): void {
+    this.browserContainerRunnerFactory = factory;
+  }
+
   startSession(sessionId: string, prompt: string, options: StartSessionOptions): void {
     // Check if session is already running
     const existingRunner = this.runners.get(sessionId);
@@ -87,12 +113,25 @@ export class RunnerManager {
       claudePath: options.claudePath,
       mcpConfigPath: options.mcpConfigPath,
       permissionToolName: options.permissionToolName,
+      bridgePort: options.bridgePort,
+      containerId: options.containerId,
     };
 
-    // Use container factory if requested and available
-    const factory = (isContainerBackend(options.runnerBackend) && this.containerRunnerFactory)
-      ? this.containerRunnerFactory
-      : this.runnerFactory;
+    // Choose the appropriate factory based on runnerBackend and browserInContainer
+    let factory: RunnerFactory;
+    if (isContainerBackend(options.runnerBackend)) {
+      // Use browser container factory if browserInContainer is true and available
+      // Otherwise use regular container factory
+      if (options.browserInContainer && this.browserContainerRunnerFactory) {
+        factory = this.browserContainerRunnerFactory;
+      } else if (this.containerRunnerFactory) {
+        factory = this.containerRunnerFactory;
+      } else {
+        factory = this.runnerFactory;
+      }
+    } else {
+      factory = this.runnerFactory;
+    }
     const runner = factory(runnerOptions);
     this.runners.set(sessionId, runner);
     this.eventHandlers.set(sessionId, options.onEvent);

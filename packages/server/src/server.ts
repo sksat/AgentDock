@@ -4,7 +4,7 @@ import { serve, type ServerType } from '@hono/node-server';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFile, readdir } from 'node:fs';
-import { exec } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +18,7 @@ import { SessionManager } from './session-manager.js';
 import { RunnerManager, RunnerEventType, RunnerFactory, defaultRunnerFactory, ClaudePermissionMode } from './runner-manager.js';
 import { MockClaudeRunner, Scenario } from './mock-claude-runner.js';
 import { PodmanClaudeRunner } from './podman-claude-runner.js';
-import { ContainerConfig, ContainerMount, createDefaultContainerConfig } from './container-config.js';
+import { ContainerConfig, ContainerMount, createDefaultContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
 import { UsageMonitor, UsageData } from './usage-monitor.js';
 import { GitStatusProvider } from './git-status-provider.js';
 import { BrowserSessionManager } from './browser-session-manager.js';
@@ -62,16 +62,21 @@ export interface ServerOptions {
   containerExtraArgs?: string[];
 }
 
+interface GenerateMcpConfigOptions {
+  sessionId: string;
+  wsUrl: string;
+  mcpServerCommand: string;
+  mcpServerArgs: string[];
+  mcpServerCwd?: string;
+  /** Override the browser bridge URL (for same-container mode) */
+  browserBridgeUrl?: string;
+}
+
 /**
  * Generate a temporary MCP config file for a session
  */
-function generateMcpConfig(
-  sessionId: string,
-  wsUrl: string,
-  mcpServerCommand: string,
-  mcpServerArgs: string[],
-  mcpServerCwd?: string
-): string {
+function generateMcpConfig(options: GenerateMcpConfigOptions): string {
+  const { sessionId, wsUrl, mcpServerCommand, mcpServerArgs, mcpServerCwd, browserBridgeUrl } = options;
   const configDir = join(tmpdir(), 'agent-dock-mcp');
   if (!existsSync(configDir)) {
     mkdirSync(configDir, { recursive: true });
@@ -84,6 +89,8 @@ function generateMcpConfig(
     env: {
       BRIDGE_WS_URL: wsUrl,
       SESSION_ID: sessionId,
+      // If browserBridgeUrl is provided (same-container mode), use it for browser operations
+      ...(browserBridgeUrl && { BROWSER_BRIDGE_URL: browserBridgeUrl }),
     },
   };
 
@@ -577,12 +584,39 @@ export function createServer(options: ServerOptions): BridgeServer {
     };
     runnerManager.setContainerRunnerFactory(containerRunnerFactory);
     console.log('[Server] Container runner available (image: %s)', containerConfig.image);
+
+    // Set up browser container runner factory (Issue #78: same-container mode)
+    // This runs Claude and browser bridge in the same container, sharing localhost
+    if (browserContainerConfig) {
+      const browserContainerRunnerFactory: RunnerFactory = (opts) => {
+        // Create config with browser bridge enabled
+        // bridgePort is passed per-session to avoid conflicts between sessions
+        const configWithBrowser: ContainerConfig = {
+          ...browserContainerConfig!,
+          browserBridgeEnabled: true,
+          bridgePort: opts.bridgePort ?? 3002,
+        };
+        return new PodmanClaudeRunner({
+          workingDir: opts.workingDir,
+          containerConfig: configWithBrowser,
+          claudePath: opts.claudePath,
+          mcpConfigPath: opts.mcpConfigPath,
+          permissionToolName: opts.permissionToolName,
+        });
+      };
+      runnerManager.setBrowserContainerRunnerFactory(browserContainerRunnerFactory);
+      console.log('[Server] Browser container runner available (image: %s)', browserContainerConfig.image);
+    }
   }
   const browserSessionManager = new BrowserSessionManager();
   const containerBrowserSessionManager = new ContainerBrowserSessionManager();
 
   // Map session ID to PersistentContainerManager (for sessions using container browser)
   const sessionContainerManagers = new Map<string, PersistentContainerManager>();
+
+  // Map session ID to container ID (Issue #78: same-container mode)
+  // Used when browserInContainer is true to track the persistent container
+  const sessionContainerIds = new Map<string, string>();
 
   let httpServer: HttpServer | null = null;
   let wss: WebSocketServer | null = null;
@@ -911,8 +945,148 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
+  /**
+   * Start a persistent container for same-container mode (Issue #78).
+   * Returns the container ID if successful.
+   */
+  async function startPersistentContainer(
+    sessionId: string,
+    workingDir: string,
+    bridgePort: number
+  ): Promise<string> {
+    // Check if container already exists
+    const existingId = sessionContainerIds.get(sessionId);
+    if (existingId) {
+      return existingId;
+    }
+
+    if (!browserContainerConfig) {
+      throw new Error('Browser container config not available');
+    }
+
+    // Build container config with browser bridge enabled
+    const configWithBrowser: ContainerConfig = {
+      ...browserContainerConfig,
+      browserBridgeEnabled: true,
+      bridgePort,
+    };
+
+    // Build environment variables
+    const gitEnv = getGitEnvVars();
+
+    // Build podman args
+    const podmanRunArgs = buildPodmanArgs(configWithBrowser, workingDir, gitEnv);
+
+    // Modify args for detached mode: replace 'run -it' with 'run -d'
+    const detachedArgs = podmanRunArgs.map((arg, i) => {
+      if (arg === '-it') return '-d';
+      return arg;
+    });
+
+    // Add sleep infinity to keep container running
+    detachedArgs.push('sleep', 'infinity');
+
+    console.log(`[Server] Starting persistent container: podman ${detachedArgs.join(' ')}`);
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn('podman', detachedArgs);
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', async (code) => {
+        if (code === 0) {
+          const rawId = stdout.trim();
+          // Validate container ID format
+          if (!rawId || rawId.length < 12 || !/^[a-f0-9]+$/i.test(rawId)) {
+            reject(new Error(`Invalid container ID received: ${rawId}`));
+            return;
+          }
+          const containerId = rawId.substring(0, 12);
+          sessionContainerIds.set(sessionId, containerId);
+          console.log(`[Server] Persistent container started: ${containerId}`);
+
+          // Wait for browser bridge to be ready
+          try {
+            await waitForBrowserBridge(bridgePort);
+            console.log(`[Server] Browser bridge ready on port ${bridgePort}`);
+          } catch (error) {
+            console.warn(`[Server] Browser bridge not responding on port ${bridgePort}, continuing anyway`);
+          }
+
+          resolve(containerId);
+        } else {
+          reject(new Error(`Failed to start container: ${stderr}`));
+        }
+      });
+
+      proc.on('error', reject);
+    });
+  }
+
+  /**
+   * Wait for browser bridge to be ready on the given port.
+   */
+  async function waitForBrowserBridge(port: number, timeoutMs = 10000): Promise<void> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const ws = new WebSocket(`ws://localhost:${port}`);
+          const timeout = setTimeout(() => {
+            ws.close();
+            reject(new Error('Connection timeout'));
+          }, 1000);
+          ws.on('open', () => {
+            clearTimeout(timeout);
+            ws.close();
+            resolve();
+          });
+          ws.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+        return; // Connection successful
+      } catch {
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    throw new Error(`Browser bridge not ready after ${timeoutMs}ms`);
+  }
+
+  /**
+   * Stop a persistent container for a session.
+   */
+  async function stopPersistentContainer(sessionId: string): Promise<void> {
+    const containerId = sessionContainerIds.get(sessionId);
+    if (!containerId) {
+      return;
+    }
+
+    sessionContainerIds.delete(sessionId);
+
+    return new Promise((resolve) => {
+      const proc = spawn('podman', ['stop', '-t', '2', containerId]);
+      proc.on('close', () => {
+        console.log(`[Server] Persistent container stopped: ${containerId}`);
+        resolve();
+      });
+      proc.on('error', () => {
+        resolve(); // Ignore errors during cleanup
+      });
+    });
+  }
+
   // Process queued input after current execution completes
-  function processQueuedInput(sessionId: string, content: string): void {
+  async function processQueuedInput(sessionId: string, content: string): Promise<void> {
     const session = sessionManager.getSession(sessionId);
     if (!session) {
       console.log(`[Server] processQueuedInput: session ${sessionId} not found`);
@@ -924,20 +1098,6 @@ export function createServer(options: ServerOptions): BridgeServer {
 
     // Start Claude CLI with MCP permission handling
     try {
-      // Generate MCP config for this session (unless using mock)
-      let mcpConfigPath: string | undefined;
-      let permissionToolName: string | undefined;
-      if (!useMock) {
-        mcpConfigPath = generateMcpConfig(
-          sessionId,
-          wsUrl,
-          mcpServerCommand,
-          mcpServerArgs,
-          mcpServerCwd
-        );
-        permissionToolName = 'mcp__bridge__permission_prompt';
-      }
-
       // Use global default for thinking
       const thinkingEnabled = settingsManager.get('defaultThinkingEnabled');
 
@@ -951,7 +1111,46 @@ export function createServer(options: ServerOptions): BridgeServer {
       const permissionMode = modeMap[sessionMode];
 
       // Use session's runner backend if set, otherwise use global default
-      const runnerBackend = sessionRunnerBackends.get(sessionId) ?? settingsManager.get('defaultRunnerBackend');
+      // Check in-memory map first, then session from DB, then global default
+      const runnerBackend = sessionRunnerBackends.get(sessionId) ?? session.runnerBackend ?? settingsManager.get('defaultRunnerBackend');
+
+      // Get browserInContainer setting for this session (Issue #78)
+      const browserInContainer = shouldUseContainerBrowser(sessionId);
+
+      // Generate unique bridge port for this session (3100-4099 range)
+      // Using a hash of the session ID to get consistent port per session
+      const bridgePort = browserInContainer
+        ? 3100 + (sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+        : undefined;
+
+      // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
+      // This allows Claude and browser bridge to share localhost
+      let containerId: string | undefined;
+      if (browserInContainer && bridgePort && runnerBackend === 'podman') {
+        try {
+          containerId = await startPersistentContainer(sessionId, session.workingDir, bridgePort);
+          console.log(`[Server] Using persistent container ${containerId} for session ${sessionId}`);
+        } catch (error) {
+          console.error(`[Server] Failed to start persistent container:`, error);
+          // Fall back to non-persistent mode
+        }
+      }
+
+      // Generate MCP config for this session (unless using mock)
+      let mcpConfigPath: string | undefined;
+      let permissionToolName: string | undefined;
+      if (!useMock) {
+        mcpConfigPath = generateMcpConfig({
+          sessionId,
+          wsUrl,
+          mcpServerCommand,
+          mcpServerArgs,
+          mcpServerCwd,
+          // In same-container mode, the browser bridge runs inside the container
+          browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+        });
+        permissionToolName = 'mcp__bridge__permission_prompt';
+      }
 
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
@@ -961,6 +1160,9 @@ export function createServer(options: ServerOptions): BridgeServer {
         thinkingEnabled,
         permissionMode,
         runnerBackend,
+        browserInContainer,
+        bridgePort,
+        containerId,
         onEvent: (sid, eventType, data) => {
           handleRunnerEvent(sid, eventType, data);
           // Clean up MCP config on exit
@@ -1213,7 +1415,12 @@ export function createServer(options: ServerOptions): BridgeServer {
           }
           console.log(`[Server] Processing queued input for session ${sessionId}: ${nextInput}`);
           // Start new turn with queued input (use setTimeout to ensure runner is cleaned up)
-          setTimeout(() => processQueuedInput(sessionId, nextInput), 0);
+          setTimeout(() => {
+            processQueuedInput(sessionId, nextInput).catch((error) => {
+              console.error(`[Server] Error processing queued input:`, error);
+              updateAndBroadcastStatus(sessionId, 'idle');
+            });
+          }, 0);
         } else {
           updateAndBroadcastStatus(sessionId, 'idle');
         }
@@ -1527,6 +1734,9 @@ export function createServer(options: ServerOptions): BridgeServer {
             await containerManager.stopContainer();
             sessionContainerManagers.delete(message.sessionId);
           }
+
+          // Clean up persistent container (Issue #78: same-container mode)
+          await stopPersistentContainer(message.sessionId);
 
           // Unregister from git status tracking
           gitStatusProvider.unregisterSession(message.sessionId);
@@ -1864,20 +2074,6 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // Start Claude CLI with MCP permission handling
         try {
-          // Generate MCP config for this session (unless using mock)
-          let mcpConfigPath: string | undefined;
-          let permissionToolName: string | undefined;
-          if (!useMock) {
-            mcpConfigPath = generateMcpConfig(
-              message.sessionId,
-              wsUrl,
-              mcpServerCommand,
-              mcpServerArgs,
-              mcpServerCwd
-            );
-            permissionToolName = 'mcp__bridge__permission_prompt';
-          }
-
           // Use message's thinkingEnabled if specified, otherwise use global default
           const thinkingEnabled = message.thinkingEnabled ?? settingsManager.get('defaultThinkingEnabled');
 
@@ -1891,7 +2087,32 @@ export function createServer(options: ServerOptions): BridgeServer {
           const permissionMode = modeMap[sessionMode];
 
           // Use session's runner backend if set, otherwise use global default
-          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
+          // Check in-memory map first, then session from DB, then global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? session.runnerBackend ?? settingsManager.get('defaultRunnerBackend');
+
+          // Get browserInContainer setting for this session (Issue #78)
+          const browserInContainer = shouldUseContainerBrowser(message.sessionId);
+
+          // Generate unique bridge port for this session (3100-4099 range)
+          const bridgePort = browserInContainer
+            ? 3100 + (message.sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+            : undefined;
+
+          // Generate MCP config for this session (unless using mock)
+          let mcpConfigPath: string | undefined;
+          let permissionToolName: string | undefined;
+          if (!useMock) {
+            mcpConfigPath = generateMcpConfig({
+              sessionId: message.sessionId,
+              wsUrl,
+              mcpServerCommand,
+              mcpServerArgs,
+              mcpServerCwd,
+              // In same-container mode, the browser bridge runs inside the container
+              browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+            });
+            permissionToolName = 'mcp__bridge__permission_prompt';
+          }
 
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
@@ -1902,6 +2123,8 @@ export function createServer(options: ServerOptions): BridgeServer {
             thinkingEnabled,
             permissionMode,
             runnerBackend,
+            browserInContainer,
+            bridgePort,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -2227,19 +2450,6 @@ Keep it concise but comprehensive.`;
 
         // Start Claude CLI with the summary request
         try {
-          let mcpConfigPath: string | undefined;
-          let permissionToolName: string | undefined;
-          if (!useMock) {
-            mcpConfigPath = generateMcpConfig(
-              message.sessionId,
-              wsUrl,
-              mcpServerCommand,
-              mcpServerArgs,
-              mcpServerCwd
-            );
-            permissionToolName = 'mcp__bridge__permission_prompt';
-          }
-
           // Map session permission mode to Claude permission mode
           const modeMap: Record<string, ClaudePermissionMode> = {
             'ask': 'default',
@@ -2250,7 +2460,31 @@ Keep it concise but comprehensive.`;
           const permissionMode = modeMap[sessionMode];
 
           // Use session's runner backend if set, otherwise use global default
-          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? settingsManager.get('defaultRunnerBackend');
+          // Check in-memory map first, then session from DB, then global default
+          const runnerBackend = sessionRunnerBackends.get(message.sessionId) ?? session.runnerBackend ?? settingsManager.get('defaultRunnerBackend');
+
+          // Get browserInContainer setting for this session (Issue #78)
+          const browserInContainer = shouldUseContainerBrowser(message.sessionId);
+
+          // Generate unique bridge port for this session (3100-4099 range)
+          const bridgePort = browserInContainer
+            ? 3100 + (message.sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+            : undefined;
+
+          let mcpConfigPath: string | undefined;
+          let permissionToolName: string | undefined;
+          if (!useMock) {
+            mcpConfigPath = generateMcpConfig({
+              sessionId: message.sessionId,
+              wsUrl,
+              mcpServerCommand,
+              mcpServerArgs,
+              mcpServerCwd,
+              // In same-container mode, the browser bridge runs inside the container
+              browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+            });
+            permissionToolName = 'mcp__bridge__permission_prompt';
+          }
 
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,
@@ -2259,6 +2493,8 @@ Keep it concise but comprehensive.`;
             permissionToolName,
             permissionMode,
             runnerBackend,
+            browserInContainer,
+            bridgePort,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {

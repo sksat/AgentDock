@@ -87,9 +87,12 @@ export function buildPodmanArgs(
   }
 
   // Browser bridge environment variables (Issue #78: same-container mode)
+  // With --network=host, the bridge listens directly on bridgePort on the host.
+  // Each session should use a unique bridgePort to avoid conflicts.
   if (config.browserBridgeEnabled) {
+    const bridgePort = config.bridgePort ?? 3002;
     args.push('-e', 'BROWSER_BRIDGE_ENABLED=true');
-    args.push('-e', `BRIDGE_PORT=${config.bridgePort ?? 3002}`);
+    args.push('-e', `BRIDGE_PORT=${bridgePort}`);
   }
 
   // Extra arguments

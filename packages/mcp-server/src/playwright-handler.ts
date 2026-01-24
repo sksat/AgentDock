@@ -1,9 +1,18 @@
 import WebSocket from 'ws';
 import type { BrowserCommand, BrowserCommandMessage, ServerMessage } from '@agent-dock/shared';
 
+// Type for direct bridge response (from container-browser-bridge)
+interface DirectBridgeResponse {
+  type: 'command_result';
+  requestId: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
 /**
  * Handles Playwright browser commands by sending them to the AgentDock server
- * and waiting for the result.
+ * or directly to the container browser bridge (Issue #78: same-container mode).
  */
 export class PlaywrightHandler {
   private ws: WebSocket | null = null;
@@ -12,10 +21,17 @@ export class PlaywrightHandler {
     reject: (error: Error) => void;
   }> = new Map();
   private requestCounter = 0;
+  private browserLaunched = false;
 
+  /**
+   * @param bridgeUrl WebSocket URL to connect to
+   * @param sessionId Session ID for AgentDock server mode
+   * @param directBridgeMode If true, connect directly to container bridge (Issue #78)
+   */
   constructor(
     private bridgeUrl: string,
-    private sessionId: string
+    private sessionId: string,
+    private directBridgeMode = false
   ) {}
 
   async connect(): Promise<void> {
@@ -28,15 +44,20 @@ export class PlaywrightHandler {
 
       this.ws.on('message', (data) => {
         try {
-          const message = JSON.parse(data.toString()) as ServerMessage;
-          if (message.type === 'browser_command_result') {
-            const pending = this.pendingCommands.get(message.requestId);
+          const rawMessage = JSON.parse(data.toString());
+
+          // Handle both message formats:
+          // - AgentDock server: { type: 'browser_command_result', ... }
+          // - Direct bridge: { type: 'command_result', ... }
+          const responseType = this.directBridgeMode ? 'command_result' : 'browser_command_result';
+          if (rawMessage.type === responseType) {
+            const pending = this.pendingCommands.get(rawMessage.requestId);
             if (pending) {
-              this.pendingCommands.delete(message.requestId);
-              if (message.success) {
-                pending.resolve(message.result);
+              this.pendingCommands.delete(rawMessage.requestId);
+              if (rawMessage.success) {
+                pending.resolve(rawMessage.result);
               } else {
-                pending.reject(new Error(message.error || 'Browser command failed'));
+                pending.reject(new Error(rawMessage.error || 'Browser command failed'));
               }
             }
           }
@@ -56,6 +77,7 @@ export class PlaywrightHandler {
         }
         this.pendingCommands.clear();
         this.ws = null;
+        this.browserLaunched = false;
       });
     });
   }
@@ -79,13 +101,31 @@ export class PlaywrightHandler {
       await this.connect();
     }
 
+    // In direct bridge mode, we need to launch the browser first
+    if (this.directBridgeMode && !this.browserLaunched) {
+      await this.launchBrowserDirect();
+    }
+
     const requestId = `playwright-${++this.requestCounter}`;
-    const message: BrowserCommandMessage = {
-      type: 'browser_command',
-      sessionId: this.sessionId,
-      requestId,
-      command,
-    };
+
+    // Build message based on mode
+    let message: unknown;
+    if (this.directBridgeMode) {
+      // Direct bridge format: { requestId, command: { type, ...params } }
+      // Convert from BrowserCommand format to BridgeCommand format
+      message = {
+        requestId,
+        command: this.convertToBridgeCommand(command),
+      };
+    } else {
+      // AgentDock server format: { type: 'browser_command', sessionId, requestId, command }
+      message = {
+        type: 'browser_command',
+        sessionId: this.sessionId,
+        requestId,
+        command,
+      } as BrowserCommandMessage;
+    }
 
     return new Promise((resolve, reject) => {
       this.pendingCommands.set(requestId, { resolve, reject });
@@ -264,5 +304,75 @@ export class PlaywrightHandler {
 
   async close(): Promise<unknown> {
     return this.executeCommand({ name: 'browser_close' });
+  }
+
+  // ==================== Direct Bridge Mode Helpers (Issue #78) ====================
+
+  /**
+   * Launch browser in direct bridge mode
+   */
+  private async launchBrowserDirect(): Promise<void> {
+    const requestId = `launch-${++this.requestCounter}`;
+    const message = {
+      requestId,
+      command: { type: 'launch_browser' },
+    };
+
+    return new Promise((resolve, reject) => {
+      this.pendingCommands.set(requestId, {
+        resolve: () => {
+          this.browserLaunched = true;
+          resolve();
+        },
+        reject,
+      });
+
+      this.ws!.send(JSON.stringify(message), (error) => {
+        if (error) {
+          this.pendingCommands.delete(requestId);
+          reject(error);
+        }
+      });
+    });
+  }
+
+  /**
+   * Convert BrowserCommand (AgentDock format) to BridgeCommand (container bridge format)
+   * The main difference is command.name vs command.type
+   */
+  private convertToBridgeCommand(command: BrowserCommand): unknown {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cmd = command as any;
+    const name = cmd.name as string;
+
+    // Map command names to types
+    const typeMap: Record<string, string> = {
+      'browser_navigate': 'browser_navigate',
+      'browser_navigate_back': 'browser_navigate_back',
+      'browser_click': 'browser_click',
+      'browser_hover': 'browser_hover',
+      'browser_type': 'browser_type',
+      'browser_press_key': 'browser_press_key',
+      'browser_select_option': 'browser_select_option',
+      'browser_drag': 'browser_drag',
+      'browser_fill_form': 'browser_fill_form',
+      'browser_snapshot': 'browser_snapshot',
+      'browser_take_screenshot': 'browser_screenshot',
+      'browser_console_messages': 'browser_console_messages',
+      'browser_network_requests': 'browser_network_requests',
+      'browser_evaluate': 'browser_evaluate',
+      'browser_wait_for': 'browser_wait_for',
+      'browser_handle_dialog': 'browser_handle_dialog',
+      'browser_resize': 'browser_resize',
+      'browser_tabs': 'browser_tabs',
+      'browser_close': 'close_browser',
+    };
+
+    const type = typeMap[name] || name;
+
+    // Build the bridge command with type instead of name
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { name: _, ...rest } = cmd;
+    return { type, ...rest };
   }
 }
