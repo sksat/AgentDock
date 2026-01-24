@@ -2108,6 +2108,28 @@ export function createServer(options: ServerOptions): BridgeServer {
             ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
+          // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
+          // This allows Claude and browser bridge to share localhost
+          let containerId: string | undefined;
+          if (browserInContainer && bridgePort && runnerBackend === 'podman') {
+            try {
+              // Use PersistentContainerManager for container lifecycle and screencast support
+              const containerManager = await getOrCreateContainerManager(message.sessionId, session.workingDir);
+              containerId = await containerManager.startContainer();
+              console.log(`[Server] Using persistent container ${containerId} for session ${message.sessionId}`);
+
+              // Set up screencast connection via containerBrowserSessionManager
+              if (!containerBrowserSessionManager.hasSession(message.sessionId)) {
+                await containerManager.startBrowserBridge();
+                await containerBrowserSessionManager.createSession(message.sessionId, containerManager);
+                console.log(`[Server] Container browser session created for ${message.sessionId}`);
+              }
+            } catch (error) {
+              console.error(`[Server] Failed to start persistent container:`, error);
+              // Fall back to non-persistent mode
+            }
+          }
+
           // Generate MCP config for this session (unless using mock)
           let mcpConfigPath: string | undefined;
           let permissionToolName: string | undefined;
@@ -2135,6 +2157,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             runnerBackend,
             browserInContainer,
             bridgePort,
+            containerId,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -2482,6 +2505,28 @@ Keep it concise but comprehensive.`;
             ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
+          // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
+          // This allows Claude and browser bridge to share localhost
+          let containerId: string | undefined;
+          if (browserInContainer && bridgePort && runnerBackend === 'podman') {
+            try {
+              // Use PersistentContainerManager for container lifecycle and screencast support
+              const containerManager = await getOrCreateContainerManager(message.sessionId, session.workingDir);
+              containerId = await containerManager.startContainer();
+              console.log(`[Server] Using persistent container ${containerId} for session ${message.sessionId}`);
+
+              // Set up screencast connection via containerBrowserSessionManager
+              if (!containerBrowserSessionManager.hasSession(message.sessionId)) {
+                await containerManager.startBrowserBridge();
+                await containerBrowserSessionManager.createSession(message.sessionId, containerManager);
+                console.log(`[Server] Container browser session created for ${message.sessionId}`);
+              }
+            } catch (error) {
+              console.error(`[Server] Failed to start persistent container:`, error);
+              // Fall back to non-persistent mode
+            }
+          }
+
           let mcpConfigPath: string | undefined;
           let permissionToolName: string | undefined;
           if (!useMock) {
@@ -2506,6 +2551,7 @@ Keep it concise but comprehensive.`;
             runnerBackend,
             browserInContainer,
             bridgePort,
+            containerId,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {
