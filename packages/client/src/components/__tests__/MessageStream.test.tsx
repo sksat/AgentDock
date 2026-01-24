@@ -1129,8 +1129,8 @@ drwxr-xr-x  1 root root    22 Jul 20  2021 ..
 
     // Truncated info should be in Output header
     expect(screen.getByText(/truncated \(34\.6KB\)/)).toBeInTheDocument();
-    // Home path should be simplified to ~/ in the file path line
-    expect(screen.getByText(/~\/.claude\/projects\/test\/tool-results\/output\.txt/)).toBeInTheDocument();
+    // Only filename should be visible, full path on hover
+    expect(screen.getByText('output.txt')).toBeInTheDocument();
     expect(screen.getByText('Preview (first 2KB):')).toBeInTheDocument();
     // Preview content should be visible
     expect(screen.getByText(/total 4905180/)).toBeInTheDocument();

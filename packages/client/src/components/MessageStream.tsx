@@ -699,8 +699,8 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               )}
             </div>
             {persistedData && (
-              <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-tertiary font-mono truncate" title={persistedData.filePath}>
-                Full output: {simplifyHomePath(persistedData.filePath)}
+              <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-tertiary font-mono" title={simplifyHomePath(persistedData.filePath)}>
+                Full output: <span className="underline decoration-dotted cursor-help">{persistedData.filePath.split('/').pop()}</span>
               </div>
             )}
             {content.output ? (
