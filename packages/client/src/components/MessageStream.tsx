@@ -58,6 +58,7 @@ export interface TodoUpdateContent {
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
   workingDir?: string;
+  sessionId?: string;
 }
 
 // cat -n format pattern: leading spaces, line number, tab or →, content
@@ -391,11 +392,12 @@ export interface MessageStreamHandle {
   scrollToTodoUpdate: (toolUseId: string) => void;
 }
 
-export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir }, ref) {
+export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir, sessionId }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const prevMessagesLengthRef = useRef(messages.length);
+  const prevSessionIdRef = useRef(sessionId);
 
   // Scroll to bottom when messages change and autoScroll is enabled
   useEffect(() => {
@@ -403,6 +405,18 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [messages, autoScroll]);
+
+  // Reset autoScroll and scroll to bottom when session changes
+  useEffect(() => {
+    if (sessionId !== prevSessionIdRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoScroll(true);
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+      prevSessionIdRef.current = sessionId;
+    }
+  }, [sessionId]);
 
   // Reset autoScroll when user posts (detect new user message)
   useEffect(() => {
@@ -416,15 +430,24 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     prevMessagesLengthRef.current = messages.length;
   }, [messages]);
 
-  // Handle scroll events
+  // Handle scroll events with improved threshold
+  // Only disable auto-scroll when user scrolls up more than 50% of viewport
+  // Re-enable auto-scroll when user scrolls back to within 10px of bottom
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    // Consider "at bottom" if within 10px threshold
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const threshold = clientHeight * 0.5; // 50% of viewport height
 
-    setAutoScroll(isAtBottom);
+    if (distanceFromBottom < 10) {
+      // At bottom (within 10px) - enable auto-scroll
+      setAutoScroll(true);
+    } else if (distanceFromBottom > threshold) {
+      // Scrolled up more than 50% of viewport - disable auto-scroll
+      setAutoScroll(false);
+    }
+    // In between (10px to 50%): maintain current autoScroll state
   }, []);
 
   // Expose scrollToTodoUpdate to parent components via ref
