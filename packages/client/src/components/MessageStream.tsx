@@ -413,6 +413,21 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     }
   }, []);
 
+  // Reset autoScroll when user posts (detect new user message)
+  // This effect must run BEFORE the ResizeObserver effect so autoScrollRef is updated
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.type === 'user') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAutoScroll(true);
+        autoScrollRef.current = true; // Update ref immediately for ResizeObserver
+        scrollToBottom();
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, scrollToBottom]);
+
   // Use ResizeObserver + MutationObserver to scroll to bottom when content changes
   // ResizeObserver catches element resizing, MutationObserver catches DOM changes (streaming text)
   useEffect(() => {
@@ -457,19 +472,6 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       prevSessionIdRef.current = sessionId;
     }
   }, [sessionId, scrollToBottom]);
-
-  // Reset autoScroll when user posts (detect new user message)
-  useEffect(() => {
-    if (messages.length > prevMessagesLengthRef.current) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage?.type === 'user') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setAutoScroll(true);
-        autoScrollRef.current = true; // Update ref immediately for ResizeObserver
-      }
-    }
-    prevMessagesLengthRef.current = messages.length;
-  }, [messages]);
 
   // Handle scroll events with improved threshold
   // Only disable auto-scroll when user scrolls up more than 50% of viewport
