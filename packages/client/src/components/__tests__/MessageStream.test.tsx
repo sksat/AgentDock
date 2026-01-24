@@ -1100,7 +1100,7 @@ describe('Read tool output formatting', () => {
 });
 
 describe('Bash tool output formatting', () => {
-  it('should display persisted-output with structured header and simplified path', () => {
+  it('should display persisted-output with truncated info in header', () => {
     // Real Claude Code persisted-output format when output is too large
     const persistedOutput = `<persisted-output>
 Output too large (34.6KB). Full output saved to: /home/sksat/.claude/projects/test/tool-results/output.txt
@@ -1127,9 +1127,9 @@ drwxr-xr-x  1 root root    22 Jul 20  2021 ..
     ];
     render(<MessageStream messages={messages} />);
 
-    // Meta info should be displayed in structured format
-    expect(screen.getByText(/Output too large \(34\.6KB\)/)).toBeInTheDocument();
-    // Home path should be simplified to ~/
+    // Truncated info should be in Output header
+    expect(screen.getByText(/truncated \(34\.6KB\)/)).toBeInTheDocument();
+    // Home path should be simplified to ~/ in the file path line
     expect(screen.getByText(/~\/.claude\/projects\/test\/tool-results\/output\.txt/)).toBeInTheDocument();
     expect(screen.getByText('Preview (first 2KB):')).toBeInTheDocument();
     // Preview content should be visible

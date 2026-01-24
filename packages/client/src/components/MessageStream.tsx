@@ -278,20 +278,10 @@ function BashToolOutput({ output, isError }: { output: string; isError: boolean 
     );
   }
 
-  // Persisted output with structured header
+  // Persisted output - show preview header and content only (meta info is in parent header)
   if (persistedData) {
     return (
       <div className="bg-bg-secondary max-h-96 overflow-auto">
-        {/* Meta info header */}
-        <div className="px-3 py-2 border-b border-border bg-bg-tertiary/50 text-xs text-text-secondary">
-          <div className="flex items-center gap-2">
-            <span className="text-accent-warning">⚠</span>
-            <span>Output too large ({persistedData.sizeInfo})</span>
-          </div>
-          <div className="mt-1 font-mono text-text-tertiary truncate" title={persistedData.filePath}>
-            Full output: {simplifyHomePath(persistedData.filePath)}
-          </div>
-        </div>
         {/* Preview header */}
         <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-secondary font-medium">
           {persistedData.previewHeader}
@@ -679,6 +669,14 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
     // Bash tool - show command and output
     if (content.toolName === 'Bash') {
       const command = inp.command as string || '';
+      // Check for truncated output (persisted-output tag)
+      const { cleanOutput, tags } = content.output
+        ? parseClaudeCodeTags(content.output)
+        : { cleanOutput: '', tags: new Map() };
+      const persistedData = tags.has('persisted-output')
+        ? parsePersistedOutput(cleanOutput)
+        : null;
+
       return (
         <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
           <div className="border-b border-border">
@@ -693,7 +691,18 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
             <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
               Output
               {!content.isComplete && <span className="text-accent-warning">...</span>}
+              {persistedData && (
+                <span className="text-accent-warning flex items-center gap-1">
+                  <span>⚠</span>
+                  <span>truncated ({persistedData.sizeInfo})</span>
+                </span>
+              )}
             </div>
+            {persistedData && (
+              <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-tertiary font-mono truncate" title={persistedData.filePath}>
+                Full output: {simplifyHomePath(persistedData.filePath)}
+              </div>
+            )}
             {content.output ? (
               <BashToolOutput
                 output={content.output}
