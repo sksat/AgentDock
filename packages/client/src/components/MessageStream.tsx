@@ -156,10 +156,7 @@ function parseReadOutput(output: string): ParsedLine[] | null {
   return parsed.length > 0 ? parsed : null;
 }
 
-// Pattern for persisted-output header (truncated output info from Claude Code)
-// Format: "Output too large (XXX). Full output saved to: /path/to/file"
-const PERSISTED_OUTPUT_HEADER_PATTERN = /^Output too large \([^)]+\)\. Full output saved to: (.+)$/;
-// Format: "Preview (first XXX):"
+// Pattern for "Preview (first XXX):" header in persisted-output
 const PREVIEW_HEADER_PATTERN = /^Preview \([^)]+\):$/;
 
 interface ParsedPersistedOutput {
