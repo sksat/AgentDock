@@ -1,10 +1,17 @@
-# AgentDock
+<p align="center">
+  <img src="assets/agentdock-banner.svg" alt="AgentDock" width="400" />
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/Node.js-24.x-green.svg)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-24.x-green.svg" alt="Node.js" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue.svg" alt="TypeScript" /></a>
+</p>
 
-A Web UI for operating Claude Code and other AI agent CLIs from your browser. Manage multiple sessions, stream outputs in real-time, and control tool permissions through an intuitive interface.
+<p align="center">
+  A Web UI for operating Claude Code and other AI agent CLIs from your browser.<br />
+  Manage multiple sessions, stream outputs in real-time, and control tool permissions.
+</p>
 
 ## Features
 
