@@ -1134,3 +1134,6 @@ export interface RepositoryDeletedMessage {
   type: 'repository_deleted';
   id: string;
 }
+
+// ==================== Model Limits ====================
+export * from './model-limits.js';

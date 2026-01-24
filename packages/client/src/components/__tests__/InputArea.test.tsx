@@ -560,3 +560,113 @@ describe('InputArea session-start mode', () => {
     });
   });
 });
+
+describe('Context window occupancy', () => {
+  it('should display occupancy rate with pie chart when model and tokenUsage are provided', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+      />
+    );
+
+    // 50,000 / 200,000 = 25%
+    expect(screen.getByText('25% used')).toBeInTheDocument();
+  });
+
+  it('should display occupancy rate with custom contextWindow prop', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+        contextWindow={100000}
+      />
+    );
+
+    // 50,000 / 100,000 = 50%
+    expect(screen.getByText('50% used')).toBeInTheDocument();
+  });
+
+  it('should fallback to token display when model is unknown', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="unknown-model"
+        tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+      />
+    );
+
+    // Fallback: shows input tokens only
+    expect(screen.getByText('50,000 in')).toBeInTheDocument();
+    expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
+  });
+
+  it('should not crash when tokenUsage is undefined', () => {
+    expect(() =>
+      render(
+        <InputArea
+          onSend={() => {}}
+          model="claude-sonnet-4-5-20250929"
+        />
+      )
+    ).not.toThrow();
+  });
+
+  it('should not crash when model is undefined but tokenUsage exists', () => {
+    expect(() =>
+      render(
+        <InputArea
+          onSend={() => {}}
+          tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+        />
+      )
+    ).not.toThrow();
+  });
+
+  it('should show warning color when occupancy is between 60% and 80%', () => {
+    const { container } = render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 140000, outputTokens: 1000 }}
+      />
+    );
+
+    // 140,000 / 200,000 = 70%
+    expect(screen.getByText('70% used')).toBeInTheDocument();
+    // Check for warning color class
+    const usageElement = container.querySelector('.text-accent-warning');
+    expect(usageElement).toBeInTheDocument();
+  });
+
+  it('should show danger color when occupancy is 80% or more', () => {
+    const { container } = render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 180000, outputTokens: 1000 }}
+      />
+    );
+
+    // 180,000 / 200,000 = 90%
+    expect(screen.getByText('90% used')).toBeInTheDocument();
+    // Check for danger color class
+    const usageElement = container.querySelector('.text-accent-danger');
+    expect(usageElement).toBeInTheDocument();
+  });
+
+  it('should cap occupancy at 100%', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 250000, outputTokens: 1000 }}
+      />
+    );
+
+    // Should cap at 100%, not show 125%
+    expect(screen.getByText('100% used')).toBeInTheDocument();
+  });
+});

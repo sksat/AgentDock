@@ -7,6 +7,7 @@ import { ProjectSelector } from './ProjectSelector';
 import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
 import type { RunnerBackend, Repository, SelectedProject, RecentProject } from '@agent-dock/shared';
+import { calculateOccupancyRate, getContextWindow } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -40,6 +41,8 @@ export interface InputAreaProps {
   onModelChange?: (model: string) => void;
   sessionId?: string;
   tokenUsage?: TokenUsage;
+  /** Context window size for the current model (from CLI result or fallback) */
+  contextWindow?: number;
   thinkingEnabled?: boolean;
   onToggleThinking?: () => void;
   // Slash command callbacks
@@ -82,6 +85,7 @@ export function InputArea({
   onModelChange,
   sessionId,
   tokenUsage,
+  contextWindow: contextWindowProp,
   thinkingEnabled = false,
   onToggleThinking,
   onNewSession,
@@ -694,16 +698,71 @@ export function InputArea({
                 )}
               </div>
 
-              {/* Token usage */}
-              {tokenUsage && (
-                <div className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
-                    <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  <span>{(tokenUsage.inputTokens + tokenUsage.outputTokens).toLocaleString()} tokens</span>
-                </div>
-              )}
+              {/* Context window usage */}
+              {tokenUsage && (() => {
+                const effectiveContextWindow = contextWindowProp ?? getContextWindow(model);
+                const occupancy = calculateOccupancyRate(
+                  tokenUsage.inputTokens,
+                  model,
+                  contextWindowProp
+                );
+
+                if (occupancy === null || effectiveContextWindow === null) {
+                  // Fallback to simple token display if we can't calculate occupancy
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
+                        <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      <span>{tokenUsage.inputTokens.toLocaleString()} in</span>
+                    </div>
+                  );
+                }
+
+                // Pie chart style occupancy display
+                const colorClass = occupancy >= 80
+                  ? 'text-accent-danger'
+                  : occupancy >= 60
+                    ? 'text-accent-warning'
+                    : 'text-text-secondary';
+
+                // SVG pie chart calculation
+                // Circle: radius=6, center at (8,8), viewBox 16x16
+                const radius = 6;
+                const circumference = 2 * Math.PI * radius;
+                const fillLength = (occupancy / 100) * circumference;
+                const emptyLength = circumference - fillLength;
+
+                return (
+                  <div className={clsx("flex items-center gap-1.5", colorClass)}>
+                    <svg className="w-4 h-4 -rotate-90" viewBox="0 0 16 16">
+                      {/* Background circle */}
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        opacity="0.2"
+                      />
+                      {/* Filled portion */}
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeDasharray={`${fillLength} ${emptyLength}`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span>{Math.round(occupancy)}% used</span>
+                  </div>
+                );
+              })()}
 
               {/* Thinking mode indicator */}
               {thinkingEnabled && (
