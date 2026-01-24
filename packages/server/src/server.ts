@@ -1117,10 +1117,10 @@ export function createServer(options: ServerOptions): BridgeServer {
       // Get browserInContainer setting for this session (Issue #78)
       const browserInContainer = shouldUseContainerBrowser(sessionId);
 
-      // Generate unique bridge port for this session (3100-4099 range)
-      // Using a hash of the session ID to get consistent port per session
+      // Generate unique bridge port for this session (3002-4001 range)
+      // Must match the port calculation in getOrCreateContainerManager
       const bridgePort = browserInContainer
-        ? 3100 + (sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+        ? 3002 + (sessionId.charCodeAt(0) % 1000)
         : undefined;
 
       // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
@@ -1128,8 +1128,17 @@ export function createServer(options: ServerOptions): BridgeServer {
       let containerId: string | undefined;
       if (browserInContainer && bridgePort && runnerBackend === 'podman') {
         try {
-          containerId = await startPersistentContainer(sessionId, session.workingDir, bridgePort);
+          // Use PersistentContainerManager for container lifecycle and screencast support
+          const containerManager = await getOrCreateContainerManager(sessionId, session.workingDir);
+          containerId = await containerManager.startContainer();
           console.log(`[Server] Using persistent container ${containerId} for session ${sessionId}`);
+
+          // Set up screencast connection via containerBrowserSessionManager
+          if (!containerBrowserSessionManager.hasSession(sessionId)) {
+            await containerManager.startBrowserBridge();
+            await containerBrowserSessionManager.createSession(sessionId, containerManager);
+            console.log(`[Server] Container browser session created for ${sessionId}`);
+          }
         } catch (error) {
           console.error(`[Server] Failed to start persistent container:`, error);
           // Fall back to non-persistent mode
