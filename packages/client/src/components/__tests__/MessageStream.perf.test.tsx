@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 import {
@@ -7,6 +7,9 @@ import {
   measureRenderTime,
   createIndexedMessage,
 } from '../../test-utils/performance';
+
+// Mock scrollIntoView which is not implemented in jsdom
+Element.prototype.scrollIntoView = vi.fn();
 
 // Global render counter for tracking MessageItem renders
 const renderCounter = createRenderCounter();

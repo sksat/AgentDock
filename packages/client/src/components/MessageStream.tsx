@@ -58,6 +58,7 @@ export interface TodoUpdateContent {
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
   workingDir?: string;
+  sessionId?: string;
 }
 
 // cat -n format pattern: leading spaces, line number, tab or →, content
@@ -391,40 +392,105 @@ export interface MessageStreamHandle {
   scrollToTodoUpdate: (toolUseId: string) => void;
 }
 
-export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir }, ref) {
+export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir, sessionId }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const prevMessagesLengthRef = useRef(messages.length);
+  const prevSessionIdRef = useRef(sessionId);
 
-  // Scroll to bottom when messages change and autoScroll is enabled
+  // Ref to track autoScroll state for use in ResizeObserver callback
+  const autoScrollRef = useRef(autoScroll);
   useEffect(() => {
-    if (autoScroll && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
+
+  // Scroll to bottom using the anchor element
+  const scrollToBottom = useCallback(() => {
+    if (scrollAnchorRef.current) {
+      scrollAnchorRef.current.scrollIntoView({ behavior: 'instant', block: 'end' });
     }
-  }, [messages, autoScroll]);
+  }, []);
 
   // Reset autoScroll when user posts (detect new user message)
+  // This effect must run BEFORE the ResizeObserver effect so autoScrollRef is updated
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.type === 'user') {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setAutoScroll(true);
+        autoScrollRef.current = true; // Update ref immediately for ResizeObserver
+        scrollToBottom();
       }
     }
     prevMessagesLengthRef.current = messages.length;
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  // Handle scroll events
+  // Use ResizeObserver + MutationObserver to scroll to bottom when content changes
+  // ResizeObserver catches element resizing, MutationObserver catches DOM changes (streaming text)
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+
+    const handleContentChange = () => {
+      if (autoScrollRef.current) {
+        scrollToBottom();
+      }
+    };
+
+    // ResizeObserver for element size changes
+    const resizeObserver = new ResizeObserver(handleContentChange);
+    Array.from(container.children).forEach(child => resizeObserver.observe(child));
+
+    // MutationObserver for DOM changes (text content, new nodes)
+    const mutationObserver = new MutationObserver(handleContentChange);
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    // Immediate scroll
+    handleContentChange();
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [messages, scrollToBottom]); // Only re-run when messages change
+
+  // Reset autoScroll and scroll to bottom when session changes
+  useEffect(() => {
+    if (sessionId !== prevSessionIdRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoScroll(true);
+      autoScrollRef.current = true; // Update ref immediately for ResizeObserver
+      scrollToBottom();
+      prevSessionIdRef.current = sessionId;
+    }
+  }, [sessionId, scrollToBottom]);
+
+  // Handle scroll events with improved threshold
+  // Only disable auto-scroll when user scrolls up more than 50% of viewport
+  // Re-enable auto-scroll when user scrolls back to within 10px of bottom
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    // Consider "at bottom" if within 10px threshold
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const threshold = clientHeight * 0.5; // 50% of viewport height
 
-    setAutoScroll(isAtBottom);
+    if (distanceFromBottom < 10) {
+      // At bottom (within 10px) - enable auto-scroll
+      setAutoScroll(true);
+    } else if (distanceFromBottom > threshold) {
+      // Scrolled up more than 50% of viewport - disable auto-scroll
+      setAutoScroll(false);
+    }
+    // In between (10px to 50%): maintain current autoScroll state
   }, []);
 
   // Expose scrollToTodoUpdate to parent components via ref
@@ -444,6 +510,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     },
   }), []);
 
+  // Handle scroll to bottom button click
+  const handleScrollToBottomClick = useCallback(() => {
+    setAutoScroll(true);
+    autoScrollRef.current = true;
+    scrollToBottom();
+  }, [scrollToBottom]);
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
@@ -453,20 +526,49 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
   }
 
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className="flex-1 overflow-y-auto p-4 space-y-4"
-    >
-      {messages.map((message, index) => (
-        <MessageItem
-          key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
-          message={message}
-          thinkingExpanded={thinkingExpanded}
-          onToggleThinking={toggleThinkingExpanded}
-          workingDir={workingDir}
-        />
-      ))}
+    <div className="relative flex-1 flex flex-col overflow-hidden">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
+        {messages.map((message, index) => (
+          <MessageItem
+            key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
+            message={message}
+            thinkingExpanded={thinkingExpanded}
+            onToggleThinking={toggleThinkingExpanded}
+            workingDir={workingDir}
+          />
+        ))}
+        {/* Scroll anchor for reliable scrollIntoView */}
+        <div ref={scrollAnchorRef} aria-hidden="true" />
+      </div>
+
+      {/* Scroll to bottom button - appears when auto-scroll is disabled */}
+      {!autoScroll && (
+        <button
+          onClick={handleScrollToBottomClick}
+          className="absolute bottom-4 right-4 bg-bg-tertiary hover:bg-bg-secondary text-text-primary rounded-full p-2 shadow-lg transition-colors border border-border-primary"
+          aria-label="Scroll to bottom"
+          title="Scroll to bottom"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="7 13 12 18 17 13" />
+            <polyline points="7 6 12 11 17 6" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 });

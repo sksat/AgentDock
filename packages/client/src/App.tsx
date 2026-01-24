@@ -453,7 +453,7 @@ function App() {
             <main className="flex-1 flex flex-col overflow-hidden">
               {/* Messages, Machine, or Browser view based on sessionView */}
               {sessionView === 'stream' && (
-                <MessageStream ref={messageStreamRef} messages={messages} workingDir={session?.workingDir} />
+                <MessageStream ref={messageStreamRef} messages={messages} workingDir={session?.workingDir} sessionId={activeSessionId ?? undefined} />
               )}
               {sessionView === 'machine' && (
                 <MachineView
