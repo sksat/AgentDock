@@ -4,7 +4,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 
 // Mock scrollIntoView which is not implemented in jsdom
-Element.prototype.scrollIntoView = vi.fn();
+// Simulate scrolling by setting parent's scrollTop to scrollHeight
+Element.prototype.scrollIntoView = vi.fn(function(this: Element) {
+  // Find the scrollable parent (the one with overflow-y-auto)
+  let parent = this.parentElement;
+  while (parent) {
+    if (parent.classList?.contains('overflow-y-auto')) {
+      // Simulate scrolling to bottom by setting scrollTop to scrollHeight
+      const scrollHeight = Object.getOwnPropertyDescriptor(parent, 'scrollHeight')?.value ?? 0;
+      parent.scrollTop = scrollHeight;
+      break;
+    }
+    parent = parent.parentElement;
+  }
+});
 
 describe('MessageStream', () => {
   it('should render empty state when no messages', () => {
