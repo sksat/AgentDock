@@ -465,6 +465,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       if (lastMessage?.type === 'user') {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setAutoScroll(true);
+        autoScrollRef.current = true; // Update ref immediately for ResizeObserver
       }
     }
     prevMessagesLengthRef.current = messages.length;
