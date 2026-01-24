@@ -1927,7 +1927,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           break;
         }
 
-        runnerManager.stopSession(message.sessionId);
+        // Send Escape key to interrupt Claude Code's current operation
+        // This preserves the session (unlike stopSession which kills the process)
+        runnerManager.interruptSession(message.sessionId);
         updateAndBroadcastStatus(message.sessionId, 'idle');
         response = {
           type: 'result',

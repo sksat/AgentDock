@@ -363,6 +363,31 @@ describe('ClaudeRunner', () => {
     });
   });
 
+  describe('interrupt (PTY mode)', () => {
+    it('should send Escape key to PTY', async () => {
+      const runner = new ClaudeRunner();
+      runner.start('test');
+
+      runner.interrupt();
+
+      expect(mockPty.pty.write).toHaveBeenCalledWith('\x1b');
+    });
+
+    it('should not kill the PTY process', async () => {
+      const runner = new ClaudeRunner();
+      runner.start('test');
+
+      runner.interrupt();
+
+      expect(mockPty.pty.kill).not.toHaveBeenCalled();
+    });
+
+    it('should not throw if process not started', async () => {
+      const runner = new ClaudeRunner();
+      expect(() => runner.interrupt()).not.toThrow();
+    });
+  });
+
   describe('sendInput (PTY mode)', () => {
     it('should write to PTY', async () => {
       const runner = new ClaudeRunner();

@@ -13,6 +13,7 @@ vi.mock('../claude-runner.js', () => ({
       emit: emitter.emit.bind(emitter),
       start: vi.fn(),
       stop: vi.fn(),
+      interrupt: vi.fn(),
       sendInput: vi.fn(),
       isRunning: false,
     };

@@ -195,6 +195,13 @@ export class MockClaudeRunner extends EventEmitter {
     this.emit('exit', { code: null, signal: 'SIGTERM' });
   }
 
+  interrupt(): void {
+    // Interrupt current operation without terminating the runner
+    // This simulates pressing Escape in Claude Code
+    this.stopped = true;
+    // Note: Unlike stop(), we don't emit 'exit' because the process is still alive
+  }
+
   sendInput(input: string): void {
     this.lastInput = input;
     if (this.inputResolver) {

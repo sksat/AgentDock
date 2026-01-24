@@ -309,6 +309,14 @@ export class ClaudeRunner extends EventEmitter {
     }
   }
 
+  interrupt(): void {
+    if (this.ptyProcess) {
+      // Send Escape key to interrupt Claude Code's current operation
+      // This mimics pressing Esc in the terminal
+      this.ptyProcess.write('\x1b');
+    }
+  }
+
   sendInput(input: string): void {
     if (this.ptyProcess) {
       console.log(`[ClaudeRunner] Sending input to PTY: ${input}`);
