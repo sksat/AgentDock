@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.AGENTDOCK_PORT || '3001'
   const clientPort = env.AGENTDOCK_CLIENT_PORT ? parseInt(env.AGENTDOCK_CLIENT_PORT, 10) : 5173
   const noWatch = env.AGENTDOCK_NO_WATCH === 'true'
+  const hostExpose = env.AGENTDOCK_HOST_EXPOSE === 'true'
 
   return {
     plugins: [react(), tailwindcss()],
@@ -16,6 +17,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_STABLE_MODE': JSON.stringify(noWatch),
     },
     server: {
+      host: hostExpose ? true : undefined,
       port: clientPort,
       hmr: noWatch ? false : undefined,
       proxy: {

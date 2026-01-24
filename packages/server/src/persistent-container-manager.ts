@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
 import { WebSocket } from 'ws';
 import type { ContainerConfig } from './container-config.js';
-import { buildPodmanArgs } from './container-config.js';
+import { buildPodmanArgs, getGitEnvVars } from './container-config.js';
 
 export interface PersistentContainerOptions {
   containerConfig: ContainerConfig;
@@ -64,7 +64,9 @@ export class PersistentContainerManager extends EventEmitter {
     const { containerConfig, workingDir } = this.options;
 
     // Build podman args for a detached container that stays running
-    const baseArgs = buildPodmanArgs(containerConfig, workingDir, {});
+    // Include Git environment variables from host config
+    const gitEnv = getGitEnvVars();
+    const baseArgs = buildPodmanArgs(containerConfig, workingDir, gitEnv);
 
     // Replace 'run' with 'run -d' for detached mode and add sleep infinity
     // baseArgs structure: ['run', '-it', '--rm', '--userns=keep-id', ...mounts..., image]

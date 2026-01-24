@@ -14,7 +14,7 @@ import {
   ClaudePermissionMode,
   StartOptions,
 } from './claude-runner.js';
-import { ContainerConfig, buildPodmanArgs } from './container-config.js';
+import { ContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
 
 // Permission mode cycle order (Shift+Tab cycles through these)
 const PERMISSION_MODE_ORDER: ClaudePermissionMode[] = ['default', 'acceptEdits', 'plan'];
@@ -145,7 +145,10 @@ export class PodmanClaudeRunner extends EventEmitter {
    */
   start(prompt: string, options: StartOptions = {}): void {
     // Build environment variables to pass to container
-    const env: Record<string, string> = {};
+    // Include Git environment variables from host config
+    const env: Record<string, string> = {
+      ...getGitEnvVars(),
+    };
 
     // Pass ANTHROPIC_API_KEY to container
     if (process.env.ANTHROPIC_API_KEY) {

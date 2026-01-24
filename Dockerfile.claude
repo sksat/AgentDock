@@ -9,7 +9,21 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     ca-certificates \
+    # Native module build dependencies (Issue #79)
+    build-essential \
+    # Useful CLI tools
+    jq \
+    ripgrep \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Allow node user to use sudo without password
+RUN echo "node ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/node
+
+# Install uv (Python package manager, can also install Python)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/ \
+    && mv /root/.local/bin/uvx /usr/local/bin/
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -21,12 +35,20 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Enable pnpm via corepack
+RUN corepack enable pnpm
+
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
+
+# Copy entrypoint script (Issue #80)
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Use existing node user (UID 1000) for rootless compatibility
 USER node
 WORKDIR /workspace
 
-# Default command
+# Entrypoint handles Git configuration
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/bin/bash"]
