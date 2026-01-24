@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import clsx from 'clsx';
 import { Streamdown } from 'streamdown';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
@@ -58,6 +58,240 @@ export interface TodoUpdateContent {
 export interface MessageStreamProps {
   messages: MessageStreamItem[];
   workingDir?: string;
+}
+
+// cat -n format pattern: leading spaces, line number, tab or →, content
+const CAT_LINE_PATTERN = /^\s*(\d+)[\t→](.*)$/;
+
+interface ParsedLine {
+  lineNumber: number;
+  content: string;
+}
+
+// Claude Code metadata tags configuration
+// - stripContent: true = remove entire tag including content (e.g., internal reminders)
+// - stripContent: false = remove only markup, keep content visible (e.g., truncated output info)
+const CLAUDE_CODE_TAG_CONFIG = {
+  'system-reminder': { stripContent: true },
+  'persisted-output': { stripContent: false },
+} as const;
+
+type ClaudeCodeTag = keyof typeof CLAUDE_CODE_TAG_CONFIG;
+
+interface ParsedTags {
+  /** Output with tags processed according to config */
+  cleanOutput: string;
+  /** Map of tag name to array of tag contents */
+  tags: Map<ClaudeCodeTag, string[]>;
+}
+
+/**
+ * Parse Claude Code metadata tags from tool output.
+ * - Tags with stripContent=true: entire tag (markup + content) is removed
+ * - Tags with stripContent=false: only markup is removed, content remains visible
+ * Returns the processed output and a map of extracted tag contents.
+ */
+function parseClaudeCodeTags(output: string): ParsedTags {
+  const tags = new Map<ClaudeCodeTag, string[]>();
+  let cleanOutput = output;
+
+  for (const [tag, config] of Object.entries(CLAUDE_CODE_TAG_CONFIG)) {
+    const contents: string[] = [];
+    const pairedRegex = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g');
+
+    // Extract contents
+    let match;
+    while ((match = pairedRegex.exec(output)) !== null) {
+      contents.push(match[1]);
+    }
+
+    if (config.stripContent) {
+      // Remove entire tag (markup + content)
+      cleanOutput = cleanOutput.replace(pairedRegex, '');
+    } else {
+      // Remove only markup, keep content
+      cleanOutput = cleanOutput.replace(new RegExp(`<${tag}>`, 'g'), '');
+      cleanOutput = cleanOutput.replace(new RegExp(`</${tag}>`, 'g'), '');
+    }
+
+    // Remove self-closing tags
+    cleanOutput = cleanOutput.replace(new RegExp(`<${tag}\\s*/?>`, 'g'), '');
+
+    if (contents.length > 0) {
+      tags.set(tag as ClaudeCodeTag, contents);
+    }
+  }
+
+  return { cleanOutput: cleanOutput.trim(), tags };
+}
+
+/**
+ * Parse Read tool output in cat -n format.
+ * Returns array of parsed lines if all lines match the pattern, null otherwise.
+ * Note: Claude Code metadata tags are stripped - the Read tool doesn't need them.
+ */
+function parseReadOutput(output: string): ParsedLine[] | null {
+  // Strip Claude Code metadata tags - Read tool displays file content only
+  const { cleanOutput } = parseClaudeCodeTags(output);
+
+  const lines = cleanOutput.split('\n');
+  const parsed: ParsedLine[] = [];
+
+  for (const line of lines) {
+    const match = line.match(CAT_LINE_PATTERN);
+    if (match) {
+      parsed.push({
+        lineNumber: parseInt(match[1], 10),
+        content: match[2],
+      });
+    } else if (line.trim() === '') {
+      // Allow empty lines (trailing newline)
+      continue;
+    } else {
+      // Non-matching line found, return null to fallback to plain display
+      return null;
+    }
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+// Pattern for "Preview (first XXX):" header in persisted-output
+const PREVIEW_HEADER_PATTERN = /^Preview \([^)]+\):$/;
+
+interface ParsedPersistedOutput {
+  /** Size info like "34.6KB" */
+  sizeInfo: string;
+  /** Path to full output file */
+  filePath: string;
+  /** Preview header like "Preview (first 2KB):" */
+  previewHeader: string;
+  /** Actual preview content */
+  previewContent: string;
+}
+
+/**
+ * Parse persisted-output format from Claude Code.
+ * Returns structured data if it matches the expected format, null otherwise.
+ */
+function parsePersistedOutput(output: string): ParsedPersistedOutput | null {
+  const lines = output.trim().split('\n');
+  if (lines.length < 3) return null;
+
+  // First line: "Output too large (34.6KB). Full output saved to: /path"
+  const headerMatch = lines[0].match(/^Output too large \(([^)]+)\)\. Full output saved to: (.+)$/);
+  if (!headerMatch) return null;
+
+  // Find "Preview (first XXX):" line
+  let previewLineIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (PREVIEW_HEADER_PATTERN.test(lines[i])) {
+      previewLineIndex = i;
+      break;
+    }
+  }
+
+  if (previewLineIndex === -1) return null;
+
+  return {
+    sizeInfo: headerMatch[1],
+    filePath: headerMatch[2],
+    previewHeader: lines[previewLineIndex],
+    previewContent: lines.slice(previewLineIndex + 1).join('\n'),
+  };
+}
+
+/**
+ * Read tool output component with line number formatting
+ */
+function ReadToolOutput({ output, isError }: { output: string; isError: boolean }) {
+  const parsedLines = useMemo(() => parseReadOutput(output), [output]);
+  // Always strip Claude Code tags for fallback display to avoid exposing internal metadata
+  const cleanOutput = useMemo(() => parseClaudeCodeTags(output).cleanOutput, [output]);
+
+  if (isError || !parsedLines) {
+    // Error or unparseable output: use plain pre display with tags stripped
+    return (
+      <pre className={clsx(
+        'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
+        isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
+      )}>
+        {cleanOutput}
+      </pre>
+    );
+  }
+
+  // Line number table format
+  return (
+    <div className="bg-bg-secondary max-h-96 overflow-auto">
+      <table className="w-full text-sm font-mono">
+        <tbody>
+          {parsedLines.map(({ lineNumber, content }, index) => (
+            <tr key={index} className="hover:bg-bg-tertiary">
+              <td className="select-none text-right px-3 py-0.5 text-text-secondary w-12 border-r border-border">
+                {lineNumber}
+              </td>
+              <td className="px-3 py-0.5 text-text-primary whitespace-pre">
+                {content || ' '}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Simplify file path by replacing home directory with ~/
+ */
+function simplifyHomePath(filePath: string): string {
+  // Match common home directory patterns
+  const homeMatch = filePath.match(/^(\/home\/[^/]+|\/Users\/[^/]+)/);
+  if (homeMatch) {
+    return filePath.replace(homeMatch[1], '~');
+  }
+  return filePath;
+}
+
+/**
+ * Bash tool output component with persisted-output formatting
+ */
+function BashToolOutput({ output, isError }: { output: string; isError: boolean }) {
+  const { cleanOutput, tags } = useMemo(() => parseClaudeCodeTags(output), [output]);
+
+  // Check if this is a persisted-output format (truncated large output)
+  const persistedData = useMemo(() => {
+    // Only parse if there was a persisted-output tag
+    if (tags.has('persisted-output')) {
+      return parsePersistedOutput(cleanOutput);
+    }
+    return null;
+  }, [cleanOutput, tags]);
+
+  if (isError) {
+    return (
+      <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-accent-danger/10 text-accent-danger">
+        {cleanOutput}
+      </pre>
+    );
+  }
+
+  // Persisted output - show preview content only (all meta info is in parent header)
+  if (persistedData) {
+    return (
+      <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+        {persistedData.previewContent}
+      </pre>
+    );
+  }
+
+  // Normal output
+  return (
+    <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+      {cleanOutput}
+    </pre>
+  );
 }
 
 /**
@@ -427,6 +661,14 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
     // Bash tool - show command and output
     if (content.toolName === 'Bash') {
       const command = inp.command as string || '';
+      // Check for truncated output (persisted-output tag)
+      const { cleanOutput, tags } = content.output
+        ? parseClaudeCodeTags(content.output)
+        : { cleanOutput: '', tags: new Map() };
+      const persistedData = tags.has('persisted-output')
+        ? parsePersistedOutput(cleanOutput)
+        : null;
+
       return (
         <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
           <div className="border-b border-border">
@@ -441,13 +683,29 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
             <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
               Output
               {!content.isComplete && <span className="text-accent-warning">...</span>}
+              {persistedData && (
+                <>
+                  <span className="text-text-tertiary">{persistedData.previewHeader}</span>
+                  <span className="text-accent-warning flex items-center gap-1">
+                    <span>⚠</span>
+                    <span>truncated ({persistedData.sizeInfo})</span>
+                  </span>
+                  <span className="ml-auto text-text-tertiary font-mono" title={simplifyHomePath(persistedData.filePath)}>
+                    Full: <span className="underline decoration-dotted cursor-help">{persistedData.filePath.split('/').pop()}</span>
+                  </span>
+                </>
+              )}
             </div>
-            <pre className={clsx(
-              'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-              content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-            )}>
-              {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-            </pre>
+            {content.output ? (
+              <BashToolOutput
+                output={content.output}
+                isError={content.isError ?? false}
+              />
+            ) : (
+              <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+                {content.isComplete ? '(no output)' : 'Running...'}
+              </pre>
+            )}
           </div>
         </div>
       );
@@ -493,17 +751,15 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
     // Read tool - show output only (input info is already in header)
     if (content.toolName === 'Read') {
       return (
-        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
+        <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden">
           <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
             Output
             {!content.isComplete && <span className="text-accent-warning">...</span>}
           </div>
-          <pre className={clsx(
-            'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-            content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-          )}>
-            {content.output || (content.isComplete ? '(no output)' : 'Running...')}
-          </pre>
+          <ReadToolOutput
+            output={content.output || (content.isComplete ? '(no output)' : 'Running...')}
+            isError={content.isError ?? false}
+          />
         </div>
       );
     }

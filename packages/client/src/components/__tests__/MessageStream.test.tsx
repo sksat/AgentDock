@@ -826,3 +826,381 @@ describe('AssistantMessage Markdown rendering', () => {
     }, { timeout: 2000 });
   });
 });
+
+describe('Read tool output formatting', () => {
+  // Real Claude Code Read tool output format samples for regression testing
+  const REAL_OUTPUT_SAMPLES = {
+    // Format: "   1\tcode" (spaces + line number + tab + content)
+    tabSeparator: '     1\tconst foo = 1;\n     2\tconst bar = 2;',
+    // Format: "   1→code" (spaces + line number + → + content)
+    arrowSeparator: '     1→const foo = 1;\n     2→const bar = 2;',
+    // Format without leading spaces: "1→code"
+    noLeadingSpaces: '1→const foo = 1;\n2→const bar = 2;',
+    // Format with minimal spaces: " 46→code"
+    minimalSpaces: '    46→source "$HOME/.cargo/env"\n    47→',
+    // Actual Claude Code Read tool output (copy-pasted from real usage)
+    actualClaudeOutput: '    63→// cat -n format pattern: leading spaces, line number, tab or →, content\n    64→const CAT_LINE_PATTERN = /^\\s*(\\d+)[\\t→](.*)$/;\n    65→',
+    // Output with system-reminder tags (Claude Code adds these)
+    withSystemReminder: '     1→const foo = 1;\n     2→const bar = 2;\n\n<system-reminder>\nSome reminder content here.\n</system-reminder>',
+    // Output with only system-reminder (typical for Read tool)
+    withOnlySystemReminder: '     1→code\n<system-reminder>reminder</system-reminder>',
+  };
+
+  it('should parse tab-separated format (standard cat -n)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.tabSeparator,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Line numbers should be displayed separately
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+    expect(screen.getByText('const bar = 2;')).toBeInTheDocument();
+  });
+
+  it('should parse arrow-separated format with leading spaces', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.arrowSeparator,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+  });
+
+  it('should parse arrow-separated format without leading spaces', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.noLeadingSpaces,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+  });
+
+  it('should parse real bashrc output format', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '~/.bashrc' },
+          output: REAL_OUTPUT_SAMPLES.minimalSpaces,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('46')).toBeInTheDocument();
+    expect(screen.getByText('47')).toBeInTheDocument();
+    expect(screen.getByText('source "$HOME/.cargo/env"')).toBeInTheDocument();
+  });
+
+  it('should parse actual Claude Code Read tool output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/MessageStream.tsx', offset: 63, limit: 3 },
+          output: REAL_OUTPUT_SAMPLES.actualClaudeOutput,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('63')).toBeInTheDocument();
+    expect(screen.getByText('64')).toBeInTheDocument();
+    expect(screen.getByText('65')).toBeInTheDocument();
+    // Content should be separated from line numbers
+    expect(screen.getByText(/cat -n format pattern/)).toBeInTheDocument();
+  });
+
+  it('should strip system-reminder tags from output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.withSystemReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Line numbers should be parsed correctly
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('const foo = 1;')).toBeInTheDocument();
+    // system-reminder content should not be visible
+    expect(screen.queryByText(/Some reminder content/)).not.toBeInTheDocument();
+  });
+
+  it('should parse cat-n with system-reminder stripped (typical Read tool output)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: REAL_OUTPUT_SAMPLES.withOnlySystemReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // Line numbers should be parsed correctly
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('code')).toBeInTheDocument();
+    // system-reminder content should not be visible
+    expect(screen.queryByText(/reminder/)).not.toBeInTheDocument();
+  });
+
+  it('should fallback to pre for non-cat-n format output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: 'Some plain text output',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('Some plain text output')).toBeInTheDocument();
+    // Should use <pre> element for non-parsed output
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    expect(preElement?.textContent).toContain('Some plain text output');
+  });
+
+  it('should strip system-reminder tags from non-cat-n format output (fallback)', () => {
+    // When output is not cat -n format but contains system-reminder tags,
+    // the fallback <pre> display should still strip the internal metadata
+    const outputWithReminder = `Some plain text output
+<system-reminder>
+Internal reminder that should not be shown to user
+</system-reminder>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: outputWithReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Should use <pre> element for non-parsed output
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    // Plain text should be visible
+    expect(preElement?.textContent).toContain('Some plain text output');
+    // system-reminder content should be stripped
+    expect(preElement?.textContent).not.toContain('Internal reminder');
+    expect(preElement?.textContent).not.toContain('system-reminder');
+  });
+
+  it('should display error output in red with pre element', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/nonexistent' },
+          output: 'File not found',
+          isComplete: true,
+          isError: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    expect(preElement).toHaveClass('text-accent-danger');
+  });
+
+  it('should handle offset line numbers (not starting from 1)', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts', offset: 100 },
+          output: ' 100\tconst x = 1;\n 101\tconst y = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByText('101')).toBeInTheDocument();
+    expect(screen.getByText('const x = 1;')).toBeInTheDocument();
+  });
+
+  it('should handle empty lines in output', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: '   1\tconst x = 1;\n   2\t\n   3\tconst y = 2;',
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+});
+
+describe('Bash tool output formatting', () => {
+  it('should display persisted-output with truncated info in header', () => {
+    // Real Claude Code persisted-output format when output is too large
+    const persistedOutput = `<persisted-output>
+Output too large (34.6KB). Full output saved to: /home/sksat/.claude/projects/test/tool-results/output.txt
+
+Preview (first 2KB):
+total 4905180
+drwx--x---+ 1 user user 13486 Jan 24 08:36 .
+drwxr-xr-x  1 root root    22 Jul 20  2021 ..
+</persisted-output>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Bash',
+          toolUseId: 'bash-1',
+          input: { command: 'ls -la ~' },
+          output: persistedOutput,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // All truncated info should be in Output header line
+    expect(screen.getByText(/truncated \(34\.6KB\)/)).toBeInTheDocument();
+    expect(screen.getByText('output.txt')).toBeInTheDocument();
+    expect(screen.getByText(/Preview \(first 2KB\)/)).toBeInTheDocument();
+    // Preview content should be visible
+    expect(screen.getByText(/total 4905180/)).toBeInTheDocument();
+    // Tags should not be visible
+    expect(screen.queryByText(/<persisted-output>/)).not.toBeInTheDocument();
+  });
+
+  it('should strip system-reminder tags including content', () => {
+    const outputWithReminder = `some command output
+
+<system-reminder>
+Internal reminder that should not be shown
+</system-reminder>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Bash',
+          toolUseId: 'bash-1',
+          input: { command: 'echo hello' },
+          output: outputWithReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Find output pre element
+    const preElements = container.querySelectorAll('pre');
+    const outputPre = Array.from(preElements).find(pre =>
+      pre.textContent?.includes('some command output')
+    );
+    expect(outputPre).toBeInTheDocument();
+    // system-reminder content should be completely removed
+    expect(outputPre?.textContent).not.toContain('Internal reminder');
+  });
+});
