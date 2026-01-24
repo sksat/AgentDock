@@ -41,10 +41,13 @@ export interface SystemInfo {
 }
 
 export interface UsageInfo {
+  /** Current context input tokens (session cumulative, reflects compaction) */
   inputTokens: number;
   outputTokens: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  /** Total input tokens for the entire task (never decreases, for task size tracking) */
+  totalInputTokens?: number;
 }
 
 export interface GlobalUsage {
@@ -1433,14 +1436,29 @@ export function useSession(): UseSessionReturn {
           const sessionId = message.sessionId;
           setSessionUsageInfo((prev) => {
             const newMap = new Map(prev);
-            const current = newMap.get(sessionId) ?? { inputTokens: 0, outputTokens: 0 };
-            // Accumulate usage
-            newMap.set(sessionId, {
-              inputTokens: current.inputTokens + message.inputTokens,
-              outputTokens: current.outputTokens + message.outputTokens,
-              cacheCreationInputTokens: (current.cacheCreationInputTokens ?? 0) + (message.cacheCreationInputTokens ?? 0),
-              cacheReadInputTokens: (current.cacheReadInputTokens ?? 0) + (message.cacheReadInputTokens ?? 0),
-            });
+            const current = newMap.get(sessionId) ?? { inputTokens: 0, outputTokens: 0, totalInputTokens: 0 };
+
+            if (message.isCumulative) {
+              // Cumulative values from CLI modelUsage - overwrite (reflects compaction)
+              // But always accumulate totalInputTokens for task size tracking
+              const inputDelta = Math.max(0, message.inputTokens - current.inputTokens);
+              newMap.set(sessionId, {
+                inputTokens: message.inputTokens,
+                outputTokens: message.outputTokens,
+                cacheCreationInputTokens: message.cacheCreationInputTokens ?? 0,
+                cacheReadInputTokens: message.cacheReadInputTokens ?? 0,
+                totalInputTokens: (current.totalInputTokens ?? 0) + inputDelta,
+              });
+            } else {
+              // Per-turn delta (legacy behavior) - accumulate
+              newMap.set(sessionId, {
+                inputTokens: current.inputTokens + message.inputTokens,
+                outputTokens: current.outputTokens + message.outputTokens,
+                cacheCreationInputTokens: (current.cacheCreationInputTokens ?? 0) + (message.cacheCreationInputTokens ?? 0),
+                cacheReadInputTokens: (current.cacheReadInputTokens ?? 0) + (message.cacheReadInputTokens ?? 0),
+                totalInputTokens: (current.totalInputTokens ?? 0) + message.inputTokens,
+              });
+            }
             return newMap;
           });
           break;

@@ -735,6 +735,12 @@ export interface UsageInfoMessage {
   outputTokens: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  /**
+   * If true, values are session cumulative (from CLI modelUsage).
+   * If false/undefined, values are per-turn delta (legacy behavior).
+   * Cumulative values should overwrite, delta values should accumulate.
+   */
+  isCumulative?: boolean;
 }
 
 export interface PermissionRequestMessage {
