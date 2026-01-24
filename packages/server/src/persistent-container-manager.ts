@@ -129,14 +129,29 @@ export class PersistentContainerManager extends EventEmitter {
   }
 
   /**
-   * Start the browser bridge service inside the container
+   * Start the browser bridge service inside the container.
+   *
+   * If browserBridgeEnabled is true in containerConfig, the bridge is already
+   * started by the entrypoint script, so we only need to connect to it.
+   * Otherwise, we start it manually via podman exec.
    */
   async startBrowserBridge(): Promise<void> {
     if (!this.containerId) {
       throw new Error('Container not started');
     }
 
-    // Execute browser bridge inside the running container
+    const { containerConfig } = this.options;
+
+    // If browserBridgeEnabled is true, the entrypoint already started the bridge
+    // Just wait a bit and connect (Issue #78: same-container mode)
+    if (containerConfig.browserBridgeEnabled) {
+      console.log(`[PersistentContainer] Browser bridge started by entrypoint, connecting...`);
+      // Wait a bit for the bridge to be ready, then connect
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return this.connectToBridge();
+    }
+
+    // Execute browser bridge inside the running container (legacy mode)
     const proc = spawn('podman', [
       'exec',
       '-d', // detached
