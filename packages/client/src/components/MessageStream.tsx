@@ -395,6 +395,7 @@ export interface MessageStreamHandle {
 export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(function MessageStream({ messages, workingDir, sessionId }, ref) {
   const { isExpanded: thinkingExpanded, toggleExpanded: toggleThinkingExpanded } = useThinkingPreference();
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const prevMessagesLengthRef = useRef(messages.length);
   const prevSessionIdRef = useRef(sessionId);
@@ -405,6 +406,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     autoScrollRef.current = autoScroll;
   }, [autoScroll]);
 
+  // Scroll to bottom using the anchor element
+  const scrollToBottom = useCallback(() => {
+    if (scrollAnchorRef.current) {
+      scrollAnchorRef.current.scrollIntoView({ behavior: 'instant', block: 'end' });
+    }
+  }, []);
+
   // Use ResizeObserver + MutationObserver to scroll to bottom when content changes
   // ResizeObserver catches element resizing, MutationObserver catches DOM changes (streaming text)
   useEffect(() => {
@@ -412,18 +420,18 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
 
     const container = containerRef.current;
 
-    const scrollToBottom = () => {
+    const handleContentChange = () => {
       if (autoScrollRef.current) {
-        container.scrollTop = container.scrollHeight;
+        scrollToBottom();
       }
     };
 
     // ResizeObserver for element size changes
-    const resizeObserver = new ResizeObserver(scrollToBottom);
+    const resizeObserver = new ResizeObserver(handleContentChange);
     Array.from(container.children).forEach(child => resizeObserver.observe(child));
 
     // MutationObserver for DOM changes (text content, new nodes)
-    const mutationObserver = new MutationObserver(scrollToBottom);
+    const mutationObserver = new MutationObserver(handleContentChange);
     mutationObserver.observe(container, {
       childList: true,
       subtree: true,
@@ -431,13 +439,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     });
 
     // Immediate scroll
-    scrollToBottom();
+    handleContentChange();
 
     return () => {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, [messages]); // Only re-run when messages change
+  }, [messages, scrollToBottom]); // Only re-run when messages change
 
   // Reset autoScroll and scroll to bottom when session changes
   useEffect(() => {
@@ -445,12 +453,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoScroll(true);
       autoScrollRef.current = true; // Update ref immediately for ResizeObserver
-      if (containerRef.current) {
-        containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      }
+      scrollToBottom();
       prevSessionIdRef.current = sessionId;
     }
-  }, [sessionId]);
+  }, [sessionId, scrollToBottom]);
 
   // Reset autoScroll when user posts (detect new user message)
   useEffect(() => {
@@ -509,21 +515,57 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     );
   }
 
+  // Handle scroll to bottom button click
+  const handleScrollToBottomClick = useCallback(() => {
+    setAutoScroll(true);
+    autoScrollRef.current = true;
+    scrollToBottom();
+  }, [scrollToBottom]);
+
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className="flex-1 overflow-y-auto p-4 space-y-4"
-    >
-      {messages.map((message, index) => (
-        <MessageItem
-          key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
-          message={message}
-          thinkingExpanded={thinkingExpanded}
-          onToggleThinking={toggleThinkingExpanded}
-          workingDir={workingDir}
-        />
-      ))}
+    <div className="relative flex-1 flex flex-col overflow-hidden">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
+        {messages.map((message, index) => (
+          <MessageItem
+            key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
+            message={message}
+            thinkingExpanded={thinkingExpanded}
+            onToggleThinking={toggleThinkingExpanded}
+            workingDir={workingDir}
+          />
+        ))}
+        {/* Scroll anchor for reliable scrollIntoView */}
+        <div ref={scrollAnchorRef} aria-hidden="true" />
+      </div>
+
+      {/* Scroll to bottom button - appears when auto-scroll is disabled */}
+      {!autoScroll && (
+        <button
+          onClick={handleScrollToBottomClick}
+          className="absolute bottom-4 right-4 bg-bg-tertiary hover:bg-bg-secondary text-text-primary rounded-full p-2 shadow-lg transition-colors border border-border-primary"
+          aria-label="Scroll to bottom"
+          title="Scroll to bottom"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="7 13 12 18 17 13" />
+            <polyline points="7 6 12 11 17 6" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 });
