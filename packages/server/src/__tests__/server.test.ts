@@ -547,3 +547,47 @@ describe('isWebTool', () => {
     expect(isWebTool('AskUserQuestion')).toBe(false);
   });
 });
+
+describe('shouldAutoAllowByPermissionMode', () => {
+  // Test for permission mode auto-allow logic
+  // This matches Claude Code VSCode extension behavior
+  let shouldAutoAllowByPermissionMode: (permissionMode: string | undefined, toolName: string) => boolean;
+
+  beforeAll(async () => {
+    const serverModule = await import('../server.js');
+    shouldAutoAllowByPermissionMode = serverModule.shouldAutoAllowByPermissionMode;
+  });
+
+  describe('auto-edit mode', () => {
+    it('should auto-allow Edit tool when permissionMode is auto-edit', () => {
+      expect(shouldAutoAllowByPermissionMode('auto-edit', 'Edit')).toBe(true);
+    });
+
+    it('should NOT auto-allow Write tool when permissionMode is auto-edit', () => {
+      // Write is not included in acceptEdits mode per Claude Code design
+      // Feature Request #19080 requests acceptEditsAndWrites
+      expect(shouldAutoAllowByPermissionMode('auto-edit', 'Write')).toBe(false);
+    });
+
+    it('should NOT auto-allow Bash tool when permissionMode is auto-edit', () => {
+      expect(shouldAutoAllowByPermissionMode('auto-edit', 'Bash')).toBe(false);
+    });
+  });
+
+  describe('default mode (ask)', () => {
+    it('should NOT auto-allow Edit tool when permissionMode is ask', () => {
+      expect(shouldAutoAllowByPermissionMode('ask', 'Edit')).toBe(false);
+    });
+
+    it('should NOT auto-allow Edit tool when permissionMode is undefined', () => {
+      expect(shouldAutoAllowByPermissionMode(undefined, 'Edit')).toBe(false);
+    });
+  });
+
+  describe('plan mode', () => {
+    it('should NOT auto-allow Edit tool when permissionMode is plan', () => {
+      // Plan mode does not allow any modifications
+      expect(shouldAutoAllowByPermissionMode('plan', 'Edit')).toBe(false);
+    });
+  });
+});
