@@ -28,6 +28,10 @@ export interface ContainerConfig {
   extraMounts: ContainerMount[];
   /** Additional arguments to pass to podman */
   extraArgs: string[];
+  /** Enable browser bridge in the container (Issue #78: same-container mode) */
+  browserBridgeEnabled?: boolean;
+  /** Bridge port number (default: 3002) */
+  bridgePort?: number;
 }
 
 /**
@@ -80,6 +84,12 @@ export function buildPodmanArgs(
   // Environment variables
   for (const [key, value] of Object.entries(env)) {
     args.push('-e', `${key}=${value}`);
+  }
+
+  // Browser bridge environment variables (Issue #78: same-container mode)
+  if (config.browserBridgeEnabled) {
+    args.push('-e', 'BROWSER_BRIDGE_ENABLED=true');
+    args.push('-e', `BRIDGE_PORT=${config.bridgePort ?? 3002}`);
   }
 
   // Extra arguments
