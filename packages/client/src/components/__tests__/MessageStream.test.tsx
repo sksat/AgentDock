@@ -1100,10 +1100,10 @@ describe('Read tool output formatting', () => {
 });
 
 describe('Bash tool output formatting', () => {
-  it('should strip persisted-output tags but keep content', () => {
+  it('should display persisted-output with structured header and simplified path', () => {
     // Real Claude Code persisted-output format when output is too large
     const persistedOutput = `<persisted-output>
-Output too large (34.6KB). Full output saved to: /tmp/tool-results/output.txt
+Output too large (34.6KB). Full output saved to: /home/sksat/.claude/projects/test/tool-results/output.txt
 
 Preview (first 2KB):
 total 4905180
@@ -1125,18 +1125,17 @@ drwxr-xr-x  1 root root    22 Jul 20  2021 ..
         timestamp: '2024-01-01T00:00:00Z',
       },
     ];
-    const { container } = render(<MessageStream messages={messages} />);
+    render(<MessageStream messages={messages} />);
 
-    // Output content should be visible (only markup stripped, content kept)
-    const preElements = container.querySelectorAll('pre');
-    const outputPre = Array.from(preElements).find(pre =>
-      pre.textContent?.includes('Output too large')
-    );
-    expect(outputPre).toBeInTheDocument();
-    expect(outputPre?.textContent).toContain('Preview (first 2KB)');
-    // persisted-output tags themselves should not be visible
-    expect(outputPre?.textContent).not.toContain('<persisted-output>');
-    expect(outputPre?.textContent).not.toContain('</persisted-output>');
+    // Meta info should be displayed in structured format
+    expect(screen.getByText(/Output too large \(34\.6KB\)/)).toBeInTheDocument();
+    // Home path should be simplified to ~/
+    expect(screen.getByText(/~\/.claude\/projects\/test\/tool-results\/output\.txt/)).toBeInTheDocument();
+    expect(screen.getByText('Preview (first 2KB):')).toBeInTheDocument();
+    // Preview content should be visible
+    expect(screen.getByText(/total 4905180/)).toBeInTheDocument();
+    // Tags should not be visible
+    expect(screen.queryByText(/<persisted-output>/)).not.toBeInTheDocument();
   });
 
   it('should strip system-reminder tags including content', () => {

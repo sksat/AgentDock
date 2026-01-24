@@ -156,6 +156,54 @@ function parseReadOutput(output: string): ParsedLine[] | null {
   return parsed.length > 0 ? parsed : null;
 }
 
+// Pattern for persisted-output header (truncated output info from Claude Code)
+// Format: "Output too large (XXX). Full output saved to: /path/to/file"
+const PERSISTED_OUTPUT_HEADER_PATTERN = /^Output too large \([^)]+\)\. Full output saved to: (.+)$/;
+// Format: "Preview (first XXX):"
+const PREVIEW_HEADER_PATTERN = /^Preview \([^)]+\):$/;
+
+interface ParsedPersistedOutput {
+  /** Size info like "34.6KB" */
+  sizeInfo: string;
+  /** Path to full output file */
+  filePath: string;
+  /** Preview header like "Preview (first 2KB):" */
+  previewHeader: string;
+  /** Actual preview content */
+  previewContent: string;
+}
+
+/**
+ * Parse persisted-output format from Claude Code.
+ * Returns structured data if it matches the expected format, null otherwise.
+ */
+function parsePersistedOutput(output: string): ParsedPersistedOutput | null {
+  const lines = output.trim().split('\n');
+  if (lines.length < 3) return null;
+
+  // First line: "Output too large (34.6KB). Full output saved to: /path"
+  const headerMatch = lines[0].match(/^Output too large \(([^)]+)\)\. Full output saved to: (.+)$/);
+  if (!headerMatch) return null;
+
+  // Find "Preview (first XXX):" line
+  let previewLineIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (PREVIEW_HEADER_PATTERN.test(lines[i])) {
+      previewLineIndex = i;
+      break;
+    }
+  }
+
+  if (previewLineIndex === -1) return null;
+
+  return {
+    sizeInfo: headerMatch[1],
+    filePath: headerMatch[2],
+    previewHeader: lines[previewLineIndex],
+    previewContent: lines.slice(previewLineIndex + 1).join('\n'),
+  };
+}
+
 /**
  * Read tool output component with line number formatting
  */
@@ -192,6 +240,75 @@ function ReadToolOutput({ output, isError }: { output: string; isError: boolean 
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Simplify file path by replacing home directory with ~/
+ */
+function simplifyHomePath(filePath: string): string {
+  // Match common home directory patterns
+  const homeMatch = filePath.match(/^(\/home\/[^/]+|\/Users\/[^/]+)/);
+  if (homeMatch) {
+    return filePath.replace(homeMatch[1], '~');
+  }
+  return filePath;
+}
+
+/**
+ * Bash tool output component with persisted-output formatting
+ */
+function BashToolOutput({ output, isError }: { output: string; isError: boolean }) {
+  const { cleanOutput, tags } = useMemo(() => parseClaudeCodeTags(output), [output]);
+
+  // Check if this is a persisted-output format (truncated large output)
+  const persistedData = useMemo(() => {
+    // Only parse if there was a persisted-output tag
+    if (tags.has('persisted-output')) {
+      return parsePersistedOutput(cleanOutput);
+    }
+    return null;
+  }, [cleanOutput, tags]);
+
+  if (isError) {
+    return (
+      <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-accent-danger/10 text-accent-danger">
+        {cleanOutput}
+      </pre>
+    );
+  }
+
+  // Persisted output with structured header
+  if (persistedData) {
+    return (
+      <div className="bg-bg-secondary max-h-96 overflow-auto">
+        {/* Meta info header */}
+        <div className="px-3 py-2 border-b border-border bg-bg-tertiary/50 text-xs text-text-secondary">
+          <div className="flex items-center gap-2">
+            <span className="text-accent-warning">⚠</span>
+            <span>Output too large ({persistedData.sizeInfo})</span>
+          </div>
+          <div className="mt-1 font-mono text-text-tertiary truncate" title={persistedData.filePath}>
+            Full output: {simplifyHomePath(persistedData.filePath)}
+          </div>
+        </div>
+        {/* Preview header */}
+        <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-secondary font-medium">
+          {persistedData.previewHeader}
+        </div>
+        {/* Preview content */}
+        <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap text-text-secondary">
+          {persistedData.previewContent}
+        </pre>
+      </div>
+    );
+  }
+
+  // Normal output
+  return (
+    <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+      {cleanOutput}
+    </pre>
   );
 }
 
@@ -577,14 +694,16 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               Output
               {!content.isComplete && <span className="text-accent-warning">...</span>}
             </div>
-            <pre className={clsx(
-              'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
-              content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
-            )}>
-              {content.output
-                ? parseClaudeCodeTags(content.output).cleanOutput
-                : (content.isComplete ? '(no output)' : 'Running...')}
-            </pre>
+            {content.output ? (
+              <BashToolOutput
+                output={content.output}
+                isError={content.isError ?? false}
+              />
+            ) : (
+              <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+                {content.isComplete ? '(no output)' : 'Running...'}
+              </pre>
+            )}
           </div>
         </div>
       );
