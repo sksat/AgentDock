@@ -68,17 +68,18 @@ interface ParsedLine {
   content: string;
 }
 
-// Known Claude Code metadata tags
-const CLAUDE_CODE_TAGS = [
-  'system-reminder',
-  'persisted-output',
-  // Add more tags as discovered
-] as const;
+// Claude Code metadata tags configuration
+// - stripContent: true = remove entire tag including content (e.g., internal reminders)
+// - stripContent: false = remove only markup, keep content visible (e.g., truncated output info)
+const CLAUDE_CODE_TAG_CONFIG = {
+  'system-reminder': { stripContent: true },
+  'persisted-output': { stripContent: false },
+} as const;
 
-type ClaudeCodeTag = typeof CLAUDE_CODE_TAGS[number];
+type ClaudeCodeTag = keyof typeof CLAUDE_CODE_TAG_CONFIG;
 
 interface ParsedTags {
-  /** Output with tags removed */
+  /** Output with tags processed according to config */
   cleanOutput: string;
   /** Map of tag name to array of tag contents */
   tags: Map<ClaudeCodeTag, string[]>;
@@ -86,29 +87,38 @@ interface ParsedTags {
 
 /**
  * Parse Claude Code metadata tags from tool output.
- * Returns both the clean output (with tags removed) and a map of extracted tags.
- * Each tool can decide whether to use the tags or display them.
+ * - Tags with stripContent=true: entire tag (markup + content) is removed
+ * - Tags with stripContent=false: only markup is removed, content remains visible
+ * Returns the processed output and a map of extracted tag contents.
  */
 function parseClaudeCodeTags(output: string): ParsedTags {
   const tags = new Map<ClaudeCodeTag, string[]>();
   let cleanOutput = output;
 
-  for (const tag of CLAUDE_CODE_TAGS) {
+  for (const [tag, config] of Object.entries(CLAUDE_CODE_TAG_CONFIG)) {
     const contents: string[] = [];
-
-    // Extract paired tags
     const pairedRegex = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g');
+
+    // Extract contents
     let match;
     while ((match = pairedRegex.exec(output)) !== null) {
       contents.push(match[1]);
     }
-    cleanOutput = cleanOutput.replace(pairedRegex, '');
 
-    // Extract self-closing tags (no content)
+    if (config.stripContent) {
+      // Remove entire tag (markup + content)
+      cleanOutput = cleanOutput.replace(pairedRegex, '');
+    } else {
+      // Remove only markup, keep content
+      cleanOutput = cleanOutput.replace(new RegExp(`<${tag}>`, 'g'), '');
+      cleanOutput = cleanOutput.replace(new RegExp(`</${tag}>`, 'g'), '');
+    }
+
+    // Remove self-closing tags
     cleanOutput = cleanOutput.replace(new RegExp(`<${tag}\\s*/?>`, 'g'), '');
 
     if (contents.length > 0) {
-      tags.set(tag, contents);
+      tags.set(tag as ClaudeCodeTag, contents);
     }
   }
 
@@ -571,7 +581,9 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
               content.isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
             )}>
-              {content.output || (content.isComplete ? '(no output)' : 'Running...')}
+              {content.output
+                ? parseClaudeCodeTags(content.output).cleanOutput
+                : (content.isComplete ? '(no output)' : 'Running...')}
             </pre>
           </div>
         </div>

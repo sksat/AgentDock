@@ -842,10 +842,8 @@ describe('Read tool output formatting', () => {
     actualClaudeOutput: '    63→// cat -n format pattern: leading spaces, line number, tab or →, content\n    64→const CAT_LINE_PATTERN = /^\\s*(\\d+)[\\t→](.*)$/;\n    65→',
     // Output with system-reminder tags (Claude Code adds these)
     withSystemReminder: '     1→const foo = 1;\n     2→const bar = 2;\n\n<system-reminder>\nSome reminder content here.\n</system-reminder>',
-    // Output with persisted-output tags (Bash tool uses these)
-    withPersistedOutput: '     1→echo "hello"\n     2→\n<persisted-output>\nPrevious command output...\n</persisted-output>',
-    // Output with multiple different tags
-    withMultipleTags: '     1→code\n<system-reminder>reminder</system-reminder>\n<persisted-output>output</persisted-output>',
+    // Output with only system-reminder (typical for Read tool)
+    withOnlySystemReminder: '     1→code\n<system-reminder>reminder</system-reminder>',
   };
 
   it('should parse tab-separated format (standard cat -n)', () => {
@@ -986,7 +984,7 @@ describe('Read tool output formatting', () => {
     expect(screen.queryByText(/Some reminder content/)).not.toBeInTheDocument();
   });
 
-  it('should strip persisted-output tags from output', () => {
+  it('should parse cat-n with system-reminder stripped (typical Read tool output)', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -994,7 +992,7 @@ describe('Read tool output formatting', () => {
           toolName: 'Read',
           toolUseId: 'read-1',
           input: { file_path: '/path/to/file.ts' },
-          output: REAL_OUTPUT_SAMPLES.withPersistedOutput,
+          output: REAL_OUTPUT_SAMPLES.withOnlySystemReminder,
           isComplete: true,
           isError: false,
         },
@@ -1003,32 +1001,11 @@ describe('Read tool output formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('echo "hello"')).toBeInTheDocument();
-    expect(screen.queryByText(/Previous command output/)).not.toBeInTheDocument();
-  });
-
-  it('should strip multiple different Claude Code tags', () => {
-    const messages: MessageStreamItem[] = [
-      {
-        type: 'tool',
-        content: {
-          toolName: 'Read',
-          toolUseId: 'read-1',
-          input: { file_path: '/path/to/file.ts' },
-          output: REAL_OUTPUT_SAMPLES.withMultipleTags,
-          isComplete: true,
-          isError: false,
-        },
-        timestamp: '2024-01-01T00:00:00Z',
-      },
-    ];
-    render(<MessageStream messages={messages} />);
-
+    // Line numbers should be parsed correctly
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText('code')).toBeInTheDocument();
+    // system-reminder content should not be visible
     expect(screen.queryByText(/reminder/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/output/)).not.toBeInTheDocument();
   });
 
   it('should fallback to pre for non-cat-n format output', () => {
@@ -1119,5 +1096,79 @@ describe('Read tool output formatting', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
+  });
+});
+
+describe('Bash tool output formatting', () => {
+  it('should strip persisted-output tags but keep content', () => {
+    // Real Claude Code persisted-output format when output is too large
+    const persistedOutput = `<persisted-output>
+Output too large (34.6KB). Full output saved to: /tmp/tool-results/output.txt
+
+Preview (first 2KB):
+total 4905180
+drwx--x---+ 1 user user 13486 Jan 24 08:36 .
+drwxr-xr-x  1 root root    22 Jul 20  2021 ..
+</persisted-output>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Bash',
+          toolUseId: 'bash-1',
+          input: { command: 'ls -la ~' },
+          output: persistedOutput,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Output content should be visible (only markup stripped, content kept)
+    const preElements = container.querySelectorAll('pre');
+    const outputPre = Array.from(preElements).find(pre =>
+      pre.textContent?.includes('Output too large')
+    );
+    expect(outputPre).toBeInTheDocument();
+    expect(outputPre?.textContent).toContain('Preview (first 2KB)');
+    // persisted-output tags themselves should not be visible
+    expect(outputPre?.textContent).not.toContain('<persisted-output>');
+    expect(outputPre?.textContent).not.toContain('</persisted-output>');
+  });
+
+  it('should strip system-reminder tags including content', () => {
+    const outputWithReminder = `some command output
+
+<system-reminder>
+Internal reminder that should not be shown
+</system-reminder>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Bash',
+          toolUseId: 'bash-1',
+          input: { command: 'echo hello' },
+          output: outputWithReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Find output pre element
+    const preElements = container.querySelectorAll('pre');
+    const outputPre = Array.from(preElements).find(pre =>
+      pre.textContent?.includes('some command output')
+    );
+    expect(outputPre).toBeInTheDocument();
+    // system-reminder content should be completely removed
+    expect(outputPre?.textContent).not.toContain('Internal reminder');
   });
 });
