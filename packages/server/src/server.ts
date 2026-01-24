@@ -1989,6 +1989,14 @@ export function createServer(options: ServerOptions): BridgeServer {
         sessionManager.setPermissionMode(message.sessionId, message.mode);
         console.log(`[Server] Permission mode set for session ${message.sessionId}: ${message.mode}`);
 
+        // If Claude Code is currently running, try to change the mode via control_request
+        if (runnerManager.hasRunningSession(message.sessionId)) {
+          const changed = runnerManager.requestPermissionModeChange(message.sessionId, claudeMode);
+          if (changed) {
+            console.log(`[Server] Requested permission mode change for running session ${message.sessionId}: ${claudeMode}`);
+          }
+        }
+
         // Broadcast to all clients attached to this session
         sendToSession(message.sessionId, {
           type: 'system_info',
@@ -1996,9 +2004,6 @@ export function createServer(options: ServerOptions): BridgeServer {
           permissionMode: message.mode,
         });
 
-        // Note: If Claude Code is currently running, the mode change won't take effect
-        // until the next turn. This is by design - Claude Code's -p mode doesn't accept
-        // interactive input like Shift+Tab.
         // No additional response needed - already broadcast via sendToSession
         return;
       }

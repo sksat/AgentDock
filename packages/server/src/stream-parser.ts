@@ -111,7 +111,17 @@ export interface SystemEvent {
   [key: string]: unknown;
 }
 
-export type StreamEvent = AssistantEvent | UserEvent | ResultEvent | SystemEvent;
+export interface ControlResponseEvent {
+  type: 'control_response';
+  response: {
+    subtype: 'success' | 'error';
+    request_id: string;
+    response?: { mode?: string };
+    error?: string;
+  };
+}
+
+export type StreamEvent = AssistantEvent | UserEvent | ResultEvent | SystemEvent | ControlResponseEvent;
 
 export class StreamJsonParser {
   /**

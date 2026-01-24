@@ -52,6 +52,13 @@ export interface UsageData {
   cacheReadInputTokens?: number;
 }
 
+export interface ControlResponse {
+  subtype: 'success' | 'error';
+  request_id: string;
+  response?: { mode?: ClaudePermissionMode };
+  error?: string;
+}
+
 export interface ClaudeRunnerEvents {
   started: (data: { pid: number }) => void;
   text: (data: { text: string }) => void;
@@ -67,6 +74,8 @@ export interface ClaudeRunnerEvents {
   permission_request: (data: { requestId: string; toolName: string; input: unknown }) => void;
   /** Permission mode changed (from Claude Code's system event) */
   permission_mode_changed: (data: { permissionMode: ClaudePermissionMode }) => void;
+  /** Control response received */
+  control_response: (data: ControlResponse) => void;
 }
 
 export class ClaudeRunner extends EventEmitter {
@@ -98,18 +107,84 @@ export class ClaudeRunner extends EventEmitter {
   }
 
   /**
-   * Request permission mode change by sending Shift+Tab to Claude Code.
-   * The actual mode change is confirmed via system event response.
+   * Generate a unique request ID for control requests
+   */
+  private generateRequestId(): string {
+    return Math.random().toString(36).substring(2, 15);
+  }
+
+  /**
+   * Send a control_request message to Claude Code via stdin.
+   * This is the format used by the Claude Agent SDK for runtime configuration changes.
+   * @param request The control request payload (e.g., { subtype: 'set_permission_mode', mode: 'plan' })
+   * @returns The request ID if sent successfully, null if no stdin available
+   */
+  sendControlRequest(request: { subtype: string; [key: string]: unknown }): string | null {
+    // Prefer childProcess stdin (pipes mode) over PTY
+    const stdin = this.childProcess?.stdin;
+    if (!stdin || stdin.writableEnded) {
+      // Fallback to PTY if available (less reliable for control_request)
+      if (this.ptyProcess) {
+        const requestId = this.generateRequestId();
+        const controlRequest = {
+          type: 'control_request',
+          request_id: requestId,
+          request,
+        };
+        console.log('[ClaudeRunner] Sending control_request via PTY:', JSON.stringify(controlRequest));
+        this.ptyProcess.write(JSON.stringify(controlRequest) + '\n');
+        return requestId;
+      }
+      console.log('[ClaudeRunner] Cannot send control_request: no stdin available');
+      return null;
+    }
+
+    const requestId = this.generateRequestId();
+    const controlRequest = {
+      type: 'control_request',
+      request_id: requestId,
+      request,
+    };
+
+    console.log('[ClaudeRunner] Sending control_request:', JSON.stringify(controlRequest));
+    stdin.write(JSON.stringify(controlRequest) + '\n');
+    return requestId;
+  }
+
+  /**
+   * Request permission mode change by sending control_request to Claude Code.
+   * The actual mode change is confirmed via control_response event.
    * @param targetMode The desired permission mode
-   * @returns true if Shift+Tab was sent, false if already at target or no PTY
+   * @returns true if control_request was sent, false if already at target or no stdin
    */
   requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean {
     if (this._permissionMode === targetMode) {
       return false;
     }
 
+    const requestId = this.sendControlRequest({
+      subtype: 'set_permission_mode',
+      mode: targetMode,
+    });
+
+    if (!requestId) {
+      // Fallback to Shift+Tab for PTY mode (legacy behavior)
+      if (this.ptyProcess) {
+        console.log('[ClaudeRunner] Falling back to Shift+Tab for permission mode change');
+        return this.requestPermissionModeChangeViaShiftTab(targetMode);
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Legacy method: Request permission mode change by sending Shift+Tab to Claude Code.
+   * This is kept as a fallback for PTY mode without stream-json input.
+   */
+  private requestPermissionModeChangeViaShiftTab(targetMode: ClaudePermissionMode): boolean {
     if (!this.ptyProcess) {
-      console.log('[ClaudeRunner] Cannot change permission mode: no PTY process');
       return false;
     }
 
@@ -183,14 +258,9 @@ export class ClaudeRunner extends EventEmitter {
       console.log('[ClaudeRunner] Extended thinking enabled with MAX_THINKING_TOKENS=31999');
     }
 
-    if (hasImages) {
-      // Use child_process.spawn with pipes for image messages
-      // This allows us to write stdin before the process reads it
-      this.startWithPipes(prompt, args, options.images!, env);
-    } else {
-      // Use PTY for regular messages (supports interactive features)
-      this.startWithPty(prompt, args, env);
-    }
+    // Always use pipes mode for stream-json input to support control_request
+    // This enables runtime configuration changes like permission mode updates
+    this.startWithPipes(prompt, args, hasImages ? options.images! : undefined, env);
   }
 
   private startWithPty(prompt: string, args: string[], env: Record<string, string>): void {
@@ -220,12 +290,17 @@ export class ClaudeRunner extends EventEmitter {
     });
   }
 
-  private startWithPipes(prompt: string, args: string[], images: ImageContent[], env: Record<string, string>): void {
-    console.log('[ClaudeRunner] Starting with pipes for image:', this.options.claudePath, args.join(' '));
-    console.log('[ClaudeRunner] Images attached:', images.length);
+  private startWithPipes(prompt: string, args: string[], images: ImageContent[] | undefined, env: Record<string, string>): void {
+    const hasImages = images && images.length > 0;
+    console.log('[ClaudeRunner] Starting with pipes:', this.options.claudePath, args.join(' '));
+    if (hasImages) {
+      console.log('[ClaudeRunner] Images attached:', images.length);
+    }
 
-    // Build the user message with images
-    const userMessage = this.buildUserMessageWithImages(prompt, images);
+    // Build the user message
+    const userMessage = hasImages
+      ? this.buildUserMessageWithImages(prompt, images)
+      : this.buildUserMessage(prompt);
 
     this.childProcess = spawn(this.options.claudePath!, args, {
       cwd: this.options.workingDir,
@@ -235,11 +310,11 @@ export class ClaudeRunner extends EventEmitter {
 
     console.log('[ClaudeRunner] Child process started with PID:', this.childProcess.pid);
 
-    // Write the image message to stdin immediately, then close stdin
+    // Write the user message to stdin
+    // DO NOT close stdin - keep it open for control_request messages
     if (this.childProcess.stdin) {
       this.childProcess.stdin.write(userMessage + '\n');
-      this.childProcess.stdin.end();
-      console.log('[ClaudeRunner] Image message written to stdin');
+      console.log('[ClaudeRunner] User message written to stdin (keeping stdin open for control_request)');
     }
 
     this._isRunning = true;
@@ -271,6 +346,20 @@ export class ClaudeRunner extends EventEmitter {
       this._isRunning = false;
       this.emit('error', { type: 'process', message: error.message, error });
     });
+  }
+
+  /**
+   * Build a stream-json user message with text only
+   */
+  private buildUserMessage(prompt: string): string {
+    const message = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: prompt }],
+      },
+    };
+    return JSON.stringify(message);
   }
 
   /**
@@ -333,11 +422,12 @@ export class ClaudeRunner extends EventEmitter {
   private buildArgs(prompt: string, options: StartOptions): string[] {
     const hasImages = options.images && options.images.length > 0;
 
-    // When images are present, use stream-json input format with empty prompt
-    // The actual content (including images) is sent via stdin using pipes
+    // Always use stream-json input format to support control_request messages
+    // This enables runtime configuration changes like permission mode updates
+    // The actual content is sent via stdin
     const args: string[] = hasImages
       ? ['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']
-      : ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
+      : ['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'];
 
     if (options.sessionId) {
       args.push('--resume', options.sessionId);
@@ -444,7 +534,30 @@ export class ClaudeRunner extends EventEmitter {
           modelUsage: event.modelUsage,
         });
         break;
+
+      case 'control_response':
+        this.processControlResponse(event);
+        break;
     }
+  }
+
+  private processControlResponse(event: StreamEvent): void {
+    if (event.type !== 'control_response') return;
+
+    const response = event.response;
+    console.log('[ClaudeRunner] Control response received:', JSON.stringify(response));
+
+    // Update permission mode if this was a set_permission_mode response
+    if (response.subtype === 'success' && response.response?.mode) {
+      this.updatePermissionMode(response.response.mode);
+    }
+
+    this.emit('control_response', {
+      subtype: response.subtype,
+      request_id: response.request_id,
+      response: response.response as { mode?: ClaudePermissionMode },
+      error: response.error,
+    });
   }
 
   private processAssistantMessage(event: StreamEvent): void {

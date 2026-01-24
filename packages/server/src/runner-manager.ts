@@ -183,6 +183,19 @@ export class RunnerManager {
     return true;
   }
 
+  /**
+   * Request permission mode change for a running session
+   * Sends Shift+Tab key sequence to Claude Code to cycle through modes
+   * @returns true if mode change was requested, false if session is not running
+   */
+  requestPermissionModeChange(sessionId: string, targetMode: ClaudePermissionMode): boolean {
+    const runner = this.runners.get(sessionId);
+    if (!runner?.isRunning) {
+      return false;
+    }
+    return runner.requestPermissionModeChange(targetMode);
+  }
+
   getRunningCount(): number {
     let count = 0;
     for (const runner of this.runners.values()) {
