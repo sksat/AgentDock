@@ -399,28 +399,55 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
   const prevMessagesLengthRef = useRef(messages.length);
   const prevSessionIdRef = useRef(sessionId);
 
-  // Scroll to bottom when messages change and autoScroll is enabled
-  // Use requestAnimationFrame to ensure DOM has been updated with new content
+  // Ref to track autoScroll state for use in ResizeObserver callback
+  const autoScrollRef = useRef(autoScroll);
   useEffect(() => {
-    if (autoScroll && containerRef.current) {
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight;
-        }
-      });
-    }
-  }, [messages, autoScroll]);
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
+
+  // Use ResizeObserver + MutationObserver to scroll to bottom when content changes
+  // ResizeObserver catches element resizing, MutationObserver catches DOM changes (streaming text)
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+
+    const scrollToBottom = () => {
+      if (autoScrollRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+
+    // ResizeObserver for element size changes
+    const resizeObserver = new ResizeObserver(scrollToBottom);
+    Array.from(container.children).forEach(child => resizeObserver.observe(child));
+
+    // MutationObserver for DOM changes (text content, new nodes)
+    const mutationObserver = new MutationObserver(scrollToBottom);
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    // Immediate scroll
+    scrollToBottom();
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [messages]); // Only re-run when messages change
 
   // Reset autoScroll and scroll to bottom when session changes
   useEffect(() => {
     if (sessionId !== prevSessionIdRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoScroll(true);
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight;
-        }
-      });
+      autoScrollRef.current = true; // Update ref immediately for ResizeObserver
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
       prevSessionIdRef.current = sessionId;
     }
   }, [sessionId]);
