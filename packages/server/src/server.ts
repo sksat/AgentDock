@@ -2102,9 +2102,10 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Get browserInContainer setting for this session (Issue #78)
           const browserInContainer = shouldUseContainerBrowser(message.sessionId);
 
-          // Generate unique bridge port for this session (3100-4099 range)
+          // Generate unique bridge port for this session (3002-4001 range)
+          // IMPORTANT: Must match the port calculation in getOrCreateContainerManager
           const bridgePort = browserInContainer
-            ? 3100 + (message.sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+            ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
           // Generate MCP config for this session (unless using mock)
@@ -2475,9 +2476,10 @@ Keep it concise but comprehensive.`;
           // Get browserInContainer setting for this session (Issue #78)
           const browserInContainer = shouldUseContainerBrowser(message.sessionId);
 
-          // Generate unique bridge port for this session (3100-4099 range)
+          // Generate unique bridge port for this session (3002-4001 range)
+          // IMPORTANT: Must match the port calculation in getOrCreateContainerManager
           const bridgePort = browserInContainer
-            ? 3100 + (message.sessionId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000)
+            ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
           let mcpConfigPath: string | undefined;

@@ -80,7 +80,7 @@ export class PersistentContainerManager extends EventEmitter {
       '--rm',
       '--userns=keep-id',
       ...mountArgs,
-      '-p', `${this.options.bridgePort}:3002`, // Expose bridge port
+      '-p', `${this.options.bridgePort}:${this.options.bridgePort}`, // Expose bridge port (same port inside/outside)
       containerConfig.image,
       'sleep', 'infinity', // Keep container running
     ];

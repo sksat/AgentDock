@@ -10,7 +10,8 @@ export interface BridgeServerOptions {
 export class BridgeServer extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private browserManager: BrowserManager;
-  private hostConnection: WebSocket | null = null;
+  /** All connected host clients (supports multiple connections) */
+  private hostConnections: Set<WebSocket> = new Set();
   private port: number;
 
   constructor(options: BridgeServerOptions) {
@@ -21,18 +22,18 @@ export class BridgeServer extends EventEmitter {
   }
 
   private setupBrowserEvents(): void {
-    // Forward screencast frames to host
+    // Forward screencast frames to all connected clients
     this.browserManager.on('frame', (frame) => {
-      this.sendToHost({
+      this.broadcast({
         type: 'screencast_frame',
         data: frame.data,
         metadata: frame.metadata,
       });
     });
 
-    // Forward status updates to host
+    // Forward status updates to all connected clients
     this.browserManager.on('status', (status) => {
-      this.sendToHost({
+      this.broadcast({
         type: 'screencast_status',
         active: status.active,
         url: status.url,
@@ -40,9 +41,9 @@ export class BridgeServer extends EventEmitter {
       });
     });
 
-    // Forward errors to host
+    // Forward errors to all connected clients
     this.browserManager.on('error', (error) => {
-      this.sendToHost({
+      this.broadcast({
         type: 'error',
         message: error.message,
       });
@@ -55,38 +56,36 @@ export class BridgeServer extends EventEmitter {
         this.wss = new WebSocketServer({ port: this.port });
 
         this.wss.on('connection', (ws) => {
-          console.log('[BridgeServer] Host connected');
-          this.hostConnection = ws;
+          console.log(`[BridgeServer] Host connected (total: ${this.hostConnections.size + 1})`);
+          this.hostConnections.add(ws);
 
           ws.on('message', async (data) => {
             let requestId: string | undefined;
             try {
               const message = JSON.parse(data.toString()) as BridgeRequest;
               requestId = message.requestId;
-              await this.handleRequest(message);
+              await this.handleRequest(message, ws);
             } catch (error) {
               console.error('[BridgeServer] Error handling message:', error);
               // Include requestId in error response if available
-              if (requestId) {
-                this.sendToHost({
-                  type: 'command_result',
-                  requestId,
-                  success: false,
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                });
-              } else {
-                // Fallback for parse errors where requestId is not available
-                this.sendToHost({
-                  type: 'error',
-                  message: error instanceof Error ? error.message : 'Unknown error',
-                });
-              }
+              const errorResponse = requestId
+                ? {
+                    type: 'command_result' as const,
+                    requestId,
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                  }
+                : {
+                    type: 'error' as const,
+                    message: error instanceof Error ? error.message : 'Unknown error',
+                  };
+              this.sendToClient(ws, errorResponse);
             }
           });
 
           ws.on('close', () => {
-            console.log('[BridgeServer] Host disconnected');
-            this.hostConnection = null;
+            console.log(`[BridgeServer] Host disconnected (remaining: ${this.hostConnections.size - 1})`);
+            this.hostConnections.delete(ws);
           });
 
           ws.on('error', (error) => {
@@ -124,19 +123,20 @@ export class BridgeServer extends EventEmitter {
     });
   }
 
-  private async handleRequest(request: BridgeRequest): Promise<void> {
+  private async handleRequest(request: BridgeRequest, client: WebSocket): Promise<void> {
     const { requestId, command } = request;
 
     try {
       const result = await this.executeCommand(command);
-      this.sendToHost({
+      // Send response back to the requesting client only
+      this.sendToClient(client, {
         type: 'command_result',
         requestId,
         success: true,
         result,
       });
     } catch (error) {
-      this.sendToHost({
+      this.sendToClient(client, {
         type: 'command_result',
         requestId,
         success: false,
@@ -149,12 +149,12 @@ export class BridgeServer extends EventEmitter {
     switch (command.type) {
       case 'launch_browser':
         await this.browserManager.launch(command.options);
-        this.sendToHost({ type: 'browser_launched' });
+        this.broadcast({ type: 'browser_launched' });
         return null;
 
       case 'close_browser':
         await this.browserManager.close();
-        this.sendToHost({ type: 'browser_closed' });
+        this.broadcast({ type: 'browser_closed' });
         return null;
 
       case 'browser_navigate':
@@ -244,9 +244,20 @@ export class BridgeServer extends EventEmitter {
     }
   }
 
-  private sendToHost(message: BridgeMessage): void {
-    if (this.hostConnection?.readyState === WebSocket.OPEN) {
-      this.hostConnection.send(JSON.stringify(message));
+  /** Broadcast a message to all connected clients (for screencast frames, status updates) */
+  private broadcast(message: BridgeMessage): void {
+    const data = JSON.stringify(message);
+    for (const client of this.hostConnections) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  }
+
+  /** Send a message to a specific client (for command responses) */
+  private sendToClient(client: WebSocket, message: BridgeMessage): void {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(message));
     }
   }
 }
