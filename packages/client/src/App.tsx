@@ -83,6 +83,8 @@ function App() {
     isLoading,
     loadingReason,
     error,
+    pendingMessage,
+    clearPendingMessage,
     systemInfo,
     usageInfo,
     modelUsage,
@@ -350,6 +352,7 @@ function App() {
             activeSessionId === null ? (
               /* Welcome page when no session is selected */
               <WelcomePage
+                key={error && pendingMessage ? 'error-recovery' : 'normal'}
                 sessions={sessions}
                 isConnected={isConnected}
                 onSendMessage={handleSendMessage}
@@ -363,6 +366,12 @@ function App() {
                 onPermissionModeChange={(mode) => updateSettings({ defaultPermissionMode: mode })}
                 thinkingEnabled={globalSettings?.defaultThinkingEnabled ?? false}
                 onToggleThinking={() => updateSettings({ defaultThinkingEnabled: !globalSettings?.defaultThinkingEnabled })}
+                defaultValue={error ? pendingMessage ?? undefined : undefined}
+                onValueChange={() => {
+                  if (error && pendingMessage) {
+                    clearPendingMessage();
+                  }
+                }}
               />
             ) : (
           <>

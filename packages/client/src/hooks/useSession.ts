@@ -129,6 +129,8 @@ export interface UseSessionReturn {
   isLoading: boolean;
   loadingReason: 'compact' | null;
   error: string | null;
+  pendingMessage: string | null;
+  clearPendingMessage: () => void;
   systemInfo: SystemInfo | null;
   usageInfo: UsageInfo | null;
   modelUsage: ModelUsage[] | null;
@@ -1457,8 +1459,8 @@ export function useSession(): UseSessionReturn {
           break;
 
         case 'error':
-          // Only update isLoading/error for the active session
-          if (message.sessionId === activeSessionId) {
+          // Handle errors without sessionId (e.g., session creation errors) or for active session
+          if (!message.sessionId || message.sessionId === activeSessionId) {
             setError(message.message);
             setIsLoading(false);
             setLoadingReason(null);
@@ -1609,5 +1611,8 @@ export function useSession(): UseSessionReturn {
     globalSettings,
     getSettings,
     updateSettings,
+    // Pending message for error recovery
+    pendingMessage,
+    clearPendingMessage: useCallback(() => setPendingMessage(null), []),
   };
 }
