@@ -36,6 +36,7 @@ export interface IClaudeRunner extends EventEmitter {
   readonly permissionMode: ClaudePermissionMode;
   start(prompt: string, options?: StartOptions): void;
   stop(): void;
+  interrupt(): void;
   sendInput(input: string): void;
   requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean;
   on<K extends keyof ClaudeRunnerEvents>(event: K, listener: ClaudeRunnerEvents[K]): this;
@@ -113,6 +114,13 @@ export class RunnerManager {
     const runner = this.runners.get(sessionId);
     if (runner) {
       runner.stop();
+    }
+  }
+
+  interruptSession(sessionId: string): void {
+    const runner = this.runners.get(sessionId);
+    if (runner) {
+      runner.interrupt();
     }
   }
 

@@ -407,6 +407,16 @@ export class PodmanClaudeRunner extends EventEmitter {
   }
 
   /**
+   * Interrupt the current operation by sending Escape key.
+   */
+  interrupt(): void {
+    if (this.ptyProcess) {
+      // Send Escape key to interrupt Claude Code's current operation
+      this.ptyProcess.write('\x1b');
+    }
+  }
+
+  /**
    * Send input to the running container.
    */
   sendInput(input: string): void {
