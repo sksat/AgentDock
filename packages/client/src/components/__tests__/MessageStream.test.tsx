@@ -11,8 +11,8 @@ Element.prototype.scrollIntoView = vi.fn(function(this: Element) {
   while (parent) {
     if (parent.classList?.contains('overflow-y-auto')) {
       // Simulate scrolling to bottom by setting scrollTop to scrollHeight
-      const scrollHeight = Object.getOwnPropertyDescriptor(parent, 'scrollHeight')?.value ?? 0;
-      parent.scrollTop = scrollHeight;
+      // Access scrollHeight directly since tests define it via Object.defineProperty
+      parent.scrollTop = parent.scrollHeight;
       break;
     }
     parent = parent.parentElement;
