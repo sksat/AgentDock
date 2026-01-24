@@ -665,8 +665,17 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
       // Use a port based on session hash for uniqueness
       const bridgePort = 3002 + (sessionId.charCodeAt(0) % 1000);
+
+      // Create a new config with browserBridgeEnabled for same-container mode (Issue #78)
+      // This allows Browser MCP and dev servers to share the same localhost
+      const configWithBridge: ContainerConfig = {
+        ...browserContainerConfig,
+        browserBridgeEnabled: true,
+        bridgePort,
+      };
+
       manager = new PersistentContainerManager({
-        containerConfig: browserContainerConfig,
+        containerConfig: configWithBridge,
         workingDir,
         bridgePort,
       });
