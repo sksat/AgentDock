@@ -3228,6 +3228,12 @@ Keep it concise but comprehensive.`;
           try {
             const ctrl = browserSessionManager.getController(message.sessionId)!;
             const result = await executeBrowserCommand(ctrl, message.command);
+
+            // If browser was closed, destroy the session to clean up and emit status
+            if (message.command.name === 'browser_close') {
+              await browserSessionManager.destroySession(message.sessionId);
+            }
+
             response = {
               type: 'browser_command_result',
               sessionId: message.sessionId,

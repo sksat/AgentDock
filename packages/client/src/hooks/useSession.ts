@@ -1558,6 +1558,8 @@ export function useSession(): UseSessionReturn {
               active: message.active,
               browserUrl: message.browserUrl,
               browserTitle: message.browserTitle,
+              // Clear frame when browser becomes inactive
+              ...(message.active === false ? { frame: undefined } : {}),
             });
             return newMap;
           });
