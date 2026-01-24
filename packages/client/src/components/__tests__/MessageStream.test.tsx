@@ -1127,11 +1127,10 @@ drwxr-xr-x  1 root root    22 Jul 20  2021 ..
     ];
     render(<MessageStream messages={messages} />);
 
-    // Truncated info should be in Output header
+    // All truncated info should be in Output header line
     expect(screen.getByText(/truncated \(34\.6KB\)/)).toBeInTheDocument();
-    // Only filename should be visible, full path on hover
     expect(screen.getByText('output.txt')).toBeInTheDocument();
-    expect(screen.getByText('Preview (first 2KB):')).toBeInTheDocument();
+    expect(screen.getByText(/Preview \(first 2KB\)/)).toBeInTheDocument();
     // Preview content should be visible
     expect(screen.getByText(/total 4905180/)).toBeInTheDocument();
     // Tags should not be visible

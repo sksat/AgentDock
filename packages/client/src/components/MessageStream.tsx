@@ -278,19 +278,12 @@ function BashToolOutput({ output, isError }: { output: string; isError: boolean 
     );
   }
 
-  // Persisted output - show preview header and content only (meta info is in parent header)
+  // Persisted output - show preview content only (all meta info is in parent header)
   if (persistedData) {
     return (
-      <div className="bg-bg-secondary max-h-96 overflow-auto">
-        {/* Preview header */}
-        <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-secondary font-medium">
-          {persistedData.previewHeader}
-        </div>
-        {/* Preview content */}
-        <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap text-text-secondary">
-          {persistedData.previewContent}
-        </pre>
-      </div>
+      <pre className="px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto bg-bg-secondary text-text-secondary">
+        {persistedData.previewContent}
+      </pre>
     );
   }
 
@@ -692,17 +685,18 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               Output
               {!content.isComplete && <span className="text-accent-warning">...</span>}
               {persistedData && (
-                <span className="text-accent-warning flex items-center gap-1">
-                  <span>⚠</span>
-                  <span>truncated ({persistedData.sizeInfo})</span>
-                </span>
+                <>
+                  <span className="text-text-tertiary">{persistedData.previewHeader}</span>
+                  <span className="text-accent-warning flex items-center gap-1">
+                    <span>⚠</span>
+                    <span>truncated ({persistedData.sizeInfo})</span>
+                  </span>
+                  <span className="ml-auto text-text-tertiary font-mono" title={simplifyHomePath(persistedData.filePath)}>
+                    Full: <span className="underline decoration-dotted cursor-help">{persistedData.filePath.split('/').pop()}</span>
+                  </span>
+                </>
               )}
             </div>
-            {persistedData && (
-              <div className="px-3 py-1 border-b border-border bg-bg-tertiary/30 text-xs text-text-tertiary font-mono" title={simplifyHomePath(persistedData.filePath)}>
-                Full output: <span className="underline decoration-dotted cursor-help">{persistedData.filePath.split('/').pop()}</span>
-              </div>
-            )}
             {content.output ? (
               <BashToolOutput
                 output={content.output}
