@@ -700,27 +700,22 @@ export function InputArea({
 
               {/* Context window usage */}
               {tokenUsage && (() => {
-                const effectiveContextWindow = contextWindowProp ?? getContextWindow(model);
                 const occupancy = calculateOccupancyRate(
                   tokenUsage.inputTokens,
                   model,
                   contextWindowProp
                 );
 
-                if (occupancy === null || effectiveContextWindow === null) {
-                  // Fallback to simple token display if we can't calculate occupancy
+                // Low occupancy or unknown model: simple token display
+                if (occupancy === null || occupancy < 40) {
                   return (
                     <div className="flex items-center gap-1.5">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
-                        <path d="M8 4v4l3 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
                       <span>{tokenUsage.inputTokens.toLocaleString()} in</span>
                     </div>
                   );
                 }
 
-                // Pie chart style occupancy display
+                // High occupancy: pie chart with color-coded warning
                 const colorClass = occupancy >= 80
                   ? 'text-accent-danger'
                   : occupancy >= 60
@@ -728,7 +723,6 @@ export function InputArea({
                     : 'text-text-secondary';
 
                 // SVG pie chart calculation
-                // Circle: radius=6, center at (8,8), viewBox 16x16
                 const radius = 6;
                 const circumference = 2 * Math.PI * radius;
                 const fillLength = (occupancy / 100) * circumference;

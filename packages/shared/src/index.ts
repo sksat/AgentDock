@@ -589,6 +589,7 @@ export interface SessionAttachedMessage {
     outputTokens: number;
     cacheCreationTokens: number;
     cacheReadTokens: number;
+    contextWindow?: number;
   }>;
   /** Pending permission request that needs user response */
   pendingPermission?: {

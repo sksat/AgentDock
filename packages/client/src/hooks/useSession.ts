@@ -62,6 +62,7 @@ export interface ModelUsage {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+  contextWindow?: number;
 }
 
 export interface ScreencastState {

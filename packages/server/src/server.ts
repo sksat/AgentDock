@@ -1385,10 +1385,28 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'result': {
-        const resultData = eventData as { result: string; sessionId: string };
+        const resultData = eventData as {
+          result: string;
+          sessionId: string;
+          modelUsage?: Record<string, { contextWindow?: number }>;
+        };
         // Update session with Claude's session ID
         if (resultData.sessionId) {
           sessionManager.setClaudeSessionId(sessionId, resultData.sessionId);
+        }
+        // Save context window from modelUsage (if available)
+        if (resultData.modelUsage) {
+          for (const [modelName, usage] of Object.entries(resultData.modelUsage)) {
+            if (usage.contextWindow) {
+              // Update model usage with context window (0 tokens to not double-count)
+              sessionManager.addModelUsage(
+                sessionId,
+                modelName,
+                { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+                usage.contextWindow
+              );
+            }
+          }
         }
         // Flush accumulated text/thinking to history
         flushAccumulator(sessionId);

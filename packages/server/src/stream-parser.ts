@@ -60,10 +60,20 @@ export interface UserEvent {
   message: UserMessage;
 }
 
+export interface ResultModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+}
+
 export interface ResultEvent {
   type: 'result';
   result: string;
   session_id?: string;
+  modelUsage?: Record<string, ResultModelUsage>;
 }
 
 export interface SystemEvent {

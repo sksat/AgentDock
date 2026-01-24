@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 import { spawn, ChildProcess } from 'child_process';
-import { StreamJsonParser, StreamEvent } from './stream-parser.js';
+import { StreamJsonParser, StreamEvent, type ResultModelUsage } from './stream-parser.js';
 
 // Permission mode as reported by Claude Code's system event
 // Maps to: 'default' -> ask, 'acceptEdits' -> auto-edit, 'plan' -> plan
@@ -58,7 +58,7 @@ export interface ClaudeRunnerEvents {
   thinking: (data: { thinking: string }) => void;
   tool_use: (data: { id: string; name: string; input: unknown }) => void;
   tool_result: (data: { toolUseId: string; content: string; isError: boolean }) => void;
-  result: (data: { result: string; sessionId?: string }) => void;
+  result: (data: { result: string; sessionId?: string; modelUsage?: Record<string, ResultModelUsage> }) => void;
   system: (data: { subtype?: string; sessionId?: string; tools?: string[]; model?: string; permissionMode?: string; cwd?: string }) => void;
   usage: (data: UsageData) => void;
   error: (data: { type: 'stderr' | 'process' | 'parse'; message: string; error?: Error }) => void;
@@ -441,6 +441,7 @@ export class ClaudeRunner extends EventEmitter {
         this.emit('result', {
           result: event.result,
           sessionId: event.session_id,
+          modelUsage: event.modelUsage,
         });
         break;
     }

@@ -562,7 +562,7 @@ describe('InputArea session-start mode', () => {
 });
 
 describe('Context window occupancy', () => {
-  it('should display occupancy rate with pie chart when model and tokenUsage are provided', () => {
+  it('should display simple token count when occupancy is low (< 40%)', () => {
     render(
       <InputArea
         onSend={() => {}}
@@ -571,8 +571,22 @@ describe('Context window occupancy', () => {
       />
     );
 
-    // 50,000 / 200,000 = 25%
-    expect(screen.getByText('25% used')).toBeInTheDocument();
+    // 50,000 / 200,000 = 25% - low occupancy shows simple token display
+    expect(screen.getByText('50,000 in')).toBeInTheDocument();
+    expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
+  });
+
+  it('should display pie chart when occupancy is 40% or more', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"
+        tokenUsage={{ inputTokens: 80000, outputTokens: 1000 }}
+      />
+    );
+
+    // 80,000 / 200,000 = 40% - shows pie chart
+    expect(screen.getByText('40% used')).toBeInTheDocument();
   });
 
   it('should display occupancy rate with custom contextWindow prop', () => {

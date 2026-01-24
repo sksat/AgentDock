@@ -528,6 +528,7 @@ function App() {
                 onModelChange={handleModelChange}
                 sessionId={session?.claudeSessionId}
                 tokenUsage={usageInfo ? { inputTokens: usageInfo.inputTokens, outputTokens: usageInfo.outputTokens } : undefined}
+                contextWindow={modelUsage?.find(m => m.modelName === systemInfo?.model)?.contextWindow}
                 thinkingEnabled={thinkingEnabled}
                 onToggleThinking={handleToggleThinking}
                 onNewSession={() => setIsNewSessionModalOpen(true)}
