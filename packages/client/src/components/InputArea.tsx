@@ -7,7 +7,7 @@ import { ProjectSelector } from './ProjectSelector';
 import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
 import type { RunnerBackend, Repository, SelectedProject, RecentProject } from '@agent-dock/shared';
-import { calculateOccupancyRate, getContextWindow } from '@agent-dock/shared';
+import { calculateOccupancyRate } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
