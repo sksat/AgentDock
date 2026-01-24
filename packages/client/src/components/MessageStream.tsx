@@ -400,9 +400,14 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
   const prevSessionIdRef = useRef(sessionId);
 
   // Scroll to bottom when messages change and autoScroll is enabled
+  // Use requestAnimationFrame to ensure DOM has been updated with new content
   useEffect(() => {
     if (autoScroll && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        }
+      });
     }
   }, [messages, autoScroll]);
 
@@ -411,9 +416,11 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     if (sessionId !== prevSessionIdRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoScroll(true);
-      if (containerRef.current) {
-        containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      }
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        }
+      });
       prevSessionIdRef.current = sessionId;
     }
   }, [sessionId]);
