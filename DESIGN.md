@@ -629,6 +629,94 @@ function isAutoAllowedTool(toolName: string): boolean {
 - 新しいツールを追加する際は、自動許可が適切かどうかを慎重に検討すること
 - 外部 MCP ツールは絶対に自動許可リストに含めない
 
+### Permission Mode に応じた自動許可
+
+#### 目指したい状態
+
+**Claude Code VSCode 拡張と同じ挙動を実現する。**
+
+ユーザーが「Edit automatically」（`acceptEdits` モード）を選択した場合、Edit ツールは permission prompt なしで自動実行される。
+
+| Mode | Edit | Write | Bash |
+|------|------|-------|------|
+| `default` | 確認 | 確認 | 確認 |
+| `acceptEdits` | **自動** | 確認 | 確認 |
+| `plan` | 拒否 | 拒否 | 拒否 |
+
+**注意**: Claude Code の設計では `acceptEdits` は Edit のみ対象。Write は対象外（Feature Request #19080 参照）。
+
+#### 実現手段
+
+Claude Code には permission 処理を外部に委譲する方法が2つある:
+
+| 観点 | `--permission-prompt-tool` (MCP) | Hooks |
+|------|----------------------------------|-------|
+| Anthropic 推奨度 | レガシー化の傾向 | 推奨（2025年8月〜） |
+| `permission_mode` 受信 | **受信しない** | 受信する |
+| タイムアウト | なし（無期限待機可能） | 60秒（設定可能だが制限あり） |
+
+**設計方針**: 両方の実装を内部的に切り替え可能にする。
+
+```typescript
+// 設定またはセッションごとに選択可能
+type PermissionHandlerType = 'mcp' | 'hooks';
+```
+
+#### 判断経緯
+
+**調査結果** (2026-01-24):
+
+1. Claude Code CLI で `--permission-mode acceptEdits` を指定すると、Edit は permission prompt なしで成功
+2. `--permission-prompt-tool` を指定すると、Claude Code は permission_mode 処理をバイパスし、全て MCP に委譲
+3. Hooks は `permission_mode` を受け取れるが、60秒タイムアウト制限あり
+
+**両方の実装が必要な理由**:
+
+- **MCP**: タイムアウトなし。ユーザーが長時間応答しなくても待機可能。ただしレガシー化の懸念。
+- **Hooks**: Anthropic 推奨。`permission_mode` を直接受け取れる。ただし60秒制限。
+
+**短期的な選択**: MCP を維持し、server 側で `permission_mode` チェックを追加（最小変更）
+
+**中長期的な選択**: Hooks への移行を検討。タイムアウトが許容できるユースケースでは Hooks を使用。
+
+#### 実装（短期）
+
+`packages/server/src/server.ts` の `permission_request` ハンドラー:
+
+```typescript
+if (session.permissionMode === 'auto-edit' && message.toolName === 'Edit') {
+  ws.send(JSON.stringify({
+    type: 'permission_response',
+    sessionId: message.sessionId,
+    requestId: message.requestId,
+    response: { behavior: 'allow', updatedInput: message.input },
+  }));
+  return;
+}
+```
+
+#### 実装（中長期 - Hooks 移行）
+
+`PermissionRequest` hook を使用し、Claude Code から `permission_mode` を受け取る:
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "agentdock-permission-handler.sh"
+      }]
+    }]
+  }
+}
+```
+
+Hook 側で `permission_mode` に応じて `allow`/`deny`/`ask` を返す。
+
+**詳細な調査レポート**: `docs/research/permission-mode-investigation.md`
+
 ### リポジトリ登録機能
 
 よく使うディレクトリや Git リポジトリを事前登録し、セッション開始時に選択できる機能。リポジトリを選択してセッションを開始すると、複数セッションの同時並行開発が可能になる。
