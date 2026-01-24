@@ -206,15 +206,17 @@ function parsePersistedOutput(output: string): ParsedPersistedOutput | null {
  */
 function ReadToolOutput({ output, isError }: { output: string; isError: boolean }) {
   const parsedLines = useMemo(() => parseReadOutput(output), [output]);
+  // Always strip Claude Code tags for fallback display to avoid exposing internal metadata
+  const cleanOutput = useMemo(() => parseClaudeCodeTags(output).cleanOutput, [output]);
 
   if (isError || !parsedLines) {
-    // Error or unparseable output: use plain pre display
+    // Error or unparseable output: use plain pre display with tags stripped
     return (
       <pre className={clsx(
         'px-3 py-2 text-sm font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto',
         isError ? 'bg-accent-danger/10 text-accent-danger' : 'bg-bg-secondary text-text-secondary'
       )}>
-        {output}
+        {cleanOutput}
       </pre>
     );
   }

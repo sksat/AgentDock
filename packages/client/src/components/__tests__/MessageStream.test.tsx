@@ -1032,6 +1032,40 @@ describe('Read tool output formatting', () => {
     expect(preElement?.textContent).toContain('Some plain text output');
   });
 
+  it('should strip system-reminder tags from non-cat-n format output (fallback)', () => {
+    // When output is not cat -n format but contains system-reminder tags,
+    // the fallback <pre> display should still strip the internal metadata
+    const outputWithReminder = `Some plain text output
+<system-reminder>
+Internal reminder that should not be shown to user
+</system-reminder>`;
+
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolName: 'Read',
+          toolUseId: 'read-1',
+          input: { file_path: '/path/to/file.ts' },
+          output: outputWithReminder,
+          isComplete: true,
+          isError: false,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = render(<MessageStream messages={messages} />);
+
+    // Should use <pre> element for non-parsed output
+    const preElement = container.querySelector('pre');
+    expect(preElement).toBeInTheDocument();
+    // Plain text should be visible
+    expect(preElement?.textContent).toContain('Some plain text output');
+    // system-reminder content should be stripped
+    expect(preElement?.textContent).not.toContain('Internal reminder');
+    expect(preElement?.textContent).not.toContain('system-reminder');
+  });
+
   it('should display error output in red with pre element', () => {
     const messages: MessageStreamItem[] = [
       {
