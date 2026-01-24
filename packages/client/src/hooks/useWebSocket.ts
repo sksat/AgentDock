@@ -103,8 +103,17 @@ export function useWebSocket(
     }
 
     if (wsRef.current) {
-      wsRef.current.close();
+      const ws = wsRef.current;
       wsRef.current = null;
+
+      // If still connecting, wait for open/error before closing
+      // This prevents "WebSocket closed before connection established" errors
+      if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => ws.close();
+        ws.onerror = () => ws.close();
+      } else {
+        ws.close();
+      }
     }
 
     setIsConnected(false);

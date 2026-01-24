@@ -132,4 +132,59 @@ describe('useWebSocket', () => {
     // onDisconnect should have been called
     expect(onDisconnect).toHaveBeenCalled();
   });
+
+  it('should handle disconnect during CONNECTING state without errors', async () => {
+    // Create a WebSocket that stays in CONNECTING state
+    class SlowMockWebSocket extends MockWebSocket {
+      constructor(url: string) {
+        super(url);
+        // Override: don't auto-connect, stay in CONNECTING
+        this.readyState = MockWebSocket.CONNECTING;
+      }
+
+      // Allow manual triggering of connection
+      triggerOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.onopen?.();
+      }
+    }
+
+    // Temporarily replace with slow mock
+    // @ts-expect-error - Mock WebSocket for testing
+    globalThis.WebSocket = SlowMockWebSocket;
+
+    const closeSpy = vi.fn();
+    const originalClose = SlowMockWebSocket.prototype.close;
+    SlowMockWebSocket.prototype.close = function () {
+      closeSpy();
+      originalClose.call(this);
+    };
+
+    const { unmount } = renderHook(() =>
+      useWebSocket('ws://localhost:3001/ws', { reconnect: false })
+    );
+
+    // WebSocket should be in CONNECTING state
+    expect(mockInstances[0].readyState).toBe(MockWebSocket.CONNECTING);
+
+    // Unmount while still connecting - this should NOT throw
+    act(() => {
+      unmount();
+    });
+
+    // close() should NOT have been called yet (waiting for open/error)
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    // Simulate connection completing after unmount
+    act(() => {
+      (mockInstances[0] as SlowMockWebSocket).triggerOpen();
+    });
+
+    // NOW close should have been called
+    expect(closeSpy).toHaveBeenCalled();
+
+    // Restore
+    // @ts-expect-error - Mock WebSocket for testing
+    globalThis.WebSocket = MockWebSocket;
+  });
 });
