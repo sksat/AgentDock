@@ -3,6 +3,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MessageStream, type MessageStreamItem } from '../MessageStream';
 
+// Mock scrollIntoView which is not implemented in jsdom
+Element.prototype.scrollIntoView = vi.fn();
+
 describe('MessageStream', () => {
   it('should render empty state when no messages', () => {
     render(<MessageStream messages={[]} />);
