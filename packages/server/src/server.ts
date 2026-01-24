@@ -383,6 +383,29 @@ export function isWebTool(toolName: string): boolean {
 }
 
 /**
+ * Check if a tool should be auto-allowed based on permission mode.
+ *
+ * This matches Claude Code VSCode extension behavior:
+ * - acceptEdits (auto-edit): auto-allow Edit tool only
+ *   - Write is NOT included (see Claude Code Feature Request #19080)
+ * - plan: no auto-allow (read-only mode)
+ * - default/ask: no auto-allow
+ *
+ * @param permissionMode - The session's permission mode
+ * @param toolName - The tool to check
+ * @returns true if the tool should be auto-allowed
+ */
+export function shouldAutoAllowByPermissionMode(
+  permissionMode: string | undefined,
+  toolName: string
+): boolean {
+  if (permissionMode === 'auto-edit' && toolName === 'Edit') {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Execute a browser command via BrowserController
  */
 async function executeBrowserCommand(controller: BrowserController, command: BrowserCommand): Promise<unknown> {
@@ -2072,6 +2095,17 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // Auto-allow certain tools (browser tools, AskUserQuestion, etc.)
         if (isAutoAllowedTool(message.toolName)) {
+          ws.send(JSON.stringify({
+            type: 'permission_response',
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            response: { behavior: 'allow', updatedInput: message.input },
+          }));
+          return;
+        }
+
+        // Auto-allow based on permission mode (matches Claude Code VSCode extension behavior)
+        if (shouldAutoAllowByPermissionMode(session.permissionMode, message.toolName)) {
           ws.send(JSON.stringify({
             type: 'permission_response',
             sessionId: message.sessionId,
