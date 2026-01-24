@@ -507,6 +507,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     },
   }), []);
 
+  // Handle scroll to bottom button click
+  const handleScrollToBottomClick = useCallback(() => {
+    setAutoScroll(true);
+    autoScrollRef.current = true;
+    scrollToBottom();
+  }, [scrollToBottom]);
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
@@ -514,13 +521,6 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       </div>
     );
   }
-
-  // Handle scroll to bottom button click
-  const handleScrollToBottomClick = useCallback(() => {
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    scrollToBottom();
-  }, [scrollToBottom]);
 
   return (
     <div className="relative flex-1 flex flex-col overflow-hidden">
