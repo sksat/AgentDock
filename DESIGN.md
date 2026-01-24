@@ -842,3 +842,133 @@ interface RecentProject {
 ```
 
 Recent Project はセッション履歴から自動抽出される（クライアント側で計算）。
+
+---
+
+## Container Mode
+
+### 概要
+
+Container Mode は Claude Code を Podman コンテナ内で実行する機能。ホスト環境を汚染せず、安全に AI エージェントを動作させることができる。
+
+### コンテナイメージ
+
+| イメージ | 用途 | Dockerfile |
+|---------|------|-----------|
+| `localhost/claude-code:local` | Claude Code のみ | `Dockerfile.claude` |
+| `localhost/claude-browser:dev` | Claude Code + Browser MCP | `Dockerfile.claude-browser` |
+
+### アーキテクチャ
+
+#### browserInContainer: false（デフォルト）
+
+Browser MCP はホスト上で動作。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ホスト                                                       │
+│                                                             │
+│  AgentDock Server        Browser MCP (Playwright)           │
+│       │                       │                             │
+│       │ WebSocket             │ localhost                   │
+│       ▼                       ▼                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Claude Code コンテナ (--network=host)                │   │
+│  │                                                      │   │
+│  │ claude CLI → pnpm dev (localhost:5173)              │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**特徴:**
+- `--network=host` により、コンテナ内の localhost = ホストの localhost
+- Browser MCP がホスト上で動作するため、localhost アクセスが可能
+- MCP サーバーとの WebSocket 通信も localhost で動作
+
+#### browserInContainer: true（同一コンテナモード）
+
+Browser MCP もコンテナ内で動作。localhost が共有される。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ホスト                                                       │
+│                                                             │
+│  AgentDock Server (:3001)                                   │
+│       │                                                     │
+│       │ WebSocket (ws://localhost:3002)                     │
+│       ▼                                                     │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Claude Code + Browser コンテナ                       │   │
+│  │ (claude-browser イメージ, ポートマッピング)          │   │
+│  │                                                      │   │
+│  │  ┌─────────────────┐  ┌─────────────────────────┐   │   │
+│  │  │ Claude Code     │  │ Browser Bridge (:3002)  │   │   │
+│  │  │ pnpm dev :5173  │  │ Playwright              │   │   │
+│  │  │                 │  │ → localhost:5173 ✅     │   │   │
+│  │  └─────────────────┘  └─────────────────────────┘   │   │
+│  │                                                      │   │
+│  │            同じネットワーク空間                       │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**特徴:**
+- Browser bridge と Claude Code が同じコンテナ内で実行
+- コンテナ内の localhost が共有されるため、dev server にアクセス可能
+- ポートマッピング (`-p ${bridgePort}:3002`) でホストから bridge に接続
+- `--network=host` を使わないため、複数セッションでポート競合しない
+
+### コンポーネント
+
+#### PersistentContainerManager
+
+永続コンテナを管理するクラス。
+
+**責務:**
+- コンテナの起動・停止（detach モード）
+- Browser bridge の起動
+- Bridge WebSocket 接続の管理
+- Claude Code の実行（`podman exec`）
+
+**メソッド:**
+- `startContainer()`: コンテナを detach モードで起動
+- `startBrowserBridge()`: コンテナ内で browser bridge を起動
+- `executeClaudeCode(prompt, options)`: `podman exec` で Claude Code を実行
+- `sendBrowserCommand(requestId, command)`: Bridge にコマンド送信
+- `stopContainer()`: コンテナを停止
+
+#### ContainerBrowserSessionManager
+
+コンテナ内 Browser セッションを管理するクラス。
+
+**責務:**
+- セッションごとの Browser 操作の委譲
+- Bridge メッセージの転送
+- Screencast フレームの転送
+
+### 環境変数
+
+| 変数名 | 説明 | デフォルト |
+|--------|------|-----------|
+| `BROWSER_BRIDGE_ENABLED` | Browser bridge を起動するか | `false` |
+| `BRIDGE_PORT` | Bridge のポート番号 | `3002` |
+| `GIT_USER_NAME` | Git user.name | (ホストから取得) |
+| `GIT_USER_EMAIL` | Git user.email | (ホストから取得) |
+
+### docker-entrypoint.sh
+
+コンテナ起動時に実行されるエントリーポイントスクリプト。
+
+**責務:**
+- Git identity の設定（`GIT_USER_NAME`, `GIT_USER_EMAIL` 環境変数から）
+- GitHub SSH → HTTPS 変換の設定
+- `gh auth setup-git` による credential helper 設定
+- `BROWSER_BRIDGE_ENABLED=true` の場合、browser bridge をバックグラウンド起動
+
+### Issue 対応
+
+| Issue | 問題 | 解決策 |
+|-------|------|--------|
+| #78 | Browser MCP が localhost にアクセスできない | 同一コンテナ化により localhost を共有 |
+| #79 | ネイティブモジュールのビルドツール不足 | `build-essential`, `uv` を追加 |
+| #80 | Git 設定の自動構成 | `docker-entrypoint.sh` で自動設定 |
