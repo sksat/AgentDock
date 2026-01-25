@@ -364,9 +364,25 @@ describe('PodmanClaudeRunner', () => {
 
       expect(pty.spawn).toHaveBeenCalledWith(
         'podman',
-        expect.arrayContaining(['exec', '-it', 'abc123def456', 'claude']),
+        expect.arrayContaining(['exec', '-i', 'abc123def456', 'claude']),
         expect.any(Object)
       );
+    });
+
+    it('should use -i flag without -t in exec mode (node-pty provides PTY)', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      // Should have -i for interactive (right after 'exec')
+      expect(args).toContain('-i');
+      // Should NOT have -it (combined flag) - node-pty provides the terminal
+      expect(args).not.toContain('-it');
     });
 
     it('should NOT include run command when containerId is provided', () => {
