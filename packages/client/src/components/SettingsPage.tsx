@@ -154,6 +154,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     autoAllowWebTools: false,
     tmpfsBasePath: '/tmp/agent-dock-repos/',
     cacheDir: '',
+    systemPromptTemplate: '',
   });
 
   useEffect(() => {
@@ -268,6 +269,31 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
               label="Use Podman by default"
               description="Run sessions in Podman containers for isolation (requires server setup)"
             />
+          </SettingCard>
+
+          {/* System Prompt */}
+          <SettingCard
+            title="System Prompt"
+            description="Custom instructions added to every session. Supports template variables."
+          >
+            <div className="space-y-3">
+              <textarea
+                className="w-full h-40 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                value={displaySettings.systemPromptTemplate}
+                onChange={(e) => updateGlobalSetting('systemPromptTemplate', e.target.value)}
+                placeholder="Enter your system prompt template..."
+              />
+              <div className="text-xs text-text-secondary space-y-1">
+                <p className="font-medium">Available variables:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-text-tertiary">
+                  <li><code className="bg-bg-tertiary px-1 rounded">{`{{session_id}}`}</code> - Session ID</li>
+                  <li><code className="bg-bg-tertiary px-1 rounded">{`{{session_url}}`}</code> - URL to this session</li>
+                  <li><code className="bg-bg-tertiary px-1 rounded">{`{{working_dir}}`}</code> - Working directory path</li>
+                  <li><code className="bg-bg-tertiary px-1 rounded">{`{{repository_name}}`}</code> - Repository name (if available)</li>
+                  <li><code className="bg-bg-tertiary px-1 rounded">{`{{repository_path}}`}</code> - Repository path (if available)</li>
+                </ul>
+              </div>
+            </div>
           </SettingCard>
 
           {/* About */}
