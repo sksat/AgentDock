@@ -1,0 +1,16 @@
+# Lightweight container image for integration tests
+# Uses mock-claude instead of real Claude Code CLI
+FROM node:24-slim
+
+# Create node user with UID 1000 for rootless podman compatibility
+# (node:24-slim already has node user with UID 1000)
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory
+WORKDIR /workspace
+
+USER node

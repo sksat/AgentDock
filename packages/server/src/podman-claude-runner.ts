@@ -202,10 +202,12 @@ export class PodmanClaudeRunner extends EventEmitter {
     }
 
     // Build podman exec arguments
+    // Note: Use -i (interactive) without -t (tty) because node-pty provides the PTY.
+    // Using both -t and node-pty causes double TTY allocation conflict and immediate exit.
     const claudeArgs = this.buildClaudeArgs(prompt, options);
     const podmanArgs = [
       'exec',
-      '-it',
+      '-i',
       ...envArgs,
       this.options.containerId!,
       this.options.claudePath!,
