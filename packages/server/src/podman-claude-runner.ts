@@ -16,9 +16,6 @@ import {
 } from './claude-runner.js';
 import { ContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
 
-// Permission mode cycle order (Shift+Tab cycles through these)
-const PERMISSION_MODE_ORDER: ClaudePermissionMode[] = ['default', 'acceptEdits', 'plan'];
-
 // Regex for valid tool names: alphanumeric, hyphen, underscore, colon, slash, at-sign, dot
 // Examples: "Bash", "Read", "mcp__server:tool", "plugin@namespace"
 const VALID_TOOL_NAME_REGEX = /^[a-zA-Z0-9_\-:/@.]+$/;
@@ -87,38 +84,58 @@ export class PodmanClaudeRunner extends EventEmitter {
   }
 
   /**
-   * Request permission mode change by sending Shift+Tab to Claude Code.
+   * Generate a unique request ID for control requests.
+   */
+  private generateRequestId(): string {
+    return Math.random().toString(36).substring(2, 15);
+  }
+
+  /**
+   * Send a control_request message to Claude Code via PTY.
+   * This is the format used by the Claude Agent SDK for runtime configuration changes.
+   * @param request The control request payload (e.g., { subtype: 'set_permission_mode', mode: 'plan' })
+   * @returns The request ID if sent successfully, null if no PTY available
+   */
+  sendControlRequest(request: { subtype: string; [key: string]: unknown }): string | null {
+    if (!this.ptyProcess || !this._isRunning) {
+      console.log('[PodmanClaudeRunner] Cannot send control_request: no PTY available');
+      return null;
+    }
+
+    const requestId = this.generateRequestId();
+    const controlRequest = {
+      type: 'control_request',
+      request_id: requestId,
+      request,
+    };
+
+    console.log('[PodmanClaudeRunner] Sending control_request via PTY:', JSON.stringify(controlRequest));
+    this.ptyProcess.write(JSON.stringify(controlRequest) + '\n');
+    return requestId;
+  }
+
+  /**
+   * Request permission mode change by sending control_request to Claude Code.
+   * The actual mode change is confirmed via control_response event.
+   * @param targetMode The desired permission mode
+   * @returns true if control_request was sent, false if already at target or no PTY
    */
   requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean {
     if (this._permissionMode === targetMode) {
       return false;
     }
 
-    if (!this.ptyProcess) {
-      console.log('[PodmanClaudeRunner] Cannot change permission mode: no PTY process');
-      return false;
+    const requestId = this.sendControlRequest({
+      subtype: 'set_permission_mode',
+      mode: targetMode,
+    });
+
+    if (requestId) {
+      console.log(`[PodmanClaudeRunner] Requested permission mode change to ${targetMode} (request_id: ${requestId})`);
+      return true;
     }
 
-    const currentIndex = PERMISSION_MODE_ORDER.indexOf(this._permissionMode);
-    const targetIndex = PERMISSION_MODE_ORDER.indexOf(targetMode);
-
-    if (currentIndex === -1 || targetIndex === -1) {
-      console.log('[PodmanClaudeRunner] Invalid permission mode');
-      return false;
-    }
-
-    let steps = targetIndex - currentIndex;
-    if (steps <= 0) {
-      steps += PERMISSION_MODE_ORDER.length;
-    }
-
-    console.log(`[PodmanClaudeRunner] Sending ${steps} Shift+Tab(s) to change mode from ${this._permissionMode} to ${targetMode}`);
-
-    for (let i = 0; i < steps; i++) {
-      this.ptyProcess.write('\x1b[Z');
-    }
-
-    return true;
+    return false;
   }
 
   /**

@@ -81,6 +81,14 @@ function handleControlRequest(message) {
   if (request.subtype === 'set_permission_mode') {
     permissionMode = request.mode;
 
+    // Send system event with updated permission mode (like real Claude Code)
+    output({
+      type: 'system',
+      subtype: 'permission_mode_changed',
+      session_id: sessionId,
+      permissionMode: permissionMode,
+    });
+
     // Send success response (Claude sends two: one with mode, one without)
     output({
       type: 'control_response',
@@ -104,6 +112,16 @@ function handleControlRequest(message) {
   }
 }
 
+// Track pending operations
+let pendingOps = 0;
+let stdinClosed = false;
+
+function checkExit() {
+  if (stdinClosed && pendingOps === 0) {
+    process.exit(0);
+  }
+}
+
 // Set up stdin reading
 const rl = readline.createInterface({
   input: process.stdin,
@@ -116,7 +134,11 @@ rl.on('line', (line) => {
     const message = JSON.parse(line);
 
     if (message.type === 'user') {
-      handleUserMessage(message);
+      pendingOps++;
+      handleUserMessage(message).finally(() => {
+        pendingOps--;
+        checkExit();
+      });
     } else if (message.type === 'control_request') {
       handleControlRequest(message);
     }
@@ -126,7 +148,8 @@ rl.on('line', (line) => {
 });
 
 rl.on('close', () => {
-  process.exit(0);
+  stdinClosed = true;
+  checkExit();
 });
 
 // Keep process alive
