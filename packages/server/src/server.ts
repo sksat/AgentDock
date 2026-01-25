@@ -2780,6 +2780,15 @@ Keep it concise but comprehensive.`;
               };
               break;
             }
+          } else {
+            // Session already exists - send current status to reconnect client
+            // For container sessions, we don't have cached status, so just indicate active
+            sendToSession(message.sessionId, {
+              type: 'screencast_status',
+              sessionId: message.sessionId,
+              active: true,
+            });
+            console.log(`[ContainerBrowserSession] Reconnected client for session ${message.sessionId}`);
           }
         } else {
           // Use host browser session manager
@@ -2794,6 +2803,19 @@ Keep it concise but comprehensive.`;
                 message: error instanceof Error ? error.message : 'Failed to create browser session',
               };
               break;
+            }
+          } else {
+            // Session already exists - send current status to reconnect client
+            const status = await browserSessionManager.getStatus(message.sessionId);
+            if (status) {
+              sendToSession(message.sessionId, {
+                type: 'screencast_status',
+                sessionId: message.sessionId,
+                active: status.active,
+                browserUrl: status.browserUrl,
+                browserTitle: status.browserTitle,
+              });
+              console.log(`[BrowserSession] Reconnected client for session ${message.sessionId}`);
             }
           }
         }

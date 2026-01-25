@@ -212,6 +212,27 @@ export class BrowserSessionManager extends EventEmitter {
   }
 
   /**
+   * Get the current status of a session
+   *
+   * @param sessionId - Session identifier
+   * @returns Current session status or undefined if session doesn't exist
+   */
+  async getStatus(sessionId: string): Promise<BrowserSessionStatus | undefined> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const page = session.controller.getPage();
+    return {
+      sessionId,
+      active: session.streamer.isActive(),
+      browserUrl: page?.url(),
+      browserTitle: page ? await page.title() : undefined,
+    };
+  }
+
+  /**
    * Destroy all sessions
    */
   async destroyAll(): Promise<void> {
