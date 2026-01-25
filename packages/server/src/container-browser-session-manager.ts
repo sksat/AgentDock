@@ -223,6 +223,8 @@ export class ContainerBrowserSessionManager extends EventEmitter {
         const closedSession = this.sessions.get(sessionId);
         if (closedSession) {
           closedSession.lastStatus = closedStatus;
+          // Clear lastFrame so reload after close doesn't show old frame
+          closedSession.lastFrame = undefined;
         }
         this.emit('status', closedStatus);
         break;
