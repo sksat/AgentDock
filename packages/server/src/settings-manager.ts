@@ -16,7 +16,7 @@ Session ID: {{session_id}}
 Session URL: {{session_url}}
 
 When creating pull requests, include:
-Generated with [Claude Code](https://claude.ai/code) via [AgentDock](https://github.com/sksat/claude-bridge)`,
+Generated with [Claude Code](https://claude.ai/code) via [AgentDock](https://github.com/sksat/AgentDock)`,
 };
 
 export class SettingsManager {
