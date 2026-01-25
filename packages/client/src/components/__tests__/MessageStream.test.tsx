@@ -797,7 +797,7 @@ describe('ToolMessage - Browser tool formatting', () => {
     expect(screen.getByText('some tool')).toBeInTheDocument();
   });
 
-  it('should show expanded content by default', () => {
+  it('should show expanded content by default for browser_navigate (Input hidden)', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -813,10 +813,31 @@ describe('ToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    // Should show Input/Output sections by default (expanded)
-    expect(screen.getByText('Input')).toBeInTheDocument();
+    // browser_navigate: Input is hidden (url is shown in summary), only Output shown
+    expect(screen.queryByText('Input')).not.toBeInTheDocument();
     expect(screen.getByText('Output')).toBeInTheDocument();
     expect(screen.getByText('Navigation successful')).toBeInTheDocument();
+  });
+
+  it('should show collapsed Input for browser_click', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__bridge__browser_click',
+          input: { element: 'Submit button', ref: 'btn-1' },
+          output: 'Click successful',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // browser_click: Input is shown (collapsed by default means it's rendered)
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('Output')).toBeInTheDocument();
   });
 });
 

@@ -785,7 +785,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
         if (content.toolName.startsWith('mcp__')) {
           const browserInfo = formatBrowserTool(content.toolName, content.input);
           if (browserInfo) {
-            return { icon: '🌐', summary: `${browserInfo.prefix}:${browserInfo.shortName} ${browserInfo.description}`, inputDisplay: 'expanded' };
+            return { icon: '🌐', summary: `${browserInfo.prefix}:${browserInfo.shortName} ${browserInfo.description}`, inputDisplay: browserInfo.inputDisplay };
           }
           // Generic MCP tool
           const shortName = content.toolName.replace(/^mcp__[^_]+__/, '');
@@ -1020,7 +1020,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
 }
 
 // Helper to format browser tool display
-function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string } | null {
+function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string; inputDisplay: 'expanded' | 'collapsed' | 'hidden' } | null {
   // Match AgentDock bridge browser tools (mcp__bridge__browser_*)
   const bridgeMatch = toolName.match(/^mcp__bridge__browser_(.+)$/);
   // Match external MCP Playwright browser tools (mcp__plugin_playwright_*__browser_*)
@@ -1105,10 +1105,17 @@ function formatBrowserTool(toolName: string, input: unknown): { prefix: string; 
       description = '';
   }
 
+  // Determine inputDisplay based on action type
+  // navigate, snapshot, navigate_back: summary has all info -> hidden
+  // click, type, hover, etc.: show input but collapsed by default
+  const hiddenActions = ['navigate', 'navigate_back', 'snapshot', 'close', 'install'];
+  const inputDisplay: 'expanded' | 'collapsed' | 'hidden' = hiddenActions.includes(action) ? 'hidden' : 'collapsed';
+
   return {
     prefix: isExternalPlaywright ? 'playwright' : 'browser',
     shortName: action.replace(/_/g, ' '),
     description,
+    inputDisplay,
   };
 }
 
