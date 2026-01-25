@@ -216,6 +216,11 @@ export class PodmanClaudeRunner extends EventEmitter {
       this._isRunning = false;
       this.emit('exit', { code: exitCode, signal: signal !== undefined ? String(signal) : null });
     });
+
+    // Send initial user message via stream-json format
+    const userMessage = this.buildUserMessage(prompt);
+    this.ptyProcess.write(userMessage + '\n');
+    console.log('[PodmanClaudeRunner] Initial message sent via PTY');
   }
 
   /**
@@ -311,6 +316,11 @@ export class PodmanClaudeRunner extends EventEmitter {
       this._isRunning = false;
       this.emit('exit', { code: exitCode, signal: signal !== undefined ? String(signal) : null });
     });
+
+    // Send initial user message via stream-json format
+    const userMessage = this.buildUserMessage(prompt);
+    this.ptyProcess.write(userMessage + '\n');
+    console.log('[PodmanClaudeRunner] Initial message sent via PTY');
   }
 
   /**
@@ -319,10 +329,10 @@ export class PodmanClaudeRunner extends EventEmitter {
   private buildClaudeArgs(prompt: string, options: StartOptions): string[] {
     const args: string[] = [];
 
-    // Prompt
-    args.push('-p', prompt);
-
-    // Output format
+    // Use stream-json input/output format for multi-turn support
+    // Empty prompt via -p, actual message sent via stdin
+    args.push('-p', '');
+    args.push('--input-format', 'stream-json');
     args.push('--output-format', 'stream-json', '--verbose');
 
     // Resume session
@@ -498,15 +508,33 @@ export class PodmanClaudeRunner extends EventEmitter {
   }
 
   /**
-   * Send a follow-up user message via stdin.
-   * Note: Container mode uses PTY, not pipes, so this is not fully supported.
-   * Returns false as stdin pipes are not available in container mode.
+   * Build a user message in stream-json format.
    */
-  sendUserMessage(_text: string): boolean {
-    // Container mode uses PTY, not stdin pipes
-    // Multi-turn via stdin is not supported in container mode
-    console.log('[PodmanClaudeRunner] sendUserMessage not supported in container mode');
-    return false;
+  private buildUserMessage(text: string): string {
+    return JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text }],
+      },
+    });
+  }
+
+  /**
+   * Send a follow-up user message via PTY in stream-json format.
+   * This allows multi-turn conversations in container mode.
+   * @returns true if message was sent, false if PTY is not available
+   */
+  sendUserMessage(text: string): boolean {
+    if (!this.ptyProcess || !this._isRunning) {
+      console.log('[PodmanClaudeRunner] Cannot send user message: PTY not available');
+      return false;
+    }
+
+    const userMessage = this.buildUserMessage(text);
+    this.ptyProcess.write(userMessage + '\n');
+    console.log('[PodmanClaudeRunner] Follow-up message sent via PTY');
+    return true;
   }
 
   // Event typing
