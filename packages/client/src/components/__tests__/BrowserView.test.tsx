@@ -183,6 +183,10 @@ describe('BrowserView', () => {
   });
 
   describe('loading state', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should show loading indicator when active but no frame yet', () => {
       render(
         <BrowserView

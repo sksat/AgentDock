@@ -90,10 +90,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
 
     containerManager.on('bridge_disconnected', () => {
       console.log(`[ContainerBrowserSession] Bridge disconnected for session ${sessionId}`);
-      this.emit('status', {
+      const statusData: ContainerBrowserSessionStatus = {
         sessionId,
         active: false,
-      } satisfies ContainerBrowserSessionStatus);
+      };
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.lastStatus = statusData;
+      }
+      this.emit('status', statusData);
     });
 
     // Store session
@@ -117,10 +122,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
     });
 
     // Emit initial status
-    this.emit('status', {
+    const initialStatus: ContainerBrowserSessionStatus = {
       sessionId,
       active: true,
-    } satisfies ContainerBrowserSessionStatus);
+    };
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.lastStatus = initialStatus;
+    }
+    this.emit('status', initialStatus);
   }
 
   /**
@@ -206,10 +216,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
 
       case 'browser_closed': {
         console.log(`[ContainerBrowserSession] Browser closed for session ${sessionId}`);
-        this.emit('status', {
+        const closedStatus: ContainerBrowserSessionStatus = {
           sessionId,
           active: false,
-        } satisfies ContainerBrowserSessionStatus);
+        };
+        const closedSession = this.sessions.get(sessionId);
+        if (closedSession) {
+          closedSession.lastStatus = closedStatus;
+        }
+        this.emit('status', closedStatus);
         break;
       }
 

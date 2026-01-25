@@ -232,11 +232,26 @@ export class BrowserSessionManager extends EventEmitter {
     }
 
     const page = session.controller.getPage();
+
+    // Safely get URL and title - these can throw if page is closing/navigating
+    let browserUrl: string | undefined;
+    let browserTitle: string | undefined;
+    if (page) {
+      try {
+        browserUrl = page.url();
+        browserTitle = await page.title();
+      } catch {
+        // Page may be closing or navigating, use undefined
+        browserUrl = undefined;
+        browserTitle = undefined;
+      }
+    }
+
     return {
       sessionId,
       active: session.streamer.isActive(),
-      browserUrl: page?.url(),
-      browserTitle: page ? await page.title() : undefined,
+      browserUrl,
+      browserTitle,
     };
   }
 
