@@ -105,10 +105,17 @@ describe('PodmanClaudeRunner', () => {
       const claudeIndex = args.indexOf('claude', imageIndex);
       expect(claudeIndex).toBeGreaterThan(imageIndex);
 
-      // -p flag with prompt should follow
+      // -p flag with empty prompt (message sent via PTY in stream-json format)
       const pIndex = args.indexOf('-p', claudeIndex);
       expect(pIndex).toBeGreaterThan(claudeIndex);
-      expect(args[pIndex + 1]).toBe('Hello Claude');
+      expect(args[pIndex + 1]).toBe('');
+
+      // Verify message was sent via PTY write
+      expect(mockPty.write).toHaveBeenCalled();
+      const writeCall = vi.mocked(mockPty.write).mock.calls[0][0];
+      const parsed = JSON.parse(writeCall.replace('\n', ''));
+      expect(parsed.type).toBe('user');
+      expect(parsed.message.content[0].text).toBe('Hello Claude');
     });
 
     it('should include --userns=keep-id for rootless mode', () => {
@@ -374,7 +381,7 @@ describe('PodmanClaudeRunner', () => {
       expect(args).not.toContain('run');
     });
 
-    it('should include prompt in exec mode', () => {
+    it('should include empty prompt in exec mode (message sent via PTY)', () => {
       runner = new PodmanClaudeRunner({
         ...defaultOptions,
         containerId: 'abc123def456',
@@ -384,9 +391,17 @@ describe('PodmanClaudeRunner', () => {
       const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
       const args = spawnCall[1] as string[];
 
+      // -p flag with empty prompt
       expect(args).toContain('-p');
       const pIndex = args.indexOf('-p');
-      expect(args[pIndex + 1]).toBe('Hello Claude');
+      expect(args[pIndex + 1]).toBe('');
+
+      // Verify message was sent via PTY write
+      expect(mockPty.write).toHaveBeenCalled();
+      const writeCall = vi.mocked(mockPty.write).mock.calls[0][0];
+      const parsed = JSON.parse(writeCall.replace('\n', ''));
+      expect(parsed.type).toBe('user');
+      expect(parsed.message.content[0].text).toBe('Hello Claude');
     });
 
     it('should pass environment variables in exec mode', () => {

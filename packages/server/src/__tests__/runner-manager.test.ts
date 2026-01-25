@@ -14,7 +14,10 @@ vi.mock('../claude-runner.js', () => ({
       start: vi.fn(),
       stop: vi.fn(),
       sendInput: vi.fn(),
+      sendUserMessage: vi.fn(() => true),
+      requestPermissionModeChange: vi.fn(() => true),
       isRunning: false,
+      permissionMode: 'default',
     };
   }),
 }));
@@ -202,6 +205,76 @@ describe('RunnerManager', () => {
       (runner2 as unknown as { isRunning: boolean }).isRunning = true;
 
       expect(manager.getRunningCount()).toBe(2);
+    });
+  });
+
+  describe('requestPermissionModeChange', () => {
+    it('should return false for unknown session', () => {
+      expect(manager.requestPermissionModeChange('unknown', 'plan')).toBe(false);
+    });
+
+    it('should return false for non-running session', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      // isRunning defaults to false in mock
+
+      expect(manager.requestPermissionModeChange('session1', 'plan')).toBe(false);
+    });
+
+    it('should call requestPermissionModeChange on running session', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      const runner = manager.getRunner('session1');
+      (runner as unknown as { isRunning: boolean }).isRunning = true;
+
+      const result = manager.requestPermissionModeChange('session1', 'plan');
+
+      expect(result).toBe(true);
+      expect(runner?.requestPermissionModeChange).toHaveBeenCalledWith('plan');
+    });
+
+    it('should return false when runner returns false', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      const runner = manager.getRunner('session1');
+      (runner as unknown as { isRunning: boolean }).isRunning = true;
+      (runner?.requestPermissionModeChange as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+      const result = manager.requestPermissionModeChange('session1', 'default');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('sendUserMessage', () => {
+    it('should return false for unknown session', () => {
+      expect(manager.sendUserMessage('unknown', 'test')).toBe(false);
+    });
+
+    it('should return false for non-running session', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      // isRunning defaults to false in mock
+
+      expect(manager.sendUserMessage('session1', 'test')).toBe(false);
+    });
+
+    it('should call sendUserMessage on running session', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      const runner = manager.getRunner('session1');
+      (runner as unknown as { isRunning: boolean }).isRunning = true;
+
+      const result = manager.sendUserMessage('session1', 'follow-up message');
+
+      expect(result).toBe(true);
+      expect(runner?.sendUserMessage).toHaveBeenCalledWith('follow-up message');
+    });
+
+    it('should return false when runner returns false', () => {
+      manager.startSession('session1', 'test', { onEvent: vi.fn() });
+      const runner = manager.getRunner('session1');
+      (runner as unknown as { isRunning: boolean }).isRunning = true;
+      (runner?.sendUserMessage as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+      const result = manager.sendUserMessage('session1', 'test');
+
+      expect(result).toBe(false);
     });
   });
 });

@@ -3,12 +3,12 @@ import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, ClaudePermission
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 
-// Mock child_process for image mode (pipes)
+// Mock child_process for pipes mode
 vi.mock('child_process', () => ({
   spawn: vi.fn(),
 }));
 
-// Mock node-pty for PTY mode
+// Mock node-pty (not used in current implementation, but kept for compatibility)
 vi.mock('node-pty', () => ({
   default: {
     spawn: vi.fn(),
@@ -22,18 +22,19 @@ import * as pty from 'node-pty';
 const mockSpawn = spawn as ReturnType<typeof vi.fn>;
 const mockPtySpawn = pty.spawn as ReturnType<typeof vi.fn>;
 
-// Create mock child process (for image mode)
+// Create mock child process (for pipes mode)
 function createMockProcess(): {
   process: ChildProcess;
   stdout: EventEmitter;
   stderr: EventEmitter;
-  stdin: { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
+  stdin: { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn>; writableEnded: boolean };
 } {
   const stdout = new EventEmitter();
   const stderr = new EventEmitter();
   const stdin = {
     write: vi.fn(),
     end: vi.fn(),
+    writableEnded: false,
   };
   const process = new EventEmitter() as ChildProcess;
   (process as unknown as { stdout: EventEmitter }).stdout = stdout;
@@ -44,46 +45,13 @@ function createMockProcess(): {
   return { process, stdout, stderr, stdin };
 }
 
-// Create mock PTY process (for non-image mode)
-function createMockPty(): {
-  pty: {
-    pid: number;
-    onData: ReturnType<typeof vi.fn>;
-    onExit: ReturnType<typeof vi.fn>;
-    write: ReturnType<typeof vi.fn>;
-    kill: ReturnType<typeof vi.fn>;
-  };
-  dataCallback: ((data: string) => void) | null;
-  exitCallback: ((exitInfo: { exitCode: number; signal?: number }) => void) | null;
-} {
-  let dataCallback: ((data: string) => void) | null = null;
-  let exitCallback: ((exitInfo: { exitCode: number; signal?: number }) => void) | null = null;
-
-  const mockPty = {
-    pid: 12345,
-    onData: vi.fn((cb: (data: string) => void) => { dataCallback = cb; }),
-    onExit: vi.fn((cb: (exitInfo: { exitCode: number; signal?: number }) => void) => { exitCallback = cb; }),
-    write: vi.fn(),
-    kill: vi.fn(),
-  };
-
-  return {
-    pty: mockPty,
-    get dataCallback() { return dataCallback; },
-    get exitCallback() { return exitCallback; },
-  };
-}
-
 describe('ClaudeRunner', () => {
   let mockProcess: ReturnType<typeof createMockProcess>;
-  let mockPty: ReturnType<typeof createMockPty>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess = createMockProcess();
-    mockPty = createMockPty();
     mockSpawn.mockReturnValue(mockProcess.process);
-    mockPtySpawn.mockReturnValue(mockPty.pty);
   });
 
   afterEach(() => {
@@ -107,15 +75,16 @@ describe('ClaudeRunner', () => {
     });
   });
 
-  describe('start (PTY mode - no images)', () => {
-    it('should spawn claude process with correct arguments', async () => {
+  describe('start (pipes mode)', () => {
+    it('should spawn claude process with stream-json input format', async () => {
       const runner = new ClaudeRunner();
       runner.start('Hello Claude');
 
-      expect(mockPtySpawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.arrayContaining([
-          '-p', 'Hello Claude',
+          '-p', '',
+          '--input-format', 'stream-json',
           '--output-format', 'stream-json',
         ]),
         expect.objectContaining({
@@ -124,11 +93,30 @@ describe('ClaudeRunner', () => {
       );
     });
 
+    it('should write user message to stdin', async () => {
+      const runner = new ClaudeRunner();
+      runner.start('Hello Claude');
+
+      expect(mockProcess.stdin.write).toHaveBeenCalled();
+      const writtenData = mockProcess.stdin.write.mock.calls[0][0];
+      const parsed = JSON.parse(writtenData.replace('\n', ''));
+      expect(parsed.type).toBe('user');
+      expect(parsed.message.content[0].text).toBe('Hello Claude');
+    });
+
+    it('should keep stdin open for control_request messages', async () => {
+      const runner = new ClaudeRunner();
+      runner.start('Hello Claude');
+
+      // stdin.end should NOT be called (kept open for control_request)
+      expect(mockProcess.stdin.end).not.toHaveBeenCalled();
+    });
+
     it('should use custom working directory', async () => {
       const runner = new ClaudeRunner({ workingDir: '/custom/dir' });
       runner.start('test');
 
-      expect(mockPtySpawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.any(Array),
         expect.objectContaining({
@@ -141,7 +129,7 @@ describe('ClaudeRunner', () => {
       const runner = new ClaudeRunner({ claudePath: '/usr/local/bin/claude' });
       runner.start('test');
 
-      expect(mockPtySpawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         '/usr/local/bin/claude',
         expect.any(Array),
         expect.any(Object)
@@ -152,7 +140,7 @@ describe('ClaudeRunner', () => {
       const runner = new ClaudeRunner();
       runner.start('test', { sessionId: 'abc123' });
 
-      expect(mockPtySpawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.arrayContaining(['--resume', 'abc123']),
         expect.any(Object)
@@ -166,7 +154,7 @@ describe('ClaudeRunner', () => {
       });
       runner.start('test');
 
-      expect(mockPtySpawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.arrayContaining([
           '--permission-prompt-tool', 'mcp__bridge__permission_prompt',
@@ -187,7 +175,7 @@ describe('ClaudeRunner', () => {
     });
   });
 
-  describe('stream-json parsing (PTY mode)', () => {
+  describe('stream-json parsing', () => {
     it('should emit text event for assistant message', async () => {
       const runner = new ClaudeRunner();
       const textHandler = vi.fn();
@@ -195,14 +183,13 @@ describe('ClaudeRunner', () => {
 
       runner.start('test');
 
-      // Simulate stream-json output via PTY
       const assistantMessage = JSON.stringify({
         type: 'assistant',
         message: {
           content: [{ type: 'text', text: 'Hello!' }],
         },
       });
-      mockPty.dataCallback?.(assistantMessage + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(assistantMessage + '\n'));
 
       expect(textHandler).toHaveBeenCalledWith({ text: 'Hello!' });
     });
@@ -225,7 +212,7 @@ describe('ClaudeRunner', () => {
           }],
         },
       });
-      mockPty.dataCallback?.(toolUseMessage + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(toolUseMessage + '\n'));
 
       expect(toolUseHandler).toHaveBeenCalledWith({
         id: 'tool_123',
@@ -251,7 +238,7 @@ describe('ClaudeRunner', () => {
           }],
         },
       });
-      mockPty.dataCallback?.(toolResultMessage + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(toolResultMessage + '\n'));
 
       expect(toolResultHandler).toHaveBeenCalledWith({
         toolUseId: 'tool_123',
@@ -272,7 +259,7 @@ describe('ClaudeRunner', () => {
         result: 'Task completed successfully',
         session_id: 'session_abc',
       });
-      mockPty.dataCallback?.(resultMessage + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(resultMessage + '\n'));
 
       expect(resultHandler).toHaveBeenCalledWith({
         result: 'Task completed successfully',
@@ -292,7 +279,7 @@ describe('ClaudeRunner', () => {
         JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Line 2' }] } }),
       ].join('\n') + '\n';
 
-      mockPty.dataCallback?.(multiLine);
+      mockProcess.stdout.emit('data', Buffer.from(multiLine));
 
       expect(textHandler).toHaveBeenCalledTimes(2);
       expect(textHandler).toHaveBeenNthCalledWith(1, { text: 'Line 1' });
@@ -312,16 +299,16 @@ describe('ClaudeRunner', () => {
       });
 
       // Send partial data
-      mockPty.dataCallback?.(fullLine.slice(0, 20));
+      mockProcess.stdout.emit('data', Buffer.from(fullLine.slice(0, 20)));
       expect(textHandler).not.toHaveBeenCalled();
 
       // Send rest of data
-      mockPty.dataCallback?.(fullLine.slice(20) + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(fullLine.slice(20) + '\n'));
       expect(textHandler).toHaveBeenCalledWith({ text: 'Complete' });
     });
   });
 
-  describe('exit handling (PTY mode)', () => {
+  describe('exit handling', () => {
     it('should emit exit event when process exits', async () => {
       const runner = new ClaudeRunner();
       const exitHandler = vi.fn();
@@ -329,7 +316,7 @@ describe('ClaudeRunner', () => {
 
       runner.start('test');
 
-      mockPty.exitCallback?.({ exitCode: 0 });
+      mockProcess.process.emit('exit', 0, null);
 
       expect(exitHandler).toHaveBeenCalledWith({ code: 0, signal: null });
     });
@@ -341,36 +328,42 @@ describe('ClaudeRunner', () => {
 
       runner.start('test');
 
-      mockPty.exitCallback?.({ exitCode: 0, signal: 15 });
+      mockProcess.process.emit('exit', 0, 'SIGTERM');
 
-      expect(exitHandler).toHaveBeenCalledWith({ code: 0, signal: '15' });
+      expect(exitHandler).toHaveBeenCalledWith({ code: 0, signal: 'SIGTERM' });
+    });
+
+    it('should emit error event on process error', async () => {
+      const runner = new ClaudeRunner();
+      const errorHandler = vi.fn();
+      runner.on('error', errorHandler);
+
+      runner.start('test');
+
+      const error = new Error('Process failed');
+      mockProcess.process.emit('error', error);
+
+      expect(errorHandler).toHaveBeenCalledWith({
+        type: 'process',
+        message: 'Process failed',
+        error,
+      });
     });
   });
 
-  describe('stop (PTY mode)', () => {
-    it('should kill the PTY process', async () => {
+  describe('stop', () => {
+    it('should kill the child process', async () => {
       const runner = new ClaudeRunner();
       runner.start('test');
 
       runner.stop();
 
-      expect(mockPty.pty.kill).toHaveBeenCalled();
+      expect(mockProcess.process.kill).toHaveBeenCalled();
     });
 
     it('should not throw if process not started', async () => {
       const runner = new ClaudeRunner();
       expect(() => runner.stop()).not.toThrow();
-    });
-  });
-
-  describe('sendInput (PTY mode)', () => {
-    it('should write to PTY', async () => {
-      const runner = new ClaudeRunner();
-      runner.start('test');
-
-      runner.sendInput('user input');
-
-      expect(mockPty.pty.write).toHaveBeenCalledWith('user input\n');
     });
   });
 
@@ -389,7 +382,7 @@ describe('ClaudeRunner', () => {
     it('should return false after exit', () => {
       const runner = new ClaudeRunner();
       runner.start('test');
-      mockPty.exitCallback?.({ exitCode: 0 });
+      mockProcess.process.emit('exit', 0, null);
       expect(runner.isRunning).toBe(false);
     });
   });
@@ -408,7 +401,7 @@ describe('ClaudeRunner', () => {
         session_id: 'session_123',
         tools: ['Bash', 'Read', 'Write'],
       });
-      mockPty.dataCallback?.(systemMessage + '\n');
+      mockProcess.stdout.emit('data', Buffer.from(systemMessage + '\n'));
 
       expect(systemHandler).toHaveBeenCalledWith({
         subtype: 'init',
@@ -418,8 +411,8 @@ describe('ClaudeRunner', () => {
     });
   });
 
-  describe('image support (pipes mode)', () => {
-    it('should use child_process.spawn with stream-json when images are provided', async () => {
+  describe('image support', () => {
+    it('should use stream-json input format when images are provided', async () => {
       const runner = new ClaudeRunner();
       runner.start('What color is this?', {
         images: [{
@@ -438,8 +431,6 @@ describe('ClaudeRunner', () => {
         ]),
         expect.any(Object)
       );
-      // PTY should not be used
-      expect(mockPtySpawn).not.toHaveBeenCalled();
     });
 
     it('should write image message to stdin when images are provided', async () => {
@@ -467,19 +458,6 @@ describe('ClaudeRunner', () => {
       expect(parsedMessage.message.content[1].text).toBe('What color is this?');
     });
 
-    it('should close stdin after writing image message', async () => {
-      const runner = new ClaudeRunner();
-      runner.start('What color?', {
-        images: [{
-          type: 'image',
-          data: 'data',
-          mediaType: 'image/jpeg',
-        }],
-      });
-
-      expect(mockProcess.stdin.end).toHaveBeenCalled();
-    });
-
     it('should handle multiple images', async () => {
       const runner = new ClaudeRunner();
       runner.start('Compare these images', {
@@ -498,7 +476,7 @@ describe('ClaudeRunner', () => {
       expect(parsedMessage.message.content[2].type).toBe('text');
     });
 
-    it('should emit events from child process stdout', async () => {
+    it('should emit events from child process stdout with images', async () => {
       const runner = new ClaudeRunner();
       const textHandler = vi.fn();
       runner.on('text', textHandler);
@@ -514,70 +492,6 @@ describe('ClaudeRunner', () => {
       mockProcess.stdout.emit('data', Buffer.from(assistantMessage + '\n'));
 
       expect(textHandler).toHaveBeenCalledWith({ text: 'The color is red.' });
-    });
-
-    it('should emit exit event from child process', async () => {
-      const runner = new ClaudeRunner();
-      const exitHandler = vi.fn();
-      runner.on('exit', exitHandler);
-
-      runner.start('What color?', {
-        images: [{ type: 'image', data: 'data', mediaType: 'image/png' }],
-      });
-
-      mockProcess.process.emit('exit', 0, null);
-
-      expect(exitHandler).toHaveBeenCalledWith({ code: 0, signal: null });
-    });
-
-    it('should emit error event from child process error', async () => {
-      const runner = new ClaudeRunner();
-      const errorHandler = vi.fn();
-      runner.on('error', errorHandler);
-
-      runner.start('What color?', {
-        images: [{ type: 'image', data: 'data', mediaType: 'image/png' }],
-      });
-
-      const error = new Error('Process failed');
-      mockProcess.process.emit('error', error);
-
-      expect(errorHandler).toHaveBeenCalledWith({
-        type: 'process',
-        message: 'Process failed',
-        error,
-      });
-    });
-
-    it('should stop child process when stop is called', async () => {
-      const runner = new ClaudeRunner();
-      runner.start('What color?', {
-        images: [{ type: 'image', data: 'data', mediaType: 'image/png' }],
-      });
-
-      runner.stop();
-
-      expect(mockProcess.process.kill).toHaveBeenCalled();
-    });
-  });
-
-  describe('mode selection', () => {
-    it('should use PTY mode when no images', () => {
-      const runner = new ClaudeRunner();
-      runner.start('Hello');
-
-      expect(mockPtySpawn).toHaveBeenCalled();
-      expect(mockSpawn).not.toHaveBeenCalled();
-    });
-
-    it('should use pipes mode when images are provided', () => {
-      const runner = new ClaudeRunner();
-      runner.start('Hello', {
-        images: [{ type: 'image', data: 'data', mediaType: 'image/png' }],
-      });
-
-      expect(mockSpawn).toHaveBeenCalled();
-      expect(mockPtySpawn).not.toHaveBeenCalled();
     });
   });
 
@@ -655,54 +569,49 @@ describe('ClaudeRunner', () => {
         const result = runner.requestPermissionModeChange('default');
 
         expect(result).toBe(false);
-        expect(mockPty.pty.write).not.toHaveBeenCalledWith('\x1b[Z');
       });
 
-      it('should return false if no PTY process', () => {
+      it('should return false if no process started', () => {
         const runner = new ClaudeRunner();
-        // Don't start - no PTY
+        // Don't start - no process
 
         const result = runner.requestPermissionModeChange('acceptEdits');
 
         expect(result).toBe(false);
       });
 
-      it('should send Shift+Tab to change from default to acceptEdits (1 step)', () => {
+      it('should send control_request to change mode', () => {
         const runner = new ClaudeRunner();
         runner.start('test');
+        vi.clearAllMocks(); // Clear the initial user message write
 
         const result = runner.requestPermissionModeChange('acceptEdits');
 
         expect(result).toBe(true);
-        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
-        expect(mockPty.pty.write).toHaveBeenCalledWith('\x1b[Z');
+        // Should send control_request via stdin
+        expect(mockProcess.stdin.write).toHaveBeenCalledTimes(1);
+        const call = mockProcess.stdin.write.mock.calls[0][0];
+        const parsed = JSON.parse(call.replace('\n', ''));
+        expect(parsed.type).toBe('control_request');
+        expect(parsed.request.subtype).toBe('set_permission_mode');
+        expect(parsed.request.mode).toBe('acceptEdits');
       });
 
-      it('should send 2 Shift+Tabs to change from default to plan', () => {
-        const runner = new ClaudeRunner();
-        runner.start('test');
-
-        const result = runner.requestPermissionModeChange('plan');
-
-        expect(result).toBe(true);
-        expect(mockPty.pty.write).toHaveBeenCalledTimes(2);
-        expect(mockPty.pty.write).toHaveBeenNthCalledWith(1, '\x1b[Z');
-        expect(mockPty.pty.write).toHaveBeenNthCalledWith(2, '\x1b[Z');
-      });
-
-      it('should send 1 Shift+Tab to change from acceptEdits to plan', () => {
+      it('should send control_request for any mode change', () => {
         const runner = new ClaudeRunner();
         runner.start('test');
         runner.updatePermissionMode('acceptEdits');
-        vi.clearAllMocks(); // Clear the write calls from start
+        vi.clearAllMocks();
 
         const result = runner.requestPermissionModeChange('plan');
 
         expect(result).toBe(true);
-        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
+        const call = mockProcess.stdin.write.mock.calls[0][0];
+        const parsed = JSON.parse(call.replace('\n', ''));
+        expect(parsed.request.mode).toBe('plan');
       });
 
-      it('should wrap around: plan to default needs 1 Shift+Tab', () => {
+      it('should work for mode change from plan to default', () => {
         const runner = new ClaudeRunner();
         runner.start('test');
         runner.updatePermissionMode('plan');
@@ -711,19 +620,9 @@ describe('ClaudeRunner', () => {
         const result = runner.requestPermissionModeChange('default');
 
         expect(result).toBe(true);
-        expect(mockPty.pty.write).toHaveBeenCalledTimes(1);
-      });
-
-      it('should wrap around: acceptEdits to default needs 2 Shift+Tabs', () => {
-        const runner = new ClaudeRunner();
-        runner.start('test');
-        runner.updatePermissionMode('acceptEdits');
-        vi.clearAllMocks();
-
-        const result = runner.requestPermissionModeChange('default');
-
-        expect(result).toBe(true);
-        expect(mockPty.pty.write).toHaveBeenCalledTimes(2);
+        const call = mockProcess.stdin.write.mock.calls[0][0];
+        const parsed = JSON.parse(call.replace('\n', ''));
+        expect(parsed.request.mode).toBe('default');
       });
     });
 
@@ -740,7 +639,7 @@ describe('ClaudeRunner', () => {
           session_id: 'session_123',
           permissionMode: 'acceptEdits',
         });
-        mockPty.dataCallback?.(systemMessage + '\n');
+        mockProcess.stdout.emit('data', Buffer.from(systemMessage + '\n'));
 
         expect(runner.permissionMode).toBe('acceptEdits');
         expect(modeChangedHandler).toHaveBeenCalledWith({ permissionMode: 'acceptEdits' });
@@ -757,10 +656,127 @@ describe('ClaudeRunner', () => {
           subtype: 'init',
           session_id: 'session_123',
         });
-        mockPty.dataCallback?.(systemMessage + '\n');
+        mockProcess.stdout.emit('data', Buffer.from(systemMessage + '\n'));
 
         expect(modeChangedHandler).not.toHaveBeenCalled();
       });
+    });
+
+    describe('control_response handling', () => {
+      it('should emit control_response event on success', () => {
+        const runner = new ClaudeRunner();
+        const controlResponseHandler = vi.fn();
+        runner.on('control_response', controlResponseHandler);
+        runner.start('test');
+
+        const controlResponse = JSON.stringify({
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: 'req_123',
+            response: { mode: 'acceptEdits' },
+          },
+        });
+        mockProcess.stdout.emit('data', Buffer.from(controlResponse + '\n'));
+
+        expect(controlResponseHandler).toHaveBeenCalledWith({
+          subtype: 'success',
+          request_id: 'req_123',
+          response: { mode: 'acceptEdits' },
+          error: undefined,
+        });
+      });
+
+      it('should update permission mode from successful control_response', () => {
+        const runner = new ClaudeRunner();
+        const modeChangedHandler = vi.fn();
+        runner.on('permission_mode_changed', modeChangedHandler);
+        runner.start('test');
+
+        const controlResponse = JSON.stringify({
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: 'req_123',
+            response: { mode: 'plan' },
+          },
+        });
+        mockProcess.stdout.emit('data', Buffer.from(controlResponse + '\n'));
+
+        expect(runner.permissionMode).toBe('plan');
+        expect(modeChangedHandler).toHaveBeenCalledWith({ permissionMode: 'plan' });
+      });
+
+      it('should emit control_response event on error', () => {
+        const runner = new ClaudeRunner();
+        const controlResponseHandler = vi.fn();
+        runner.on('control_response', controlResponseHandler);
+        runner.start('test');
+
+        const controlResponse = JSON.stringify({
+          type: 'control_response',
+          response: {
+            subtype: 'error',
+            request_id: 'req_123',
+            error: 'Invalid mode',
+          },
+        });
+        mockProcess.stdout.emit('data', Buffer.from(controlResponse + '\n'));
+
+        expect(controlResponseHandler).toHaveBeenCalledWith({
+          subtype: 'error',
+          request_id: 'req_123',
+          response: undefined,
+          error: 'Invalid mode',
+        });
+      });
+    });
+  });
+
+  describe('multi-turn conversation (stdin kept open)', () => {
+    it('should allow sending follow-up user messages via stdin after result', () => {
+      const runner = new ClaudeRunner();
+      const resultHandler = vi.fn();
+      runner.on('result', resultHandler);
+      runner.start('first message');
+
+      // Clear initial message write
+      vi.clearAllMocks();
+
+      // Simulate first result
+      const resultMessage = JSON.stringify({
+        type: 'result',
+        result: 'First response',
+        session_id: 'session_abc',
+      });
+      mockProcess.stdout.emit('data', Buffer.from(resultMessage + '\n'));
+
+      expect(resultHandler).toHaveBeenCalledWith({
+        result: 'First response',
+        sessionId: 'session_abc',
+      });
+
+      // After result, runner should still be running (stdin open)
+      expect(runner.isRunning).toBe(true);
+
+      // Send follow-up message via sendUserMessage (new method)
+      runner.sendUserMessage('second message');
+
+      // Should have written to stdin
+      expect(mockProcess.stdin.write).toHaveBeenCalledTimes(1);
+      const writtenData = mockProcess.stdin.write.mock.calls[0][0];
+      const parsed = JSON.parse(writtenData.replace('\n', ''));
+      expect(parsed.type).toBe('user');
+      expect(parsed.message.content[0].text).toBe('second message');
+    });
+
+    it('should return false from sendUserMessage if stdin is not available', () => {
+      const runner = new ClaudeRunner();
+      // Don't start - no process
+
+      const result = runner.sendUserMessage('test');
+
+      expect(result).toBe(false);
     });
   });
 });
