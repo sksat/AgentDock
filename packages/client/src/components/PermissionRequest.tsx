@@ -76,55 +76,28 @@ function isBashInput(input: unknown): input is BashInput {
   );
 }
 
-// Component for displaying Read tool requests
-function FileReadView({ filePath, offset, limit }: { filePath: string; offset?: number; limit?: number }) {
-  const hasRange = offset !== undefined || limit !== undefined;
-
+// Component for displaying Read tool requests (content only, header handled by PermissionRequest)
+function FileReadView() {
   return (
-    <div className="rounded-lg border border-border bg-bg-primary overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-2 bg-bg-tertiary border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="px-2 py-0.5 text-xs font-medium bg-blue-500/20 text-blue-400 rounded">
-            Read
-          </span>
-          <span className="font-mono text-sm text-text-primary">{filePath}</span>
-        </div>
-        {hasRange && (
-          <span className="px-2 py-0.5 text-xs font-medium bg-bg-secondary text-text-secondary rounded">
-            {offset !== undefined && `offset: ${offset}`}
-            {offset !== undefined && limit !== undefined && ', '}
-            {limit !== undefined && `limit: ${limit}`}
-          </span>
-        )}
-      </div>
-
-      {/* Icon indicator */}
-      <div className="p-4 flex items-center gap-3 text-text-secondary">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <span className="text-sm">Reading file contents</span>
-      </div>
+    <div className="flex items-center gap-3 text-text-secondary">
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span className="text-sm">Reading file contents</span>
     </div>
   );
 }
 
-// Component for displaying Bash tool requests with shell-like appearance
-function BashCommandView({ command, description }: { command: string; description?: string }) {
+// Component for displaying Bash tool requests (content only, header handled by PermissionRequest)
+function BashCommandView({ command }: { command: string }) {
   return (
-    <div>
-      {/* Title header with description */}
-      {description && (
-        <div className="text-sm text-text-secondary mb-2">{description}</div>
-      )}
-
-      {/* Shell-like command display */}
-      <div className="font-mono text-sm">
-        <div className="flex items-start gap-2">
-          <span className="text-accent-success select-none shrink-0">$</span>
-          <pre className="text-text-primary whitespace-pre-wrap break-all overflow-x-auto">{command}</pre>
-        </div>
+    <div
+      data-testid="bash-command-container"
+      className="font-mono text-sm max-h-[400px] overflow-y-auto"
+    >
+      <div className="flex items-start gap-2">
+        <span className="text-accent-success select-none shrink-0">$</span>
+        <pre className="text-text-primary whitespace-pre-wrap break-all overflow-x-auto">{command}</pre>
       </div>
     </div>
   );
@@ -199,40 +172,88 @@ export function PermissionRequest({
     return null;
   }, [toolName, input]);
 
+  // Unified header info for all tool types
+  const headerInfo = useMemo(() => {
+    if (diffViewData) {
+      const lineCount = diffViewData.newContent.split('\n').length;
+      const isNewFile = !diffViewData.oldContent;
+      return {
+        filePath: diffViewData.filePath,
+        lineCount,
+        isNewFile,
+      };
+    }
+    if (readViewData) {
+      const rangeInfo = [
+        readViewData.offset !== undefined ? `offset: ${readViewData.offset}` : null,
+        readViewData.limit !== undefined ? `limit: ${readViewData.limit}` : null,
+      ].filter(Boolean).join(', ');
+      return {
+        filePath: readViewData.filePath,
+        rangeInfo: rangeInfo || undefined,
+      };
+    }
+    if (bashViewData) {
+      return {
+        description: bashViewData.description,
+      };
+    }
+    return null;
+  }, [diffViewData, readViewData, bashViewData]);
+
   return (
-    <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
-      <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
-        <span className="text-accent-primary font-mono font-medium">{toolName}</span>
-        <span className="text-text-secondary text-sm">requests permission to run</span>
+    <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden max-h-[70vh] flex flex-col">
+      {/* Unified header */}
+      <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <span className="px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded shrink-0">
+            {toolName}
+          </span>
+          {headerInfo?.filePath && (
+            <span className="font-mono text-sm text-text-primary truncate">{headerInfo.filePath}</span>
+          )}
+          {headerInfo?.description && (
+            <span className="text-sm text-text-secondary truncate">{headerInfo.description}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {headerInfo?.lineCount && (
+            <span className="text-xs text-text-secondary">{headerInfo.lineCount} lines</span>
+          )}
+          {headerInfo?.rangeInfo && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-bg-secondary text-text-secondary rounded">
+              {headerInfo.rangeInfo}
+            </span>
+          )}
+          {headerInfo?.isNewFile && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
+              New file
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto flex-1 min-h-0">
         {diffViewData ? (
           <DiffView
             toolName={diffViewData.toolName}
             filePath={diffViewData.filePath}
             oldContent={diffViewData.oldContent}
             newContent={diffViewData.newContent}
+            hideHeader
           />
         ) : readViewData ? (
-          <FileReadView
-            filePath={readViewData.filePath}
-            offset={readViewData.offset}
-            limit={readViewData.limit}
-          />
+          <FileReadView />
         ) : bashViewData ? (
-          <BashCommandView
-            command={bashViewData.command}
-            description={bashViewData.description}
-          />
+          <BashCommandView command={bashViewData.command} />
         ) : (
-          <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">
+          <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto max-h-[400px] overflow-y-auto">
             {JSON.stringify(input, null, 2)}
           </pre>
         )}
       </div>
 
-      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3">
+      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3 shrink-0">
         <button
           onClick={handleDeny}
           disabled={responded}

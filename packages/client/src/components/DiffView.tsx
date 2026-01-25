@@ -5,6 +5,8 @@ export interface DiffViewProps {
   filePath: string;
   oldContent?: string;
   newContent: string;
+  /** Hide the header when used inside PermissionRequest */
+  hideHeader?: boolean;
 }
 
 export function DiffView({
@@ -12,6 +14,7 @@ export function DiffView({
   filePath,
   oldContent,
   newContent,
+  hideHeader = false,
 }: DiffViewProps) {
   const isNewFile = !oldContent;
 
@@ -22,24 +25,26 @@ export function DiffView({
   const lineCount = newContent.split('\n').length;
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-bg-tertiary border-b border-border">
-        <div className="flex items-center gap-3">
-          <span className="px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded">
-            {toolName}
-          </span>
-          <span className="font-mono text-sm text-text-primary">{filePath}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-secondary">{lineCount} lines</span>
-          {isNewFile && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
-              New file
+    <div className={hideHeader ? '' : 'rounded-lg border border-border overflow-hidden'}>
+      {/* Header - hidden when inside PermissionRequest */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-4 py-2 bg-bg-tertiary border-b border-border">
+          <div className="flex items-center gap-3">
+            <span className="px-2 py-0.5 text-xs font-medium bg-accent-primary/20 text-accent-primary rounded">
+              {toolName}
             </span>
-          )}
+            <span className="font-mono text-sm text-text-primary">{filePath}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-secondary">{lineCount} lines</span>
+            {isNewFile && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-accent-success/20 text-accent-success rounded">
+                New file
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Diff content - max height with scroll */}
       <div data-testid="diff-container" className="overflow-x-auto max-h-[400px] overflow-y-auto">

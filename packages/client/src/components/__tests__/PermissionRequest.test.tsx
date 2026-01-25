@@ -66,9 +66,8 @@ describe('PermissionRequest', () => {
     };
     render(<PermissionRequest {...defaultProps} toolName="Write" input={writeInput} />);
 
-    // "Write" appears in both PermissionRequest header and DiffView header
-    const writeElements = screen.getAllByText('Write');
-    expect(writeElements.length).toBe(2);
+    // "Write" appears once in unified header (no duplicate in DiffView)
+    expect(screen.getByText('Write')).toBeInTheDocument();
     expect(screen.getByText(/\/home\/user\/test.txt/)).toBeInTheDocument();
     // Should show "New file" indicator for Write without old content
     expect(screen.getByText(/New file/)).toBeInTheDocument();
@@ -82,9 +81,8 @@ describe('PermissionRequest', () => {
     };
     render(<PermissionRequest {...defaultProps} toolName="Edit" input={editInput} />);
 
-    // "Edit" appears in both PermissionRequest header and DiffView header
-    const editElements = screen.getAllByText('Edit');
-    expect(editElements.length).toBe(2);
+    // "Edit" appears once in unified header (no duplicate in DiffView)
+    expect(screen.getByText('Edit')).toBeInTheDocument();
     expect(screen.getByText('/home/user/code.ts')).toBeInTheDocument();
     // Should have a diff container
     expect(screen.getByTestId('diff-container')).toBeInTheDocument();
@@ -126,9 +124,8 @@ describe('PermissionRequest', () => {
     };
     render(<PermissionRequest {...defaultProps} toolName="Read" input={readInput} />);
 
-    // "Read" appears in both PermissionRequest header and FileReadView header
-    const readElements = screen.getAllByText('Read');
-    expect(readElements.length).toBe(2);
+    // "Read" appears once in unified header (no duplicate in FileReadView)
+    expect(screen.getByText('Read')).toBeInTheDocument();
     expect(screen.getByText('/home/user/document.txt')).toBeInTheDocument();
     // Should show "Reading file contents" indicator
     expect(screen.getByText(/Reading file contents/)).toBeInTheDocument();
@@ -143,8 +140,8 @@ describe('PermissionRequest', () => {
     render(<PermissionRequest {...defaultProps} toolName="Read" input={readInput} />);
 
     expect(screen.getByText('/home/user/large-file.log')).toBeInTheDocument();
-    expect(screen.getByText(/offset: 100/)).toBeInTheDocument();
-    expect(screen.getByText(/limit: 50/)).toBeInTheDocument();
+    // offset and limit are shown together in unified header
+    expect(screen.getByText(/offset: 100, limit: 50/)).toBeInTheDocument();
   });
 
   it('should display Bash tool with shell-like command view', () => {
@@ -172,5 +169,52 @@ describe('PermissionRequest', () => {
     // Should show shell prompt and command
     expect(screen.getByText('$')).toBeInTheDocument();
     expect(screen.getByText('git status')).toBeInTheDocument();
+  });
+
+  describe('content height constraints', () => {
+    it('should have max-height and overflow-y-auto on Bash command view', () => {
+      const bashInput = { command: 'echo "test"' };
+      const { container } = render(
+        <PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />
+      );
+
+      const bashContainer = container.querySelector('[data-testid="bash-command-container"]');
+      expect(bashContainer).toBeInTheDocument();
+      expect(bashContainer).toHaveClass('max-h-[400px]');
+      expect(bashContainer).toHaveClass('overflow-y-auto');
+    });
+
+    it('should have max-height and overflow-y-auto on JSON fallback view', () => {
+      const unknownInput = { customField: 'value' };
+      const { container } = render(
+        <PermissionRequest {...defaultProps} toolName="UnknownTool" input={unknownInput} />
+      );
+
+      const preElement = container.querySelector('pre');
+      expect(preElement).toBeInTheDocument();
+      expect(preElement).toHaveClass('max-h-[400px]');
+      expect(preElement).toHaveClass('overflow-y-auto');
+    });
+
+    it('should not crash with very long Bash command', () => {
+      const longCommand = 'a'.repeat(10000);
+      const bashInput = { command: longCommand };
+
+      expect(() =>
+        render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />)
+      ).not.toThrow();
+
+      expect(screen.getByText(/aaa/)).toBeInTheDocument();
+    });
+
+    it('should not crash with very large JSON input', () => {
+      const largeInput = {
+        data: Array.from({ length: 100 }, (_, i) => ({ id: i, value: 'x'.repeat(100) })),
+      };
+
+      expect(() =>
+        render(<PermissionRequest {...defaultProps} toolName="UnknownTool" input={largeInput} />)
+      ).not.toThrow();
+    });
   });
 });
