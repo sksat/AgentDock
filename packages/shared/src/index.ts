@@ -743,6 +743,16 @@ export interface UsageInfoMessage {
    * Cumulative values should overwrite, delta values should accumulate.
    */
   isCumulative?: boolean;
+  /**
+   * Context window size from CLI result.
+   * Used to calculate context occupancy percentage.
+   */
+  contextWindow?: number;
+  /**
+   * Model name this usage applies to.
+   * Required when contextWindow is provided for modelUsage updates.
+   */
+  modelName?: string;
 }
 
 export interface PermissionRequestMessage {
