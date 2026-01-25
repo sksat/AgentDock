@@ -56,6 +56,7 @@ export interface ModelUsage {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+  contextWindow?: number;
 }
 
 interface MessageRow {
@@ -137,16 +138,17 @@ export class SessionManager {
         FROM sessions WHERE id = ?
       `),
       upsertModelUsage: this.db.prepare(`
-        INSERT INTO session_model_usage (session_id, model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO session_model_usage (session_id, model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, context_window)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id, model_name) DO UPDATE SET
           input_tokens = input_tokens + excluded.input_tokens,
           output_tokens = output_tokens + excluded.output_tokens,
           cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
-          cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens
+          cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+          context_window = COALESCE(excluded.context_window, context_window)
       `),
       getModelUsage: this.db.prepare(`
-        SELECT model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+        SELECT model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, context_window
         FROM session_model_usage WHERE session_id = ?
       `),
       // Thread binding operations (for Slack persistence)
@@ -529,7 +531,7 @@ export class SessionManager {
   /**
    * Add usage for a specific model in a session
    */
-  addModelUsage(sessionId: string, modelName: string, usage: SessionUsage): void {
+  addModelUsage(sessionId: string, modelName: string, usage: SessionUsage, contextWindow?: number): void {
     // Persist ephemeral session first (usage means session is active)
     this.ensurePersisted(sessionId);
     this.stmts.upsertModelUsage.run(
@@ -538,7 +540,8 @@ export class SessionManager {
       usage.inputTokens,
       usage.outputTokens,
       usage.cacheCreationTokens,
-      usage.cacheReadTokens
+      usage.cacheReadTokens,
+      contextWindow ?? null
     );
   }
 
@@ -552,6 +555,7 @@ export class SessionManager {
       output_tokens: number;
       cache_creation_tokens: number;
       cache_read_tokens: number;
+      context_window: number | null;
     }>;
 
     return rows.map((row) => ({
@@ -560,6 +564,7 @@ export class SessionManager {
       outputTokens: row.output_tokens,
       cacheCreationTokens: row.cache_creation_tokens,
       cacheReadTokens: row.cache_read_tokens,
+      contextWindow: row.context_window ?? undefined,
     }));
   }
 

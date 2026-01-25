@@ -589,6 +589,7 @@ export interface SessionAttachedMessage {
     outputTokens: number;
     cacheCreationTokens: number;
     cacheReadTokens: number;
+    contextWindow?: number;
   }>;
   /** Pending permission request that needs user response */
   pendingPermission?: {
@@ -734,6 +735,12 @@ export interface UsageInfoMessage {
   outputTokens: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  /**
+   * If true, values are session cumulative (from CLI modelUsage).
+   * If false/undefined, values are per-turn delta (legacy behavior).
+   * Cumulative values should overwrite, delta values should accumulate.
+   */
+  isCumulative?: boolean;
 }
 
 export interface PermissionRequestMessage {
@@ -1134,3 +1141,6 @@ export interface RepositoryDeletedMessage {
   type: 'repository_deleted';
   id: string;
 }
+
+// ==================== Model Limits ====================
+export * from './model-limits.js';

@@ -60,10 +60,44 @@ export interface UserEvent {
   message: UserMessage;
 }
 
+/**
+ * Model usage from CLI result event.
+ *
+ * NOTE: `inputTokens` is the SESSION CUMULATIVE value, not per-turn delta.
+ * This means:
+ * - Turn 1: inputTokens = 10
+ * - Turn 2: inputTokens = 30 (cumulative)
+ * - After compact: inputTokens should reflect compacted context size
+ *
+ * Test script to verify CLI behavior:
+ * ```bash
+ * # Create session and check cumulative inputTokens
+ * SESSION=$(timeout 30 claude --output-format stream-json --verbose -p "Say hello" 2>/dev/null \
+ *   | grep '"type":"system"' | head -1 | jq -r '.session_id')
+ *
+ * # Turn 2 - inputTokens should increase
+ * timeout 30 claude --output-format stream-json --verbose --resume "$SESSION" -p "Say hello again" 2>/dev/null \
+ *   | grep '"type":"result"' | jq '.modelUsage | to_entries[] | {model: .key, inputTokens: .value.inputTokens}'
+ *
+ * # After /compact - inputTokens should decrease (TODO: verify this)
+ * timeout 30 claude --output-format stream-json --verbose --resume "$SESSION" -p "/compact" 2>/dev/null \
+ *   | grep '"type":"result"' | jq '.modelUsage'
+ * ```
+ */
+export interface ResultModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+}
+
 export interface ResultEvent {
   type: 'result';
   result: string;
   session_id?: string;
+  modelUsage?: Record<string, ResultModelUsage>;
 }
 
 export interface SystemEvent {

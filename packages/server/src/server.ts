@@ -1385,10 +1385,50 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'result': {
-        const resultData = eventData as { result: string; sessionId: string };
+        const resultData = eventData as {
+          result: string;
+          sessionId: string;
+          modelUsage?: Record<string, {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadInputTokens?: number;
+            cacheCreationInputTokens?: number;
+            contextWindow?: number;
+          }>;
+        };
         // Update session with Claude's session ID
         if (resultData.sessionId) {
           sessionManager.setClaudeSessionId(sessionId, resultData.sessionId);
+        }
+        // Process modelUsage from CLI result (cumulative values)
+        if (resultData.modelUsage) {
+          const session = sessionManager.getSession(sessionId);
+          const currentModel = session?.model;
+
+          for (const [modelName, usage] of Object.entries(resultData.modelUsage)) {
+            // Save context window to DB
+            if (usage.contextWindow) {
+              sessionManager.addModelUsage(
+                sessionId,
+                modelName,
+                { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+                usage.contextWindow
+              );
+            }
+
+            // Send cumulative usage for current model to client
+            if (modelName === currentModel && usage.inputTokens !== undefined) {
+              sendToSession(sessionId, {
+                type: 'usage_info',
+                sessionId,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens ?? 0,
+                cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
+                cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
+                isCumulative: true,
+              });
+            }
+          }
         }
         // Flush accumulated text/thinking to history
         flushAccumulator(sessionId);

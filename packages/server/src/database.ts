@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 /**
  * Initialize the SQLite database with the required schema.
@@ -45,6 +45,7 @@ function runMigrations(db: Database.Database, from: number, to: number): void {
     9: () => migrateToV9(db),
     10: () => migrateToV10(db),
     11: () => migrateToV11(db),
+    12: () => migrateToV12(db),
   };
 
   db.transaction(() => {
@@ -295,6 +296,16 @@ function migrateToV11(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_repositories_name ON repositories(name);
     CREATE INDEX IF NOT EXISTS idx_repositories_type ON repositories(type);
   `);
+}
+
+function migrateToV12(db: Database.Database): void {
+  // Add context_window column to session_model_usage table
+  const tableInfo = db.prepare("PRAGMA table_info(session_model_usage)").all() as Array<{ name: string }>;
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  if (!columns.has('context_window')) {
+    db.exec('ALTER TABLE session_model_usage ADD COLUMN context_window INTEGER DEFAULT NULL');
+  }
 }
 
 export type { Database };
