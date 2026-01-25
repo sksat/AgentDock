@@ -224,11 +224,12 @@ describe('PermissionRequest', () => {
       const longCommand = 'a'.repeat(10000);
       const bashInput = { command: longCommand };
 
-      expect(() =>
-        render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />)
-      ).not.toThrow();
+      const { container } = render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />);
 
-      expect(screen.getByText(/aaa/)).toBeInTheDocument();
+      // Verify the bash container is rendered with the long command
+      const bashContainer = container.querySelector('[data-testid="bash-command-container"]');
+      expect(bashContainer).toBeInTheDocument();
+      expect(bashContainer?.textContent).toContain('aaa');
     });
 
     it('should not crash with very large JSON input', () => {
