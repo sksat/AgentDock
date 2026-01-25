@@ -1087,17 +1087,9 @@ export function useSession(): UseSessionReturn {
             }));
           }
           // Auto-start screencast if a browser session exists
+          // Don't set active=true immediately - wait for server to confirm via screencast_status
+          // This prevents showing "Loading" state when browser session is actually stale
           if (message.hasBrowserSession) {
-            // Immediately set active state so BrowserView shows browser (not "Start browser" button)
-            setSessionScreencast((prev) => {
-              const newMap = new Map(prev);
-              const current = newMap.get(message.sessionId) ?? {};
-              newMap.set(message.sessionId, {
-                ...current,
-                active: true,
-              });
-              return newMap;
-            });
             send({ type: 'start_screencast', sessionId: message.sessionId });
           }
           // Restore todo state from history
