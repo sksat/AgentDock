@@ -603,6 +603,8 @@ export interface SessionAttachedMessage {
   isRunning?: boolean;
   /** Current permission mode for the session */
   permissionMode?: PermissionMode;
+  /** Model name stored in session (for contextWindow lookup after reload) */
+  model?: string;
 }
 
 export interface SessionListMessage {
@@ -743,6 +745,16 @@ export interface UsageInfoMessage {
    * Cumulative values should overwrite, delta values should accumulate.
    */
   isCumulative?: boolean;
+  /**
+   * Context window size from CLI result.
+   * Used to calculate context occupancy percentage.
+   */
+  contextWindow?: number;
+  /**
+   * Model name this usage applies to.
+   * Required when contextWindow is provided for modelUsage updates.
+   */
+  modelName?: string;
 }
 
 export interface PermissionRequestMessage {

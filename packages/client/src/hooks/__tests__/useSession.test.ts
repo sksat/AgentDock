@@ -1221,6 +1221,199 @@ describe('useSession', () => {
     });
   });
 
+  describe('Context window real-time updates', () => {
+    it('should update modelUsage contextWindow when usage_info includes it', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Initially no model usage
+      expect(result.current.modelUsage).toBeNull();
+
+      // Receive usage_info with contextWindow
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'usage_info',
+          sessionId: 'session-1',
+          inputTokens: 10000,
+          outputTokens: 500,
+          isCumulative: true,
+          contextWindow: 200000,
+          modelName: 'claude-sonnet-4-5',
+        });
+      });
+
+      // Should have modelUsage with contextWindow
+      expect(result.current.modelUsage).not.toBeNull();
+      expect(result.current.modelUsage?.length).toBe(1);
+      expect(result.current.modelUsage?.[0].contextWindow).toBe(200000);
+      expect(result.current.modelUsage?.[0].modelName).toBe('claude-sonnet-4-5');
+    });
+
+    it('should update existing modelUsage entry when contextWindow changes', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Attach with existing model usage (no contextWindow initially)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          modelUsage: [{
+            modelName: 'claude-sonnet-4-5',
+            inputTokens: 5000,
+            outputTokens: 200,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            // no contextWindow yet
+          }],
+        });
+      });
+
+      expect(result.current.modelUsage?.[0].contextWindow).toBeUndefined();
+
+      // Receive usage_info with contextWindow
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'usage_info',
+          sessionId: 'session-1',
+          inputTokens: 10000,
+          outputTokens: 500,
+          isCumulative: true,
+          contextWindow: 200000,
+          modelName: 'claude-sonnet-4-5',
+        });
+      });
+
+      // contextWindow should be updated
+      expect(result.current.modelUsage?.[0].contextWindow).toBe(200000);
+    });
+
+    it('should NOT update modelUsage when usage_info lacks contextWindow or modelName', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Initially no model usage
+      expect(result.current.modelUsage).toBeNull();
+
+      // Receive usage_info WITHOUT contextWindow/modelName (legacy behavior)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'usage_info',
+          sessionId: 'session-1',
+          inputTokens: 10000,
+          outputTokens: 500,
+          isCumulative: true,
+          // No contextWindow or modelName
+        });
+      });
+
+      // modelUsage should still be null (not updated)
+      expect(result.current.modelUsage).toBeNull();
+    });
+
+    it('should update modelUsage for different session without affecting active session', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create two sessions
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+            { id: 'session-2', name: 'Session 2', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session-1
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Set modelUsage for session-1
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'usage_info',
+          sessionId: 'session-1',
+          inputTokens: 5000,
+          outputTokens: 200,
+          isCumulative: true,
+          contextWindow: 200000,
+          modelName: 'claude-opus-4-5',
+        });
+      });
+
+      expect(result.current.modelUsage?.[0].modelName).toBe('claude-opus-4-5');
+
+      // Receive usage_info for session-2 (different session)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'usage_info',
+          sessionId: 'session-2',
+          inputTokens: 8000,
+          outputTokens: 300,
+          isCumulative: true,
+          contextWindow: 200000,
+          modelName: 'claude-sonnet-4-5',
+        });
+      });
+
+      // Active session's modelUsage should NOT change
+      expect(result.current.modelUsage?.[0].modelName).toBe('claude-opus-4-5');
+
+      // Switch to session-2
+      act(() => {
+        result.current.selectSession('session-2');
+      });
+
+      // Should see session-2's modelUsage
+      expect(result.current.modelUsage?.[0].modelName).toBe('claude-sonnet-4-5');
+    });
+  });
+
   describe('Session-bound systemInfo state', () => {
     it('should NOT update systemInfo when system_info arrives for different session', () => {
       const { result } = renderHook(() => useSession());
