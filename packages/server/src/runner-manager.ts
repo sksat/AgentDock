@@ -43,6 +43,8 @@ export interface StartSessionOptions {
    * If provided, uses `podman exec` on this container instead of `podman run`.
    */
   containerId?: string;
+  /** System prompt to inject (will be appended to Claude's default system prompt) */
+  systemPrompt?: string;
   onEvent: RunnerEventHandler;
 }
 
@@ -148,6 +150,7 @@ export class RunnerManager {
       images: options.images,
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.permissionMode,
+      systemPrompt: options.systemPrompt,
     });
   }
 

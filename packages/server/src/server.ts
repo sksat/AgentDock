@@ -31,6 +31,7 @@ import { PersistentContainerManager } from './persistent-container-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { RepositoryManager } from './repository-manager.js';
 import { WorkspaceSetup } from './workspace-setup.js';
+import { expandSystemPromptTemplate, buildSystemPromptVariables } from './system-prompt.js';
 import { nanoid } from 'nanoid';
 import { parsePermissionPattern, matchesPermission, suggestPattern, type PermissionPattern } from './permission-pattern.js';
 
@@ -1180,6 +1181,21 @@ export function createServer(options: ServerOptions): BridgeServer {
         permissionToolName = 'mcp__bridge__permission_prompt';
       }
 
+      // Expand system prompt template
+      let systemPrompt: string | undefined;
+      const systemPromptTemplate = settingsManager.get('systemPromptTemplate');
+      if (systemPromptTemplate) {
+        const clientPort = process.env.AGENTDOCK_CLIENT_PORT || '5173';
+        const baseUrl = process.env.AGENTDOCK_BASE_URL || `http://localhost:${clientPort}`;
+        const variables = buildSystemPromptVariables({
+          sessionId,
+          workingDir: session.workingDir,
+          baseUrl,
+          // Repository info could be added here if available
+        });
+        systemPrompt = expandSystemPromptTemplate(systemPromptTemplate, variables);
+      }
+
       runnerManager.startSession(sessionId, content, {
         workingDir: session.workingDir,
         claudeSessionId: session.claudeSessionId,
@@ -1191,6 +1207,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         browserInContainer,
         bridgePort,
         containerId,
+        systemPrompt,
         onEvent: (sid, eventType, data) => {
           handleRunnerEvent(sid, eventType, data);
           // Clean up MCP config on exit
@@ -2270,6 +2287,20 @@ export function createServer(options: ServerOptions): BridgeServer {
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
 
+          // Expand system prompt template
+          let systemPrompt: string | undefined;
+          const systemPromptTemplate = settingsManager.get('systemPromptTemplate');
+          if (systemPromptTemplate) {
+            const clientPort = process.env.AGENTDOCK_CLIENT_PORT || '5173';
+            const baseUrl = process.env.AGENTDOCK_BASE_URL || `http://localhost:${clientPort}`;
+            const variables = buildSystemPromptVariables({
+              sessionId: message.sessionId,
+              workingDir: session.workingDir,
+              baseUrl,
+            });
+            systemPrompt = expandSystemPromptTemplate(systemPromptTemplate, variables);
+          }
+
           runnerManager.startSession(message.sessionId, message.content, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
@@ -2282,6 +2313,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             browserInContainer,
             bridgePort,
             containerId,
+            systemPrompt,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               // Clean up MCP config on exit
@@ -2672,6 +2704,20 @@ Keep it concise but comprehensive.`;
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
 
+          // Expand system prompt template
+          let systemPrompt: string | undefined;
+          const systemPromptTemplate = settingsManager.get('systemPromptTemplate');
+          if (systemPromptTemplate) {
+            const clientPort = process.env.AGENTDOCK_CLIENT_PORT || '5173';
+            const baseUrl = process.env.AGENTDOCK_BASE_URL || `http://localhost:${clientPort}`;
+            const variables = buildSystemPromptVariables({
+              sessionId: message.sessionId,
+              workingDir: session.workingDir,
+              baseUrl,
+            });
+            systemPrompt = expandSystemPromptTemplate(systemPromptTemplate, variables);
+          }
+
           runnerManager.startSession(message.sessionId, summaryPrompt, {
             workingDir: session.workingDir,
             claudeSessionId: session.claudeSessionId,
@@ -2682,6 +2728,7 @@ Keep it concise but comprehensive.`;
             browserInContainer,
             bridgePort,
             containerId,
+            systemPrompt,
             onEvent: (sessionId, eventType, data) => {
               handleRunnerEvent(sessionId, eventType, data);
               if (eventType === 'exit' && mcpConfigPath) {
