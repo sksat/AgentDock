@@ -3,15 +3,17 @@
  *
  * This runner implements the IClaudeRunner interface and spawns Claude Code
  * inside a rootless Podman container for isolation.
+ *
+ * Uses ClaudeStreamProcessor for stream parsing and event emission,
+ * keeping this class focused on container management.
  */
 
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
-import { StreamEvent } from './stream-parser.js';
+import { ClaudeStreamProcessor, ClaudePermissionMode } from './claude-stream-processor.js';
 import {
   ClaudeRunnerEvents,
-  ClaudePermissionMode,
   StartOptions,
 } from './claude-runner.js';
 import { ContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
@@ -59,9 +61,8 @@ export interface PodmanClaudeRunnerOptions {
 export class PodmanClaudeRunner extends EventEmitter {
   private options: PodmanClaudeRunnerOptions;
   private ptyProcess: IPty | null = null;
-  private buffer: string = '';
+  private processor: ClaudeStreamProcessor;
   private _isRunning: boolean = false;
-  private _permissionMode: ClaudePermissionMode = 'default';
 
   constructor(options: PodmanClaudeRunnerOptions) {
     super();
@@ -73,6 +74,23 @@ export class PodmanClaudeRunner extends EventEmitter {
       permissionToolName: options.permissionToolName,
       containerId: options.containerId,
     };
+    this.processor = new ClaudeStreamProcessor();
+    this.setupProcessorEvents();
+  }
+
+  /**
+   * Forward events from processor to this runner.
+   */
+  private setupProcessorEvents(): void {
+    const events = [
+      'text', 'thinking', 'tool_use', 'tool_result',
+      'result', 'system', 'usage', 'permission_mode_changed', 'control_response'
+    ] as const;
+    for (const eventName of events) {
+      this.processor.on(eventName, (data: unknown) => {
+        this.emit(eventName, data as never);
+      });
+    }
   }
 
   get isRunning(): boolean {
@@ -80,7 +98,7 @@ export class PodmanClaudeRunner extends EventEmitter {
   }
 
   get permissionMode(): ClaudePermissionMode {
-    return this._permissionMode;
+    return this.processor.permissionMode;
   }
 
   /**
@@ -121,7 +139,7 @@ export class PodmanClaudeRunner extends EventEmitter {
    * @returns true if control_request was sent, false if already at target or no PTY
    */
   requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean {
-    if (this._permissionMode === targetMode) {
+    if (this.processor.permissionMode === targetMode) {
       return false;
     }
 
@@ -142,27 +160,7 @@ export class PodmanClaudeRunner extends EventEmitter {
    * Update permission mode from Claude Code's system event.
    */
   updatePermissionMode(mode: string): void {
-    const validMode = this.parsePermissionMode(mode);
-    if (validMode && validMode !== this._permissionMode) {
-      const oldMode = this._permissionMode;
-      this._permissionMode = validMode;
-      console.log(`[PodmanClaudeRunner] Permission mode changed: ${oldMode} -> ${validMode}`);
-      this.emit('permission_mode_changed', { permissionMode: validMode });
-    }
-  }
-
-  private parsePermissionMode(mode: string): ClaudePermissionMode | null {
-    if (mode === 'default' || mode === 'acceptEdits' || mode === 'plan') {
-      return mode;
-    }
-    if (mode === 'normal' || mode === 'ask') {
-      return 'default';
-    }
-    if (mode === 'auto-edit' || mode === 'autoEdit') {
-      return 'acceptEdits';
-    }
-    console.log(`[PodmanClaudeRunner] Unknown permission mode: ${mode}`);
-    return null;
+    this.processor.updatePermissionMode(mode);
   }
 
   /**
@@ -171,6 +169,12 @@ export class PodmanClaudeRunner extends EventEmitter {
    * Otherwise (run mode), starts a new container via podman run.
    */
   start(prompt: string, options: StartOptions = {}): void {
+    // Reset processor state for new session
+    this.processor.resetBuffer();
+    if (options.permissionMode) {
+      this.processor.setInitialPermissionMode(options.permissionMode);
+    }
+
     if (this.options.containerId) {
       // Exec mode: run Claude in existing container (Issue #78: same-container mode)
       this.startExecMode(prompt, options);
@@ -225,7 +229,7 @@ export class PodmanClaudeRunner extends EventEmitter {
     this.emit('started', { pid: this.ptyProcess.pid });
 
     this.ptyProcess.onData((data: string) => {
-      this.handleStdout(data);
+      this.processor.handleData(data);
     });
 
     this.ptyProcess.onExit(({ exitCode, signal }) => {
@@ -325,7 +329,7 @@ export class PodmanClaudeRunner extends EventEmitter {
     this.emit('started', { pid: this.ptyProcess.pid });
 
     this.ptyProcess.onData((data: string) => {
-      this.handleStdout(data);
+      this.processor.handleData(data);
     });
 
     this.ptyProcess.onExit(({ exitCode, signal }) => {
@@ -383,125 +387,6 @@ export class PodmanClaudeRunner extends EventEmitter {
     }
 
     return args;
-  }
-
-  /**
-   * Handle stdout data from the container.
-   */
-  private handleStdout(data: string): void {
-    this.buffer += data;
-    const lines = this.buffer.split('\n');
-
-    // Keep the last incomplete line in the buffer
-    this.buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      // Filter out ANSI escape sequences and control characters
-      const cleanLine = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\r/g, '');
-      if (cleanLine && cleanLine.startsWith('{')) {
-        this.parseLine(cleanLine);
-      }
-    }
-  }
-
-  /**
-   * Parse a single line of stream-json output.
-   */
-  private parseLine(line: string): void {
-    try {
-      const event = JSON.parse(line) as StreamEvent;
-      this.processEvent(event);
-    } catch {
-      // Ignore non-JSON lines (container startup messages, etc.)
-    }
-  }
-
-  /**
-   * Process a parsed stream-json event.
-   */
-  private processEvent(event: StreamEvent): void {
-    switch (event.type) {
-      case 'system':
-        if (event.permissionMode) {
-          this.updatePermissionMode(event.permissionMode);
-        }
-        this.emit('system', {
-          subtype: event.subtype,
-          sessionId: event.session_id,
-          tools: event.tools,
-          model: event.model,
-          permissionMode: event.permissionMode,
-          cwd: event.cwd,
-        });
-        break;
-
-      case 'assistant':
-        this.processAssistantMessage(event);
-        break;
-
-      case 'user':
-        this.processUserMessage(event);
-        break;
-
-      case 'result':
-        this.emit('result', {
-          result: event.result,
-          sessionId: event.session_id,
-        });
-        break;
-    }
-  }
-
-  /**
-   * Process an assistant message event.
-   */
-  private processAssistantMessage(event: StreamEvent): void {
-    if (event.type !== 'assistant') return;
-    if (!event.message?.content) return;
-
-    for (const block of event.message.content) {
-      if (block.type === 'text') {
-        this.emit('text', { text: block.text });
-      } else if (block.type === 'thinking') {
-        this.emit('thinking', { thinking: block.thinking });
-      } else if (block.type === 'tool_use') {
-        this.emit('tool_use', {
-          id: block.id,
-          name: block.name,
-          input: block.input,
-        });
-      }
-    }
-
-    // Emit usage info if available
-    if (event.message.usage) {
-      this.emit('usage', {
-        inputTokens: event.message.usage.input_tokens,
-        outputTokens: event.message.usage.output_tokens,
-        cacheCreationInputTokens: event.message.usage.cache_creation_input_tokens,
-        cacheReadInputTokens: event.message.usage.cache_read_input_tokens,
-      });
-    }
-  }
-
-  /**
-   * Process a user message event (for tool results).
-   */
-  private processUserMessage(event: StreamEvent): void {
-    if (event.type !== 'user') return;
-    if (!event.message?.content) return;
-    if (typeof event.message.content === 'string') return;
-
-    for (const block of event.message.content) {
-      if (block.type === 'tool_result') {
-        this.emit('tool_result', {
-          toolUseId: block.tool_use_id,
-          content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
-          isError: block.is_error ?? false,
-        });
-      }
-    }
   }
 
   /**
