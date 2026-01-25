@@ -157,10 +157,19 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     systemPromptTemplate: '',
   });
 
+  // Local editing state for system prompt (not saved until Save is clicked)
+  const [editingSystemPrompt, setEditingSystemPrompt] = useState<string>('');
+  const [systemPromptDirty, setSystemPromptDirty] = useState(false);
+  const [systemPromptLastSaved, setSystemPromptLastSaved] = useState<Date | null>(null);
+
   useEffect(() => {
     if (globalSettings) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplaySettings(globalSettings);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditingSystemPrompt(globalSettings.systemPromptTemplate);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSystemPromptDirty(false);
     }
   }, [globalSettings]);
 
@@ -178,6 +187,17 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     // Send to server
     updateSettings({ [key]: value });
   }, [updateSettings]);
+
+  const handleSystemPromptChange = useCallback((value: string) => {
+    setEditingSystemPrompt(value);
+    setSystemPromptDirty(value !== displaySettings.systemPromptTemplate);
+  }, [displaySettings.systemPromptTemplate]);
+
+  const saveSystemPrompt = useCallback(() => {
+    updateGlobalSetting('systemPromptTemplate', editingSystemPrompt);
+    setSystemPromptDirty(false);
+    setSystemPromptLastSaved(new Date());
+  }, [editingSystemPrompt, updateGlobalSetting]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -272,15 +292,41 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
           </SettingCard>
 
           {/* System Prompt */}
-          <SettingCard
-            title="System Prompt"
-            description="Custom instructions added to every session. Supports template variables."
-          >
+          <div className="bg-bg-secondary border border-border rounded-lg p-4">
+            <div className="flex items-start justify-between mb-1">
+              <h3 className="text-base font-medium text-text-primary">System Prompt</h3>
+              <div className="flex items-center gap-3">
+                <div className="text-xs">
+                  {systemPromptDirty ? (
+                    <span className="text-yellow-500">Unsaved changes</span>
+                  ) : systemPromptLastSaved ? (
+                    <span className="text-text-tertiary">
+                      Saved at {systemPromptLastSaved.toLocaleTimeString()}
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  onClick={saveSystemPrompt}
+                  disabled={!systemPromptDirty}
+                  className={clsx(
+                    'px-3 py-1 rounded-lg font-medium text-sm transition-colors flex-shrink-0',
+                    systemPromptDirty
+                      ? 'bg-accent-primary text-white hover:bg-accent-primary/90'
+                      : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed'
+                  )}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+            <p className="text-sm text-text-secondary mb-4">
+              Custom instructions added to every session. Supports template variables.
+            </p>
             <div className="space-y-3">
               <textarea
                 className="w-full h-40 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                value={displaySettings.systemPromptTemplate}
-                onChange={(e) => updateGlobalSetting('systemPromptTemplate', e.target.value)}
+                value={editingSystemPrompt}
+                onChange={(e) => handleSystemPromptChange(e.target.value)}
                 placeholder="Enter your system prompt template..."
               />
               <div className="text-xs text-text-secondary space-y-1">
@@ -294,7 +340,7 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
                 </ul>
               </div>
             </div>
-          </SettingCard>
+          </div>
 
           {/* About */}
           <SettingCard title="About">
