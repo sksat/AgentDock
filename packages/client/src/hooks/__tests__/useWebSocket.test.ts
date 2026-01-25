@@ -74,6 +74,97 @@ describe('useWebSocket', () => {
     });
   });
 
+  it('should report connecting state while establishing connection', async () => {
+    // Create a WebSocket that stays in CONNECTING state
+    class SlowConnectWebSocket extends MockWebSocket {
+      constructor(url: string) {
+        super(url);
+        // Override: don't auto-connect, stay in CONNECTING
+        this.readyState = MockWebSocket.CONNECTING;
+      }
+
+      triggerOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.onopen?.();
+      }
+    }
+
+    // @ts-expect-error - Mock WebSocket for testing
+    globalThis.WebSocket = SlowConnectWebSocket;
+
+    const { result } = renderHook(() =>
+      useWebSocket('ws://localhost:3001/ws', { reconnect: false })
+    );
+
+    // Should be in connecting state immediately
+    expect(result.current.connectionState).toBe('connecting');
+    expect(result.current.isConnected).toBe(false);
+
+    // Trigger connection
+    act(() => {
+      (mockInstances[0] as SlowConnectWebSocket).triggerOpen();
+    });
+
+    // Should now be connected
+    expect(result.current.connectionState).toBe('connected');
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('should transition to disconnected state on close', async () => {
+    const { result } = renderHook(() =>
+      useWebSocket('ws://localhost:3001/ws', { reconnect: false })
+    );
+
+    // Wait for connection
+    await waitFor(() => {
+      expect(result.current.connectionState).toBe('connected');
+    });
+
+    // Simulate close
+    act(() => {
+      mockInstances[0].close();
+    });
+
+    expect(result.current.connectionState).toBe('disconnected');
+    expect(result.current.isConnected).toBe(false);
+  });
+
+  it('should use 1000ms as default reconnect interval', async () => {
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() =>
+      useWebSocket('ws://localhost:3001/ws', { reconnect: true })
+    );
+
+    // Wait for initial connection
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.isConnected).toBe(true);
+
+    // Simulate disconnect
+    act(() => {
+      mockInstances[0].close();
+    });
+
+    expect(result.current.connectionState).toBe('disconnected');
+
+    // Advance by 500ms - should still be disconnected (not reconnected yet)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(mockInstances.length).toBe(1); // No new connection attempt
+
+    // Advance by another 500ms (total 1000ms) - should attempt reconnect
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(mockInstances.length).toBe(2); // New connection attempt made
+
+    vi.useRealTimers();
+  });
+
   it('should send messages', async () => {
     const { result } = renderHook(() =>
       useWebSocket('ws://localhost:3001/ws', { reconnect: false })

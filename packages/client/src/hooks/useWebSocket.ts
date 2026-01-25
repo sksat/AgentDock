@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ClientMessage, ServerMessage } from '@agent-dock/shared';
 
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
+
 export interface UseWebSocketOptions {
   onMessage?: (message: ServerMessage) => void;
   onConnect?: () => void;
@@ -11,7 +13,8 @@ export interface UseWebSocketOptions {
 }
 
 export interface UseWebSocketReturn {
-  isConnected: boolean;
+  connectionState: ConnectionState;
+  isConnected: boolean; // Derived from connectionState for backwards compatibility
   send: (message: ClientMessage) => void;
   disconnect: () => void;
   // For testing
@@ -28,10 +31,11 @@ export function useWebSocket(
     onDisconnect,
     onError,
     reconnect = true,
-    reconnectInterval = 3000,
+    reconnectInterval = 1000,
   } = options;
 
-  const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+  const isConnected = connectionState === 'connected';
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => void>(() => {});
@@ -55,15 +59,16 @@ export function useWebSocket(
       return;
     }
 
+    setConnectionState('connecting');
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      setIsConnected(true);
+      setConnectionState('connected');
       onConnectRef.current?.();
     };
 
     ws.onclose = () => {
-      setIsConnected(false);
+      setConnectionState('disconnected');
       onDisconnectRef.current?.();
 
       // Reconnect logic
@@ -116,7 +121,7 @@ export function useWebSocket(
       }
     }
 
-    setIsConnected(false);
+    setConnectionState('disconnected');
   }, []);
 
   const send = useCallback((message: ClientMessage) => {
@@ -136,6 +141,7 @@ export function useWebSocket(
   }, [connect, disconnect]);
 
   return {
+    connectionState,
     isConnected,
     send,
     disconnect,
