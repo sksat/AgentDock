@@ -496,6 +496,8 @@ export interface BridgeServer {
   stop(): Promise<void>;
   getSessionManager(): SessionManager;
   getRunnerManager(): RunnerManager;
+  /** Get the container browser session manager (for testing) */
+  getContainerBrowserSessionManager(): ContainerBrowserSessionManager;
 }
 
 export function createServer(options: ServerOptions): BridgeServer {
@@ -3183,6 +3185,10 @@ Keep it concise but comprehensive.`;
 
     getRunnerManager() {
       return runnerManager;
+    },
+
+    getContainerBrowserSessionManager() {
+      return containerBrowserSessionManager;
     },
   };
 }
