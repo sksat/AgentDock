@@ -602,6 +602,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           claudePath: opts.claudePath,
           mcpConfigPath: opts.mcpConfigPath,
           permissionToolName: opts.permissionToolName,
+          containerId: opts.containerId,
         });
       };
       runnerManager.setBrowserContainerRunnerFactory(browserContainerRunnerFactory);
