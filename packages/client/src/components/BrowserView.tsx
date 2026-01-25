@@ -1,5 +1,8 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import type { ScreencastMetadata } from '@agent-dock/shared';
+
+// Timeout for loading state before showing retry option (10 seconds)
+const LOADING_TIMEOUT_MS = 10000;
 
 export interface BrowserViewFrame {
   data: string;
@@ -67,6 +70,35 @@ export function BrowserView({
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [editedUrl, setEditedUrl] = useState('');
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+  // Track loading state for timeout
+  const isLoading = useMemo(() => isActive && !frame, [isActive, frame]);
+
+  // Handle loading timeout
+  useEffect(() => {
+    if (!isLoading) {
+      // Reset timeout state when not loading
+      setLoadingTimedOut(false);
+      return;
+    }
+
+    // If already timed out, don't start another timer
+    if (loadingTimedOut) return;
+
+    // Set timeout to show retry option
+    const timeoutId = setTimeout(() => {
+      setLoadingTimedOut(true);
+    }, LOADING_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [isLoading, loadingTimedOut]);
+
+  // Handle retry - reset timeout and restart browser
+  const handleRetry = useCallback(() => {
+    setLoadingTimedOut(false);
+    onStartBrowser();
+  }, [onStartBrowser]);
 
   // Chrome height (title bar + nav bar) - approximate
   const CHROME_HEIGHT = 72;
@@ -331,8 +363,26 @@ export function BrowserView({
     return (
       <div className="flex-1 flex items-center justify-center bg-bg-secondary text-text-secondary">
         <div className="text-center">
-          <div className="animate-spin text-4xl mb-2">⏳</div>
-          <div>Loading browser view...</div>
+          {loadingTimedOut ? (
+            <>
+              <div className="text-4xl mb-4">⚠️</div>
+              <div className="text-lg mb-2">Connection failed</div>
+              <div className="text-sm mb-6 text-text-disabled">
+                Unable to connect to browser session. Click retry to try again.
+              </div>
+              <button
+                onClick={handleRetry}
+                className="px-6 py-3 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/80 transition-colors font-medium"
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="animate-spin text-4xl mb-2">⏳</div>
+              <div>Loading browser view...</div>
+            </>
+          )}
         </div>
       </div>
     );
