@@ -155,8 +155,8 @@ describe('PodmanClaudeRunner exec mode integration', () => {
       expect((textEvent?.data as { text: string })?.text).toContain('Hello from exec mode');
 
       // If exit happened, it should be code 0 (success), not code 1 (TTY conflict)
-      if (exitData) {
-        expect(exitData.code).not.toBe(1);
+      if (exitData !== null) {
+        expect((exitData as { code: number | null }).code).not.toBe(1);
       }
     },
     30000
