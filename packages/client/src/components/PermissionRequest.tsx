@@ -206,7 +206,8 @@ export function PermissionRequest({
   homeDir,
 }: PermissionRequestProps) {
   const [responded, setResponded] = useState(false);
-  const [showPatternInput, setShowPatternInput] = useState(false);
+  const [showSessionOptions, setShowSessionOptions] = useState(false);
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   // Generate suggested pattern based on tool and input
   const suggestedPattern = useMemo(() => suggestPattern(toolName, input, workingDir, homeDir), [toolName, input, workingDir, homeDir]);
@@ -362,23 +363,6 @@ export function PermissionRequest({
         )}
       </div>
 
-      {/* Pattern input section (shown when user clicks to customize) */}
-      {showPatternInput && hasPattern && (
-        <div className="px-4 py-3 bg-bg-tertiary border-t border-border">
-          <label className="block text-xs text-text-secondary mb-1">Permission pattern:</label>
-          <input
-            type="text"
-            value={customPattern}
-            onChange={(e) => setCustomPattern(e.target.value)}
-            className="w-full px-3 py-2 rounded bg-bg-primary border border-border text-text-primary font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-            placeholder={suggestedPattern}
-          />
-          <p className="text-xs text-text-secondary mt-1">
-            Use <code className="bg-bg-primary px-1 rounded">:*</code> for prefix matching (e.g., <code className="bg-bg-primary px-1 rounded">git:*</code> matches <code className="bg-bg-primary px-1 rounded">git status</code> but not <code className="bg-bg-primary px-1 rounded">gitk</code>)
-          </p>
-        </div>
-      )}
-
       <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex flex-wrap items-center justify-end gap-3 shrink-0">
         <button
           onClick={handleDeny}
@@ -395,77 +379,91 @@ export function PermissionRequest({
           Deny
         </button>
 
-        {/* Pattern-based allow for session (recommended) */}
-        {hasPattern && (
-          <div className="flex items-center gap-1">
+        {/* Allow for session - dropdown with options */}
+        <div className="relative">
+          <div className="flex items-center">
             <button
               onClick={handleAllowForSession}
               disabled={responded}
               className={clsx(
-                'px-4 py-2 rounded-lg font-medium',
+                'px-4 py-2 rounded-l-lg font-medium',
                 'bg-accent-primary text-white',
                 'hover:bg-accent-primary/90',
                 'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
                 'transition-colors',
                 responded && 'opacity-50 cursor-not-allowed'
               )}
-              title={`Allow ${customPattern} for this session`}
+              title={hasPattern ? `Allow ${customPattern} for this session` : `Allow all ${toolName} for this session`}
             >
-              Allow <code className="font-mono text-xs bg-white/20 px-1 rounded">{customPattern}</code>
+              {hasPattern ? (
+                <>Allow <code className="font-mono text-xs bg-white/20 px-1 rounded">{customPattern}</code></>
+              ) : (
+                'Allow for session'
+              )}
             </button>
             <button
-              onClick={() => setShowPatternInput(!showPatternInput)}
+              onClick={() => setShowSessionOptions(!showSessionOptions)}
               disabled={responded}
               className={clsx(
-                'px-2 py-2 rounded-lg',
-                'bg-accent-primary/80 text-white',
-                'hover:bg-accent-primary/70',
+                'px-2 py-2 rounded-r-lg border-l border-white/20',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
                 'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
                 'transition-colors',
                 responded && 'opacity-50 cursor-not-allowed'
               )}
-              title="Edit pattern"
+              title="More options"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
           </div>
-        )}
 
-        {/* Tool-wide allow for session (legacy/dangerous for some tools) */}
-        {!hasPattern ? (
-          <button
-            onClick={handleAllowForSession}
-            disabled={responded}
-            className={clsx(
-              'px-4 py-2 rounded-lg font-medium',
-              'bg-accent-primary text-white',
-              'hover:bg-accent-primary/90',
-              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-              'transition-colors',
-              responded && 'opacity-50 cursor-not-allowed'
-            )}
-          >
-            Allow for session
-          </button>
-        ) : (
-          <button
-            onClick={handleAllowToolForSession}
-            disabled={responded}
-            className={clsx(
-              'px-3 py-2 rounded-lg font-medium text-sm',
-              'bg-bg-secondary text-text-secondary border border-border',
-              'hover:bg-bg-tertiary hover:text-text-primary',
-              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-              'transition-colors',
-              responded && 'opacity-50 cursor-not-allowed'
-            )}
-            title={`Allow all ${toolName} operations (use with caution)`}
-          >
-            Allow all {toolName}
-          </button>
-        )}
+          {/* Dropdown menu */}
+          {showSessionOptions && !responded && (
+            <div className="absolute right-0 bottom-full mb-1 w-72 bg-bg-secondary border border-border rounded-lg shadow-lg z-10">
+              {hasPattern && (
+                <>
+                  <button
+                    onClick={() => {
+                      handleAllowForSession();
+                      setShowSessionOptions(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors rounded-t-lg"
+                  >
+                    <div className="font-medium text-text-primary">Allow pattern</div>
+                    <code className="text-xs text-text-secondary font-mono">{customPattern}</code>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAllowToolForSession();
+                      setShowSessionOptions(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors border-t border-border"
+                  >
+                    <div className="font-medium text-text-primary">Allow all {toolName}</div>
+                    <span className="text-xs text-text-secondary">Allow any {toolName} operation</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => {
+                  setShowCustomInput(!showCustomInput);
+                  setShowSessionOptions(false);
+                }}
+                className={clsx(
+                  'w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
+                  hasPattern ? 'border-t border-border rounded-b-lg' : 'rounded-lg'
+                )}
+              >
+                <div className="font-medium text-text-primary">Custom pattern...</div>
+                <span className="text-xs text-text-secondary">Edit the permission pattern</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={handleAllow}
           disabled={responded}
@@ -481,6 +479,42 @@ export function PermissionRequest({
           Allow
         </button>
       </div>
+
+      {/* Custom pattern input section */}
+      {showCustomInput && (
+        <div className="px-4 py-3 bg-bg-tertiary border-t border-border">
+          <label className="block text-xs text-text-secondary mb-1">Permission pattern:</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customPattern}
+              onChange={(e) => setCustomPattern(e.target.value)}
+              className="flex-1 px-3 py-2 rounded bg-bg-primary border border-border text-text-primary font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+              placeholder={suggestedPattern}
+            />
+            <button
+              onClick={() => {
+                handleAllowForSession();
+                setShowCustomInput(false);
+              }}
+              disabled={responded}
+              className={clsx(
+                'px-4 py-2 rounded-lg font-medium',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+            >
+              Apply
+            </button>
+          </div>
+          <p className="text-xs text-text-secondary mt-1">
+            Use <code className="bg-bg-primary px-1 rounded">:*</code> for prefix matching (e.g., <code className="bg-bg-primary px-1 rounded">git:*</code> matches <code className="bg-bg-primary px-1 rounded">git status</code> but not <code className="bg-bg-primary px-1 rounded">gitk</code>)
+          </p>
+        </div>
+      )}
     </div>
   );
 }

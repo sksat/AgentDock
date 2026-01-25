@@ -24,14 +24,14 @@ describe('PermissionRequest', () => {
     expect(screen.getByText(/rm -rf/)).toBeInTheDocument();
   });
 
-  it('should render allow, pattern-based allow, allow all, and deny buttons for Bash', () => {
+  it('should render allow, pattern-based allow with dropdown, and deny buttons for Bash', () => {
     render(<PermissionRequest {...defaultProps} />);
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeInTheDocument();
-    // Pattern-based button shows the suggested pattern
+    // Pattern-based button shows the suggested pattern (split button with dropdown)
     expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeInTheDocument();
-    // Also has "Allow all Bash" button for tool-wide permission
-    expect(screen.getByRole('button', { name: /Allow all Bash/ })).toBeInTheDocument();
+    // Dropdown toggle button for more options
+    expect(screen.getByRole('button', { name: /More options/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeInTheDocument();
   });
 
@@ -54,12 +54,15 @@ describe('PermissionRequest', () => {
     expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash(rm:*)', defaultProps.input);
   });
 
-  it('should call onAllowForSession with tool name when Allow all button is clicked', () => {
+  it('should call onAllowForSession with tool name when Allow all option is clicked in dropdown', () => {
     const onAllowForSession = vi.fn();
     render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
 
-    // "Allow all Bash" button allows all Bash commands
-    fireEvent.click(screen.getByRole('button', { name: /Allow all Bash/ }));
+    // First, open the dropdown
+    fireEvent.click(screen.getByRole('button', { name: /More options/ }));
+
+    // "Allow all Bash" option allows all Bash commands
+    fireEvent.click(screen.getByText(/Allow all Bash/));
 
     expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash', defaultProps.input);
   });
