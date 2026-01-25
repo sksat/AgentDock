@@ -562,7 +562,7 @@ describe('InputArea session-start mode', () => {
 });
 
 describe('Context window occupancy', () => {
-  it('should display simple token count when occupancy is low (< 40%)', () => {
+  it('should display percentage and token count when occupancy is low (< 40%)', () => {
     render(
       <InputArea
         onSend={() => {}}
@@ -571,8 +571,8 @@ describe('Context window occupancy', () => {
       />
     );
 
-    // 50,000 / 200,000 = 25% - low occupancy shows simple token display
-    expect(screen.getByText('50,000 tokens')).toBeInTheDocument();
+    // 50,000 / 200,000 = 25% - low occupancy shows percentage and token count
+    expect(screen.getByText('25% | 50,000 tokens')).toBeInTheDocument();
     expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
   });
 

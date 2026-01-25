@@ -706,11 +706,20 @@ export function InputArea({
                   contextWindowProp
                 );
 
-                // Low occupancy or unknown model: simple token display
-                if (occupancy === null || occupancy < 40) {
+                // Unknown model: simple token display without percentage
+                if (occupancy === null) {
                   return (
                     <div className="flex items-center gap-1.5">
                       <span>{tokenUsage.inputTokens.toLocaleString()} tokens</span>
+                    </div>
+                  );
+                }
+
+                // Low occupancy: percentage and token count
+                if (occupancy < 40) {
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span>{Math.round(occupancy)}% | {tokenUsage.inputTokens.toLocaleString()} tokens</span>
                     </div>
                   );
                 }
