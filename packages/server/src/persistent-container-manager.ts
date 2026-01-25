@@ -74,13 +74,26 @@ export class PersistentContainerManager extends EventEmitter {
     // 1. Skip first 4 args (run, -it, --rm, --userns=keep-id) - we add our own
     // 2. Skip last element (image) - we add it after port mapping
     const mountArgs = baseArgs.slice(4, -1);
+
+    // Mount directories needed for MCP server execution inside container:
+    // - /tmp/agent-dock-mcp: MCP config files
+    // - project root: mcp-server dist files
+    const projectRoot = process.cwd().includes('packages/server')
+      ? process.cwd().replace('/packages/server', '')
+      : process.cwd();
+    const mcpMounts = [
+      '-v', '/tmp/agent-dock-mcp:/tmp/agent-dock-mcp:ro',
+      '-v', `${projectRoot}:${projectRoot}:ro`,
+    ];
+
     const args = [
       'run',
       '-d', // detached
       '--rm',
       '--userns=keep-id',
       ...mountArgs,
-      '-p', `${this.options.bridgePort}:${this.options.bridgePort}`, // Expose bridge port (same port inside/outside)
+      ...mcpMounts,
+      '-p', `${this.options.bridgePort}:${this.options.bridgePort}`, // Expose bridge port for host to connect
       containerConfig.image,
       'sleep', 'infinity', // Keep container running
     ];

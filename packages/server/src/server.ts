@@ -70,13 +70,21 @@ interface GenerateMcpConfigOptions {
   mcpServerCwd?: string;
   /** Override the browser bridge URL (for same-container mode) */
   browserBridgeUrl?: string;
+  /** When true, replace localhost with host.containers.internal for container access to host */
+  useContainerHost?: boolean;
 }
 
 /**
  * Generate a temporary MCP config file for a session
  */
 function generateMcpConfig(options: GenerateMcpConfigOptions): string {
-  const { sessionId, wsUrl, mcpServerCommand, mcpServerArgs, mcpServerCwd, browserBridgeUrl } = options;
+  const { sessionId, wsUrl, mcpServerCommand, mcpServerArgs, mcpServerCwd, browserBridgeUrl, useContainerHost } = options;
+
+  // When running inside a container, replace localhost with host.containers.internal
+  // so the MCP server can reach the AgentDock server on the host
+  const effectiveWsUrl = useContainerHost
+    ? wsUrl.replace('localhost', 'host.containers.internal')
+    : wsUrl;
   const configDir = join(tmpdir(), 'agent-dock-mcp');
   if (!existsSync(configDir)) {
     mkdirSync(configDir, { recursive: true });
@@ -87,7 +95,7 @@ function generateMcpConfig(options: GenerateMcpConfigOptions): string {
     command: mcpServerCommand,
     args: mcpServerArgs,
     env: {
-      BRIDGE_WS_URL: wsUrl,
+      BRIDGE_WS_URL: effectiveWsUrl,
       SESSION_ID: sessionId,
       // If browserBridgeUrl is provided (same-container mode), use it for browser operations
       ...(browserBridgeUrl && { BROWSER_BRIDGE_URL: browserBridgeUrl }),
@@ -1158,6 +1166,8 @@ export function createServer(options: ServerOptions): BridgeServer {
           mcpServerCwd,
           // In same-container mode, the browser bridge runs inside the container
           browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+          // When running in container, use host.containers.internal to reach host
+          useContainerHost: browserInContainer,
         });
         permissionToolName = 'mcp__bridge__permission_prompt';
       }
@@ -2143,6 +2153,8 @@ export function createServer(options: ServerOptions): BridgeServer {
               mcpServerCwd,
               // In same-container mode, the browser bridge runs inside the container
               browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+              // When running in container, use host.containers.internal to reach host
+              useContainerHost: browserInContainer,
             });
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
@@ -2539,6 +2551,8 @@ Keep it concise but comprehensive.`;
               mcpServerCwd,
               // In same-container mode, the browser bridge runs inside the container
               browserBridgeUrl: bridgePort ? `ws://localhost:${bridgePort}` : undefined,
+              // When running in container, use host.containers.internal to reach host
+              useContainerHost: browserInContainer,
             });
             permissionToolName = 'mcp__bridge__permission_prompt';
           }
