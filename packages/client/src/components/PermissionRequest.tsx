@@ -381,7 +381,7 @@ export function PermissionRequest({
 
         {/* Allow for session - dropdown with options */}
         <div className="relative">
-          <div className="flex items-center">
+          <div className="flex items-stretch">
             <button
               onClick={handleAllowForSession}
               disabled={responded}
@@ -405,7 +405,7 @@ export function PermissionRequest({
               onClick={() => setShowSessionOptions(!showSessionOptions)}
               disabled={responded}
               className={clsx(
-                'px-2 py-2 rounded-r-lg border-l border-white/20',
+                'px-2 rounded-r-lg border-l border-white/20 flex items-center',
                 'bg-accent-primary text-white',
                 'hover:bg-accent-primary/90',
                 'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
