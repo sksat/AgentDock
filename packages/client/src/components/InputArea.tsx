@@ -715,16 +715,7 @@ export function InputArea({
                   );
                 }
 
-                // Low occupancy: percentage and token count
-                if (occupancy < 40) {
-                  return (
-                    <div className="flex items-center gap-1.5">
-                      <span>{Math.round(occupancy)}% | {tokenUsage.inputTokens.toLocaleString()} tokens</span>
-                    </div>
-                  );
-                }
-
-                // High occupancy: pie chart with color-coded warning
+                // Color based on occupancy level
                 const colorClass = occupancy >= 80
                   ? 'text-accent-danger'
                   : occupancy >= 60
@@ -762,7 +753,7 @@ export function InputArea({
                         strokeLinecap="round"
                       />
                     </svg>
-                    <span>{Math.round(occupancy)}% used</span>
+                    <span>{Math.round(occupancy)}% | {tokenUsage.inputTokens.toLocaleString()} tokens</span>
                   </div>
                 );
               })()}

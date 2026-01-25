@@ -562,7 +562,7 @@ describe('InputArea session-start mode', () => {
 });
 
 describe('Context window occupancy', () => {
-  it('should display percentage and token count when occupancy is low (< 40%)', () => {
+  it('should display pie chart with percentage and token count at any occupancy level', () => {
     render(
       <InputArea
         onSend={() => {}}
@@ -571,12 +571,11 @@ describe('Context window occupancy', () => {
       />
     );
 
-    // 50,000 / 200,000 = 25% - low occupancy shows percentage and token count
+    // 50,000 / 200,000 = 25% - shows pie chart with percentage and token count
     expect(screen.getByText('25% | 50,000 tokens')).toBeInTheDocument();
-    expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
   });
 
-  it('should display pie chart when occupancy is 40% or more', () => {
+  it('should display pie chart with warning color when occupancy is high', () => {
     render(
       <InputArea
         onSend={() => {}}
@@ -585,8 +584,8 @@ describe('Context window occupancy', () => {
       />
     );
 
-    // 80,000 / 200,000 = 40% - shows pie chart
-    expect(screen.getByText('40% used')).toBeInTheDocument();
+    // 80,000 / 200,000 = 40% - shows pie chart with percentage and token count
+    expect(screen.getByText('40% | 80,000 tokens')).toBeInTheDocument();
   });
 
   it('should display occupancy rate with custom contextWindow prop', () => {
@@ -600,7 +599,7 @@ describe('Context window occupancy', () => {
     );
 
     // 50,000 / 100,000 = 50%
-    expect(screen.getByText('50% used')).toBeInTheDocument();
+    expect(screen.getByText('50% | 50,000 tokens')).toBeInTheDocument();
   });
 
   it('should fallback to token display when model is unknown', () => {
@@ -649,7 +648,7 @@ describe('Context window occupancy', () => {
     );
 
     // 140,000 / 200,000 = 70%
-    expect(screen.getByText('70% used')).toBeInTheDocument();
+    expect(screen.getByText('70% | 140,000 tokens')).toBeInTheDocument();
     // Check for warning color class
     const usageElement = container.querySelector('.text-accent-warning');
     expect(usageElement).toBeInTheDocument();
@@ -665,7 +664,7 @@ describe('Context window occupancy', () => {
     );
 
     // 180,000 / 200,000 = 90%
-    expect(screen.getByText('90% used')).toBeInTheDocument();
+    expect(screen.getByText('90% | 180,000 tokens')).toBeInTheDocument();
     // Check for danger color class
     const usageElement = container.querySelector('.text-accent-danger');
     expect(usageElement).toBeInTheDocument();
@@ -681,6 +680,6 @@ describe('Context window occupancy', () => {
     );
 
     // Should cap at 100%, not show 125%
-    expect(screen.getByText('100% used')).toBeInTheDocument();
+    expect(screen.getByText('100% | 250,000 tokens')).toBeInTheDocument();
   });
 });
