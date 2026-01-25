@@ -119,8 +119,11 @@ function BashCommandView({ command, description }: { command: string; descriptio
         <div className="text-sm text-text-secondary mb-2">{description}</div>
       )}
 
-      {/* Shell-like command display */}
-      <div className="font-mono text-sm">
+      {/* Shell-like command display with scroll */}
+      <div
+        data-testid="bash-command-container"
+        className="font-mono text-sm max-h-[400px] overflow-y-auto"
+      >
         <div className="flex items-start gap-2">
           <span className="text-accent-success select-none shrink-0">$</span>
           <pre className="text-text-primary whitespace-pre-wrap break-all overflow-x-auto">{command}</pre>
@@ -226,7 +229,7 @@ export function PermissionRequest({
             description={bashViewData.description}
           />
         ) : (
-          <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto">
+          <pre className="p-3 rounded bg-bg-primary text-text-secondary text-sm overflow-x-auto max-h-[400px] overflow-y-auto">
             {JSON.stringify(input, null, 2)}
           </pre>
         )}

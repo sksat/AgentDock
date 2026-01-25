@@ -173,4 +173,51 @@ describe('PermissionRequest', () => {
     expect(screen.getByText('$')).toBeInTheDocument();
     expect(screen.getByText('git status')).toBeInTheDocument();
   });
+
+  describe('content height constraints', () => {
+    it('should have max-height and overflow-y-auto on Bash command view', () => {
+      const bashInput = { command: 'echo "test"' };
+      const { container } = render(
+        <PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />
+      );
+
+      const bashContainer = container.querySelector('[data-testid="bash-command-container"]');
+      expect(bashContainer).toBeInTheDocument();
+      expect(bashContainer).toHaveClass('max-h-[400px]');
+      expect(bashContainer).toHaveClass('overflow-y-auto');
+    });
+
+    it('should have max-height and overflow-y-auto on JSON fallback view', () => {
+      const unknownInput = { customField: 'value' };
+      const { container } = render(
+        <PermissionRequest {...defaultProps} toolName="UnknownTool" input={unknownInput} />
+      );
+
+      const preElement = container.querySelector('pre');
+      expect(preElement).toBeInTheDocument();
+      expect(preElement).toHaveClass('max-h-[400px]');
+      expect(preElement).toHaveClass('overflow-y-auto');
+    });
+
+    it('should not crash with very long Bash command', () => {
+      const longCommand = 'a'.repeat(10000);
+      const bashInput = { command: longCommand };
+
+      expect(() =>
+        render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />)
+      ).not.toThrow();
+
+      expect(screen.getByText(/aaa/)).toBeInTheDocument();
+    });
+
+    it('should not crash with very large JSON input', () => {
+      const largeInput = {
+        data: Array.from({ length: 100 }, (_, i) => ({ id: i, value: 'x'.repeat(100) })),
+      };
+
+      expect(() =>
+        render(<PermissionRequest {...defaultProps} toolName="UnknownTool" input={largeInput} />)
+      ).not.toThrow();
+    });
+  });
 });
