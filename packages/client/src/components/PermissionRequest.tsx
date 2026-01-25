@@ -203,13 +203,13 @@ export function PermissionRequest({
   }, [toolName, input]);
 
   return (
-    <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden">
-      <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden max-h-[70vh] flex flex-col">
+      <div className="px-4 py-3 bg-bg-tertiary border-b border-border flex items-center gap-2 shrink-0">
         <span className="text-accent-primary font-mono font-medium">{toolName}</span>
         <span className="text-text-secondary text-sm">requests permission to run</span>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto flex-1 min-h-0">
         {diffViewData ? (
           <DiffView
             toolName={diffViewData.toolName}
@@ -235,7 +235,7 @@ export function PermissionRequest({
         )}
       </div>
 
-      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3">
+      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3 shrink-0">
         <button
           onClick={handleDeny}
           disabled={responded}
