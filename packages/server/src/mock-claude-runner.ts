@@ -203,6 +203,16 @@ export class MockClaudeRunner extends EventEmitter {
     }
   }
 
+  sendUserMessage(text: string): boolean {
+    // Mock implementation - just store the input
+    this.lastInput = text;
+    if (this.inputResolver) {
+      this.inputResolver(text);
+      this.inputResolver = null;
+    }
+    return this._isRunning;
+  }
+
   private async executeSteps(): Promise<void> {
     for (this.stepIndex = 0; this.stepIndex < this.currentScenario.steps.length; this.stepIndex++) {
       if (this.stopped) {

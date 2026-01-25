@@ -497,6 +497,18 @@ export class PodmanClaudeRunner extends EventEmitter {
     }
   }
 
+  /**
+   * Send a follow-up user message via stdin.
+   * Note: Container mode uses PTY, not pipes, so this is not fully supported.
+   * Returns false as stdin pipes are not available in container mode.
+   */
+  sendUserMessage(_text: string): boolean {
+    // Container mode uses PTY, not stdin pipes
+    // Multi-turn via stdin is not supported in container mode
+    console.log('[PodmanClaudeRunner] sendUserMessage not supported in container mode');
+    return false;
+  }
+
   // Event typing
   on<K extends keyof ClaudeRunnerEvents>(event: K, listener: ClaudeRunnerEvents[K]): this {
     return super.on(event, listener);
