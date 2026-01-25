@@ -703,6 +703,69 @@ describe('useSession', () => {
 
       expect(result.current.screencast).toBeNull();
     });
+
+    it('should set screencast.active to true when session_attached has hasBrowserSession=true', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session_attached with hasBrowserSession: true (simulating page reload)
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+          hasBrowserSession: true,
+        });
+      });
+
+      // screencast.active should be true immediately
+      expect(result.current.screencast?.active).toBe(true);
+    });
+
+    it('should NOT set screencast.active when hasBrowserSession is false or undefined', () => {
+      const { result } = renderHook(() => useSession());
+
+      // Setup: Create session
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_list',
+          sessions: [
+            { id: 'session-1', name: 'Session 1', createdAt: '2024-01-01', workingDir: '/tmp', status: 'idle' },
+          ],
+        });
+      });
+
+      // Select session
+      act(() => {
+        result.current.selectSession('session-1');
+      });
+
+      // Receive session_attached without hasBrowserSession
+      act(() => {
+        result.current.handleServerMessage({
+          type: 'session_attached',
+          sessionId: 'session-1',
+          history: [],
+        });
+      });
+
+      // screencast should be null or active should be falsy
+      expect(result.current.screencast?.active).toBeFalsy();
+    });
   });
 
   describe('History conversion for display', () => {

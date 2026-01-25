@@ -1088,6 +1088,16 @@ export function useSession(): UseSessionReturn {
           }
           // Auto-start screencast if a browser session exists
           if (message.hasBrowserSession) {
+            // Immediately set active state so BrowserView shows browser (not "Start browser" button)
+            setSessionScreencast((prev) => {
+              const newMap = new Map(prev);
+              const current = newMap.get(message.sessionId) ?? {};
+              newMap.set(message.sessionId, {
+                ...current,
+                active: true,
+              });
+              return newMap;
+            });
             send({ type: 'start_screencast', sessionId: message.sessionId });
           }
           // Restore todo state from history
