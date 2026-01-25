@@ -32,6 +32,7 @@ import { SettingsManager } from './settings-manager.js';
 import { RepositoryManager } from './repository-manager.js';
 import { WorkspaceSetup } from './workspace-setup.js';
 import { nanoid } from 'nanoid';
+import { parsePermissionPattern, matchesPermission, suggestPattern, type PermissionPattern } from './permission-pattern.js';
 
 export interface ServerOptions {
   port: number;
@@ -645,8 +646,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map request ID to WebSocket for permission responses (from MCP server)
   const pendingPermissionRequests = new Map<string, WebSocket>();
 
-  // Map session ID to set of tools that are allowed for the entire session
-  const sessionAllowedTools = new Map<string, Set<string>>();
+  // Map session ID to permission patterns that are allowed for the entire session
+  // Patterns can be tool-only (e.g., "Bash") or tool+pattern (e.g., "Bash(git:*)")
+  const sessionAllowedPatterns = new Map<string, PermissionPattern[]>();
 
   // Map session ID to machine monitor interval (for port monitoring)
   const machineMonitorIntervals = new Map<string, ReturnType<typeof setInterval>>();
@@ -1549,6 +1551,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           model: systemData.model,
           permissionMode: currentMode,
           cwd: systemData.cwd,
+          homeDir: process.env.HOME,
           tools: systemData.tools,
         });
         break;
@@ -1809,8 +1812,8 @@ export function createServer(options: ServerOptions): BridgeServer {
       case 'delete_session': {
         const deleted = sessionManager.deleteSession(message.sessionId);
         if (deleted) {
-          // Clean up session-allowed tools and runner backend preferences
-          sessionAllowedTools.delete(message.sessionId);
+          // Clean up session-allowed patterns and runner backend preferences
+          sessionAllowedPatterns.delete(message.sessionId);
           sessionRunnerBackends.delete(message.sessionId);
           sessionBrowserInContainer.delete(message.sessionId);
 
@@ -2372,29 +2375,33 @@ export function createServer(options: ServerOptions): BridgeServer {
       }
 
       case 'permission_response': {
-        // Track session-wide tool allowance if requested
+        // Track session-wide permission pattern if requested
         if (
           message.response.behavior === 'allow' &&
-          message.response.allowForSession &&
-          message.response.toolName
+          message.response.allowForSession
         ) {
-          let allowedTools = sessionAllowedTools.get(message.sessionId);
-          if (!allowedTools) {
-            allowedTools = new Set<string>();
-            sessionAllowedTools.set(message.sessionId, allowedTools);
-          }
-          allowedTools.add(message.response.toolName);
-          console.log(`[Session ${message.sessionId}] Tool "${message.response.toolName}" allowed for session`);
+          // Use pattern if provided, otherwise fall back to tool name only (legacy behavior)
+          const patternStr = message.response.pattern || message.response.toolName;
+          if (patternStr) {
+            const pattern = parsePermissionPattern(patternStr);
+            let patterns = sessionAllowedPatterns.get(message.sessionId);
+            if (!patterns) {
+              patterns = [];
+              sessionAllowedPatterns.set(message.sessionId, patterns);
+            }
+            patterns.push(pattern);
+            console.log(`[Session ${message.sessionId}] Pattern "${patternStr}" allowed for session`);
 
-          // Auto-switch to 'auto-edit' mode when Edit tool is allowed for session
-          if (message.response.toolName === 'Edit') {
-            sessionManager.setPermissionMode(message.sessionId, 'auto-edit');
-            sendToSession(message.sessionId, {
-              type: 'system_info',
-              sessionId: message.sessionId,
-              permissionMode: 'auto-edit',
-            });
-            console.log(`[Session ${message.sessionId}] Auto-switched to 'auto-edit' mode`);
+            // Auto-switch to 'auto-edit' mode when Edit tool is allowed for session (without pattern restriction)
+            if (pattern.toolName === 'Edit' && pattern.pattern === undefined) {
+              sessionManager.setPermissionMode(message.sessionId, 'auto-edit');
+              sendToSession(message.sessionId, {
+                type: 'system_info',
+                sessionId: message.sessionId,
+                permissionMode: 'auto-edit',
+              });
+              console.log(`[Session ${message.sessionId}] Auto-switched to 'auto-edit' mode`);
+            }
           }
         }
 
@@ -2480,9 +2487,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           }
         }
 
-        // Check if tool is already allowed for this session
-        const allowedTools = sessionAllowedTools.get(message.sessionId);
-        if (allowedTools?.has(message.toolName)) {
+        // Check if tool matches any allowed pattern for this session
+        const allowedPatterns = sessionAllowedPatterns.get(message.sessionId);
+        if (allowedPatterns && matchesPermission(message.toolName, message.input, allowedPatterns)) {
           // Auto-allow - respond immediately to MCP server
           ws.send(JSON.stringify({
             type: 'permission_response',

@@ -683,6 +683,8 @@ export interface SystemInfoMessage {
   model?: string;
   permissionMode?: string;
   cwd?: string;
+  /** User's home directory (e.g., /home/user) */
+  homeDir?: string;
   tools?: string[];
 }
 
@@ -881,7 +883,14 @@ export interface QuestionOption {
 
 // Permission result types (matches Claude Code's expected format)
 export type PermissionResult =
-  | { behavior: 'allow'; updatedInput: unknown; allowForSession?: boolean; toolName?: string }
+  | {
+      behavior: 'allow';
+      updatedInput: unknown;
+      allowForSession?: boolean;
+      toolName?: string;
+      /** Permission pattern for session-wide allowance, e.g., "Bash(git:*)" */
+      pattern?: string;
+    }
   | { behavior: 'deny'; message: string };
 
 // ==================== Global Usage (from ccusage) ====================

@@ -24,12 +24,28 @@ describe('PermissionRequest', () => {
     expect(screen.getByText(/rm -rf/)).toBeInTheDocument();
   });
 
-  it('should render allow, allow for session, and deny buttons', () => {
+  it('should render allow, pattern-based allow with dropdown, and deny buttons for Bash', () => {
     render(<PermissionRequest {...defaultProps} />);
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeInTheDocument();
+    // Pattern-based button shows the suggested pattern (split button with dropdown)
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeInTheDocument();
+    // Dropdown toggle button for more options
+    expect(screen.getByRole('button', { name: /More options/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeInTheDocument();
+  });
+
+  it('should have matching heights for split button parts', () => {
+    render(<PermissionRequest {...defaultProps} />);
+
+    const mainButton = screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ });
+    const dropdownToggle = screen.getByRole('button', { name: /More options/ });
+
+    // Both buttons should have the same height (split button design requirement)
+    const mainHeight = mainButton.getBoundingClientRect().height;
+    const dropdownHeight = dropdownToggle.getBoundingClientRect().height;
+
+    expect(dropdownHeight).toBe(mainHeight);
   });
 
   it('should call onAllow with updatedInput when allow is clicked', () => {
@@ -41,13 +57,37 @@ describe('PermissionRequest', () => {
     expect(onAllow).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.input);
   });
 
-  it('should call onAllowForSession when allow for session is clicked', () => {
+  it('should call onAllowForSession with pattern when pattern button is clicked', () => {
     const onAllowForSession = vi.fn();
     render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+    // For Bash with command "rm -rf /", the suggested pattern is "Bash(rm:*)"
+    fireEvent.click(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ }));
 
-    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.toolName, defaultProps.input);
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash(rm:*)', defaultProps.input);
+  });
+
+  it('should call onAllowForSession with tool name when Allow all option is clicked in dropdown', () => {
+    const onAllowForSession = vi.fn();
+    render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
+
+    // First, open the dropdown
+    fireEvent.click(screen.getByRole('button', { name: /More options/ }));
+
+    // "Allow all Bash" option allows all Bash commands
+    fireEvent.click(screen.getByText(/Allow all Bash/));
+
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash', defaultProps.input);
+  });
+
+  it('should show simple Allow for session button for tools without pattern', () => {
+    const onAllowForSession = vi.fn();
+    render(<PermissionRequest {...defaultProps} toolName="UnknownTool" input={{}} onAllowForSession={onAllowForSession} />);
+
+    // For unknown tools, just show simple "Allow for session" button
+    fireEvent.click(screen.getByRole('button', { name: /^Allow for session$/ }));
+
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'UnknownTool', {});
   });
 
   it('should call onDeny when deny is clicked', () => {
@@ -94,17 +134,17 @@ describe('PermissionRequest', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Allow$/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
-  it('should disable buttons after clicking allow for session', () => {
+  it('should disable buttons after clicking pattern-based allow', () => {
     render(<PermissionRequest {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
@@ -114,7 +154,7 @@ describe('PermissionRequest', () => {
     fireEvent.click(screen.getByRole('button', { name: /Deny/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
@@ -200,11 +240,12 @@ describe('PermissionRequest', () => {
       const longCommand = 'a'.repeat(10000);
       const bashInput = { command: longCommand };
 
-      expect(() =>
-        render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />)
-      ).not.toThrow();
+      const { container } = render(<PermissionRequest {...defaultProps} toolName="Bash" input={bashInput} />);
 
-      expect(screen.getByText(/aaa/)).toBeInTheDocument();
+      // Verify the bash container is rendered with the long command
+      const bashContainer = container.querySelector('[data-testid="bash-command-container"]');
+      expect(bashContainer).toBeInTheDocument();
+      expect(bashContainer?.textContent).toContain('aaa');
     });
 
     it('should not crash with very large JSON input', () => {
@@ -215,6 +256,106 @@ describe('PermissionRequest', () => {
       expect(() =>
         render(<PermissionRequest {...defaultProps} toolName="UnknownTool" input={largeInput} />)
       ).not.toThrow();
+    });
+  });
+
+  describe('path formatting', () => {
+    it('should format paths relative to workingDir with ./', () => {
+      const writeInput = {
+        file_path: '/home/user/project/src/app.ts',
+        content: 'Hello',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Write"
+          input={writeInput}
+          workingDir="/home/user/project"
+        />
+      );
+
+      // File path in header should be relative
+      expect(screen.getByText('./src/app.ts')).toBeInTheDocument();
+      // Pattern button should also use relative path
+      expect(screen.getByRole('button', { name: /Allow.*Write\(\.\/src\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should format paths relative to homeDir with ~/', () => {
+      const readInput = {
+        file_path: '/home/user/documents/notes.txt',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Read"
+          input={readInput}
+          homeDir="/home/user"
+        />
+      );
+
+      // File path in header should use ~/
+      expect(screen.getByText('~/documents/notes.txt')).toBeInTheDocument();
+      // Pattern button should also use ~/
+      expect(screen.getByRole('button', { name: /Allow.*Read\(~\/documents\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should prefer workingDir over homeDir for nested paths', () => {
+      const editInput = {
+        file_path: '/home/user/project/src/index.ts',
+        old_string: 'old',
+        new_string: 'new',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Edit"
+          input={editInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Should prefer ./ (workingDir) over ~/ (homeDir)
+      expect(screen.getByText('./src/index.ts')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Allow.*Edit\(\.\/src\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should keep absolute paths when not under workingDir or homeDir', () => {
+      const writeInput = {
+        file_path: '/etc/config.txt',
+        content: 'config',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Write"
+          input={writeInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Path should remain absolute
+      expect(screen.getByText('/etc/config.txt')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Allow.*Write\(\/etc\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should not affect Bash command patterns', () => {
+      const bashInput = {
+        command: 'git status',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Bash"
+          input={bashInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Bash patterns should not be affected by path formatting
+      expect(screen.getByRole('button', { name: /Allow.*Bash\(git:\*\)/ })).toBeInTheDocument();
     });
   });
 });

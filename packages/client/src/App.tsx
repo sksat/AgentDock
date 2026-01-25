@@ -206,8 +206,9 @@ function App() {
   );
 
   const handleAllowForSession = useCallback(
-    (requestId: string, toolName: string, updatedInput: unknown) => {
-      respondToPermission(requestId, { behavior: 'allow', updatedInput, allowForSession: true, toolName });
+    (requestId: string, pattern: string, updatedInput: unknown) => {
+      // pattern can be tool name only (e.g., "Bash") or tool+pattern (e.g., "Bash(git:*)")
+      respondToPermission(requestId, { behavior: 'allow', updatedInput, allowForSession: true, pattern });
     },
     [respondToPermission]
   );
@@ -501,6 +502,8 @@ function App() {
                     onAllow={handleAllow}
                     onAllowForSession={handleAllowForSession}
                     onDeny={handleDeny}
+                    workingDir={session?.workingDir}
+                    homeDir={systemInfo?.homeDir}
                   />
                 </div>
               )}

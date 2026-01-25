@@ -37,6 +37,8 @@ export interface SystemInfo {
   model?: string;
   permissionMode?: string;
   cwd?: string;
+  /** User's home directory (e.g., /home/user) */
+  homeDir?: string;
   tools?: string[];
 }
 
@@ -1383,6 +1385,7 @@ export function useSession(): UseSessionReturn {
               model: message.model,
               permissionMode: message.permissionMode,
               cwd: message.cwd,
+              homeDir: message.homeDir,
               tools: message.tools,
             });
           }

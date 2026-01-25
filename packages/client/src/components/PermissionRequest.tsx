@@ -7,8 +7,13 @@ export interface PermissionRequestProps {
   toolName: string;
   input: unknown;
   onAllow: (requestId: string, updatedInput: unknown) => void;
-  onAllowForSession: (requestId: string, toolName: string, updatedInput: unknown) => void;
+  /** @param pattern - Permission pattern like "Bash(git:*)" or tool name for tool-wide permission */
+  onAllowForSession: (requestId: string, pattern: string, updatedInput: unknown) => void;
   onDeny: (requestId: string, message: string) => void;
+  /** Current working directory for the session (e.g., /home/user/project) */
+  workingDir?: string;
+  /** User's home directory (e.g., /home/user) */
+  homeDir?: string;
 }
 
 // Type guards for file operation tools
@@ -76,6 +81,93 @@ function isBashInput(input: unknown): input is BashInput {
   );
 }
 
+/**
+ * Format a file path for display.
+ * - Paths under workingDir are shown as relative (./path)
+ * - Paths under homeDir are shown with ~/ prefix
+ * - Other paths are shown as-is
+ *
+ * @param filePath The absolute file path
+ * @param workingDir The session's working directory
+ * @param homeDir The user's home directory
+ */
+function formatFilePath(filePath: string, workingDir?: string, homeDir?: string): string {
+  // Normalize paths (remove trailing slashes)
+  const normalizedPath = filePath.replace(/\/+$/, '');
+  const normalizedWorkingDir = workingDir?.replace(/\/+$/, '');
+  const normalizedHomeDir = homeDir?.replace(/\/+$/, '');
+
+  // Check workingDir first (more specific)
+  if (normalizedWorkingDir && normalizedPath.startsWith(normalizedWorkingDir + '/')) {
+    return './' + normalizedPath.slice(normalizedWorkingDir.length + 1);
+  }
+  // Exact match with workingDir
+  if (normalizedWorkingDir && normalizedPath === normalizedWorkingDir) {
+    return '.';
+  }
+
+  // Check homeDir
+  if (normalizedHomeDir && normalizedPath.startsWith(normalizedHomeDir + '/')) {
+    return '~/' + normalizedPath.slice(normalizedHomeDir.length + 1);
+  }
+  // Exact match with homeDir
+  if (normalizedHomeDir && normalizedPath === normalizedHomeDir) {
+    return '~';
+  }
+
+  // Return as-is
+  return filePath;
+}
+
+/**
+ * Suggest a permission pattern based on a tool invocation.
+ * This matches the server-side suggestPattern function.
+ *
+ * Examples:
+ * - Bash with { command: "git status" } -> "Bash(git:*)"
+ * - Write with { file_path: "./src/app.ts" } -> "Write(./src/**)"
+ *
+ * @param workingDir Optional working directory for relative path formatting
+ * @param homeDir Optional home directory for ~/ path formatting
+ */
+function suggestPattern(toolName: string, input: unknown, workingDir?: string, homeDir?: string): string {
+  if (input === null || input === undefined || typeof input !== 'object') {
+    return toolName;
+  }
+
+  const inputObj = input as Record<string, unknown>;
+
+  switch (toolName) {
+    case 'Bash': {
+      const command = inputObj.command;
+      if (typeof command !== 'string' || command === '') {
+        return toolName;
+      }
+      // Extract first word (command name)
+      const firstWord = command.split(' ')[0];
+      return `Bash(${firstWord}:*)`;
+    }
+
+    case 'Read':
+    case 'Write':
+    case 'Edit': {
+      const filePath = inputObj.file_path;
+      if (typeof filePath !== 'string' || filePath === '') {
+        return toolName;
+      }
+      // Extract directory
+      const lastSlash = filePath.lastIndexOf('/');
+      const dir = lastSlash >= 0 ? filePath.substring(0, lastSlash) : '.';
+      // Format the directory for display
+      const formattedDir = formatFilePath(dir, workingDir, homeDir);
+      return `${toolName}(${formattedDir}/**)`;
+    }
+
+    default:
+      return toolName;
+  }
+}
+
 // Component for displaying Read tool requests (content only, header handled by PermissionRequest)
 function FileReadView() {
   return (
@@ -110,8 +202,16 @@ export function PermissionRequest({
   onAllow,
   onAllowForSession,
   onDeny,
+  workingDir,
+  homeDir,
 }: PermissionRequestProps) {
   const [responded, setResponded] = useState(false);
+  const [showSessionOptions, setShowSessionOptions] = useState(false);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+
+  // Generate suggested pattern based on tool and input
+  const suggestedPattern = useMemo(() => suggestPattern(toolName, input, workingDir, homeDir), [toolName, input, workingDir, homeDir]);
+  const [customPattern, setCustomPattern] = useState(suggestedPattern);
 
   const handleAllow = useCallback(() => {
     setResponded(true);
@@ -120,6 +220,13 @@ export function PermissionRequest({
 
   const handleAllowForSession = useCallback(() => {
     setResponded(true);
+    // Use the custom pattern if user has edited it, otherwise use the suggested pattern
+    onAllowForSession(requestId, customPattern, input);
+  }, [requestId, customPattern, input, onAllowForSession]);
+
+  const handleAllowToolForSession = useCallback(() => {
+    setResponded(true);
+    // Allow the entire tool (dangerous for Bash)
     onAllowForSession(requestId, toolName, input);
   }, [requestId, toolName, input, onAllowForSession]);
 
@@ -127,6 +234,9 @@ export function PermissionRequest({
     setResponded(true);
     onDeny(requestId, 'User denied permission');
   }, [requestId, onDeny]);
+
+  // Check if we have a specific pattern (not just tool name)
+  const hasPattern = suggestedPattern !== toolName;
 
   // Determine if this is a file operation that should show a diff
   const diffViewData = useMemo(() => {
@@ -178,7 +288,7 @@ export function PermissionRequest({
       const lineCount = diffViewData.newContent.split('\n').length;
       const isNewFile = !diffViewData.oldContent;
       return {
-        filePath: diffViewData.filePath,
+        filePath: formatFilePath(diffViewData.filePath, workingDir, homeDir),
         lineCount,
         isNewFile,
       };
@@ -189,7 +299,7 @@ export function PermissionRequest({
         readViewData.limit !== undefined ? `limit: ${readViewData.limit}` : null,
       ].filter(Boolean).join(', ');
       return {
-        filePath: readViewData.filePath,
+        filePath: formatFilePath(readViewData.filePath, workingDir, homeDir),
         rangeInfo: rangeInfo || undefined,
       };
     }
@@ -199,7 +309,7 @@ export function PermissionRequest({
       };
     }
     return null;
-  }, [diffViewData, readViewData, bashViewData]);
+  }, [diffViewData, readViewData, bashViewData, workingDir, homeDir]);
 
   return (
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden max-h-[70vh] flex flex-col">
@@ -253,7 +363,7 @@ export function PermissionRequest({
         )}
       </div>
 
-      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3 shrink-0">
+      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex flex-wrap items-center justify-end gap-3 shrink-0">
         <button
           onClick={handleDeny}
           disabled={responded}
@@ -268,20 +378,92 @@ export function PermissionRequest({
         >
           Deny
         </button>
-        <button
-          onClick={handleAllowForSession}
-          disabled={responded}
-          className={clsx(
-            'px-4 py-2 rounded-lg font-medium',
-            'bg-accent-primary text-white',
-            'hover:bg-accent-primary/90',
-            'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-            'transition-colors',
-            responded && 'opacity-50 cursor-not-allowed'
+
+        {/* Allow for session - dropdown with options */}
+        <div className="relative">
+          <div className="flex items-stretch">
+            <button
+              onClick={handleAllowForSession}
+              disabled={responded}
+              className={clsx(
+                'px-4 py-2 rounded-l-lg font-medium',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+              title={hasPattern ? `Allow ${customPattern} for this session` : `Allow all ${toolName} for this session`}
+            >
+              {hasPattern ? (
+                <>Allow <code className="font-mono text-xs bg-white/20 px-1 rounded">{customPattern}</code></>
+              ) : (
+                'Allow for session'
+              )}
+            </button>
+            <button
+              onClick={() => setShowSessionOptions(!showSessionOptions)}
+              disabled={responded}
+              className={clsx(
+                'px-2 rounded-r-lg border-l border-white/20 flex items-center',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+              title="More options"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Dropdown menu */}
+          {showSessionOptions && !responded && (
+            <div className="absolute right-0 bottom-full mb-1 w-72 bg-bg-secondary border border-border rounded-lg shadow-lg z-10">
+              {hasPattern && (
+                <>
+                  <button
+                    onClick={() => {
+                      handleAllowForSession();
+                      setShowSessionOptions(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors rounded-t-lg"
+                  >
+                    <div className="font-medium text-text-primary">Allow pattern</div>
+                    <code className="text-xs text-text-secondary font-mono">{customPattern}</code>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAllowToolForSession();
+                      setShowSessionOptions(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors border-t border-border"
+                  >
+                    <div className="font-medium text-text-primary">Allow all {toolName}</div>
+                    <span className="text-xs text-text-secondary">Allow any {toolName} operation</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => {
+                  setShowCustomInput(!showCustomInput);
+                  setShowSessionOptions(false);
+                }}
+                className={clsx(
+                  'w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
+                  hasPattern ? 'border-t border-border rounded-b-lg' : 'rounded-lg'
+                )}
+              >
+                <div className="font-medium text-text-primary">Custom pattern...</div>
+                <span className="text-xs text-text-secondary">Edit the permission pattern</span>
+              </button>
+            </div>
           )}
-        >
-          Allow for session
-        </button>
+        </div>
+
         <button
           onClick={handleAllow}
           disabled={responded}
@@ -297,6 +479,42 @@ export function PermissionRequest({
           Allow
         </button>
       </div>
+
+      {/* Custom pattern input section */}
+      {showCustomInput && (
+        <div className="px-4 py-3 bg-bg-tertiary border-t border-border">
+          <label className="block text-xs text-text-secondary mb-1">Permission pattern:</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customPattern}
+              onChange={(e) => setCustomPattern(e.target.value)}
+              className="flex-1 px-3 py-2 rounded bg-bg-primary border border-border text-text-primary font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+              placeholder={suggestedPattern}
+            />
+            <button
+              onClick={() => {
+                handleAllowForSession();
+                setShowCustomInput(false);
+              }}
+              disabled={responded}
+              className={clsx(
+                'px-4 py-2 rounded-lg font-medium',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+            >
+              Apply
+            </button>
+          </div>
+          <p className="text-xs text-text-secondary mt-1">
+            Use <code className="bg-bg-primary px-1 rounded">:*</code> for prefix matching (e.g., <code className="bg-bg-primary px-1 rounded">git:*</code> matches <code className="bg-bg-primary px-1 rounded">git status</code> but not <code className="bg-bg-primary px-1 rounded">gitk</code>)
+          </p>
+        </div>
+      )}
     </div>
   );
 }
