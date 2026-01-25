@@ -242,4 +242,104 @@ describe('PermissionRequest', () => {
       ).not.toThrow();
     });
   });
+
+  describe('path formatting', () => {
+    it('should format paths relative to workingDir with ./', () => {
+      const writeInput = {
+        file_path: '/home/user/project/src/app.ts',
+        content: 'Hello',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Write"
+          input={writeInput}
+          workingDir="/home/user/project"
+        />
+      );
+
+      // File path in header should be relative
+      expect(screen.getByText('./src/app.ts')).toBeInTheDocument();
+      // Pattern button should also use relative path
+      expect(screen.getByRole('button', { name: /Allow.*Write\(\.\/src\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should format paths relative to homeDir with ~/', () => {
+      const readInput = {
+        file_path: '/home/user/documents/notes.txt',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Read"
+          input={readInput}
+          homeDir="/home/user"
+        />
+      );
+
+      // File path in header should use ~/
+      expect(screen.getByText('~/documents/notes.txt')).toBeInTheDocument();
+      // Pattern button should also use ~/
+      expect(screen.getByRole('button', { name: /Allow.*Read\(~\/documents\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should prefer workingDir over homeDir for nested paths', () => {
+      const editInput = {
+        file_path: '/home/user/project/src/index.ts',
+        old_string: 'old',
+        new_string: 'new',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Edit"
+          input={editInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Should prefer ./ (workingDir) over ~/ (homeDir)
+      expect(screen.getByText('./src/index.ts')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Allow.*Edit\(\.\/src\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should keep absolute paths when not under workingDir or homeDir', () => {
+      const writeInput = {
+        file_path: '/etc/config.txt',
+        content: 'config',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Write"
+          input={writeInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Path should remain absolute
+      expect(screen.getByText('/etc/config.txt')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Allow.*Write\(\/etc\/\*\*\)/ })).toBeInTheDocument();
+    });
+
+    it('should not affect Bash command patterns', () => {
+      const bashInput = {
+        command: 'git status',
+      };
+      render(
+        <PermissionRequest
+          {...defaultProps}
+          toolName="Bash"
+          input={bashInput}
+          workingDir="/home/user/project"
+          homeDir="/home/user"
+        />
+      );
+
+      // Bash patterns should not be affected by path formatting
+      expect(screen.getByRole('button', { name: /Allow.*Bash\(git:\*\)/ })).toBeInTheDocument();
+    });
+  });
 });

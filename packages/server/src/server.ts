@@ -1551,6 +1551,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           model: systemData.model,
           permissionMode: currentMode,
           cwd: systemData.cwd,
+          homeDir: process.env.HOME,
           tools: systemData.tools,
         });
         break;

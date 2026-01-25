@@ -10,6 +10,10 @@ export interface PermissionRequestProps {
   /** @param pattern - Permission pattern like "Bash(git:*)" or tool name for tool-wide permission */
   onAllowForSession: (requestId: string, pattern: string, updatedInput: unknown) => void;
   onDeny: (requestId: string, message: string) => void;
+  /** Current working directory for the session (e.g., /home/user/project) */
+  workingDir?: string;
+  /** User's home directory (e.g., /home/user) */
+  homeDir?: string;
 }
 
 // Type guards for file operation tools
@@ -78,14 +82,55 @@ function isBashInput(input: unknown): input is BashInput {
 }
 
 /**
+ * Format a file path for display.
+ * - Paths under workingDir are shown as relative (./path)
+ * - Paths under homeDir are shown with ~/ prefix
+ * - Other paths are shown as-is
+ *
+ * @param filePath The absolute file path
+ * @param workingDir The session's working directory
+ * @param homeDir The user's home directory
+ */
+function formatFilePath(filePath: string, workingDir?: string, homeDir?: string): string {
+  // Normalize paths (remove trailing slashes)
+  const normalizedPath = filePath.replace(/\/+$/, '');
+  const normalizedWorkingDir = workingDir?.replace(/\/+$/, '');
+  const normalizedHomeDir = homeDir?.replace(/\/+$/, '');
+
+  // Check workingDir first (more specific)
+  if (normalizedWorkingDir && normalizedPath.startsWith(normalizedWorkingDir + '/')) {
+    return './' + normalizedPath.slice(normalizedWorkingDir.length + 1);
+  }
+  // Exact match with workingDir
+  if (normalizedWorkingDir && normalizedPath === normalizedWorkingDir) {
+    return '.';
+  }
+
+  // Check homeDir
+  if (normalizedHomeDir && normalizedPath.startsWith(normalizedHomeDir + '/')) {
+    return '~/' + normalizedPath.slice(normalizedHomeDir.length + 1);
+  }
+  // Exact match with homeDir
+  if (normalizedHomeDir && normalizedPath === normalizedHomeDir) {
+    return '~';
+  }
+
+  // Return as-is
+  return filePath;
+}
+
+/**
  * Suggest a permission pattern based on a tool invocation.
  * This matches the server-side suggestPattern function.
  *
  * Examples:
  * - Bash with { command: "git status" } -> "Bash(git:*)"
  * - Write with { file_path: "./src/app.ts" } -> "Write(./src/**)"
+ *
+ * @param workingDir Optional working directory for relative path formatting
+ * @param homeDir Optional home directory for ~/ path formatting
  */
-function suggestPattern(toolName: string, input: unknown): string {
+function suggestPattern(toolName: string, input: unknown, workingDir?: string, homeDir?: string): string {
   if (input === null || input === undefined || typeof input !== 'object') {
     return toolName;
   }
@@ -113,7 +158,9 @@ function suggestPattern(toolName: string, input: unknown): string {
       // Extract directory
       const lastSlash = filePath.lastIndexOf('/');
       const dir = lastSlash >= 0 ? filePath.substring(0, lastSlash) : '.';
-      return `${toolName}(${dir}/**)`;
+      // Format the directory for display
+      const formattedDir = formatFilePath(dir, workingDir, homeDir);
+      return `${toolName}(${formattedDir}/**)`;
     }
 
     default:
@@ -155,12 +202,14 @@ export function PermissionRequest({
   onAllow,
   onAllowForSession,
   onDeny,
+  workingDir,
+  homeDir,
 }: PermissionRequestProps) {
   const [responded, setResponded] = useState(false);
   const [showPatternInput, setShowPatternInput] = useState(false);
 
   // Generate suggested pattern based on tool and input
-  const suggestedPattern = useMemo(() => suggestPattern(toolName, input), [toolName, input]);
+  const suggestedPattern = useMemo(() => suggestPattern(toolName, input, workingDir, homeDir), [toolName, input, workingDir, homeDir]);
   const [customPattern, setCustomPattern] = useState(suggestedPattern);
 
   const handleAllow = useCallback(() => {
@@ -238,7 +287,7 @@ export function PermissionRequest({
       const lineCount = diffViewData.newContent.split('\n').length;
       const isNewFile = !diffViewData.oldContent;
       return {
-        filePath: diffViewData.filePath,
+        filePath: formatFilePath(diffViewData.filePath, workingDir, homeDir),
         lineCount,
         isNewFile,
       };
@@ -249,7 +298,7 @@ export function PermissionRequest({
         readViewData.limit !== undefined ? `limit: ${readViewData.limit}` : null,
       ].filter(Boolean).join(', ');
       return {
-        filePath: readViewData.filePath,
+        filePath: formatFilePath(readViewData.filePath, workingDir, homeDir),
         rangeInfo: rangeInfo || undefined,
       };
     }
@@ -259,7 +308,7 @@ export function PermissionRequest({
       };
     }
     return null;
-  }, [diffViewData, readViewData, bashViewData]);
+  }, [diffViewData, readViewData, bashViewData, workingDir, homeDir]);
 
   return (
     <div className="rounded-lg border border-border bg-bg-secondary overflow-hidden max-h-[70vh] flex flex-col">

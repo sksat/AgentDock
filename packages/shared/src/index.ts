@@ -683,6 +683,8 @@ export interface SystemInfoMessage {
   model?: string;
   permissionMode?: string;
   cwd?: string;
+  /** User's home directory (e.g., /home/user) */
+  homeDir?: string;
   tools?: string[];
 }
 

@@ -502,6 +502,8 @@ function App() {
                     onAllow={handleAllow}
                     onAllowForSession={handleAllowForSession}
                     onDeny={handleDeny}
+                    workingDir={session?.workingDir}
+                    homeDir={systemInfo?.homeDir}
                   />
                 </div>
               )}
