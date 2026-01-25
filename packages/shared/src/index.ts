@@ -603,6 +603,8 @@ export interface SessionAttachedMessage {
   isRunning?: boolean;
   /** Current permission mode for the session */
   permissionMode?: PermissionMode;
+  /** Model name stored in session (for contextWindow lookup after reload) */
+  model?: string;
 }
 
 export interface SessionListMessage {

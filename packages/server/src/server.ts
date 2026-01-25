@@ -1800,6 +1800,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             hasBrowserSession,
             isRunning: runnerManager.hasRunningSession(message.sessionId),
             permissionMode: currentMode,
+            model: session.model ?? undefined,
           };
         } else {
           response = {

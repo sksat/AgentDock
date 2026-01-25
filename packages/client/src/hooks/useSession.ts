@@ -1079,6 +1079,13 @@ export function useSession(): UseSessionReturn {
               permissionMode: message.permissionMode,
             }));
           }
+          // Restore model from session data (for contextWindow lookup after reload)
+          if (message.model) {
+            setSystemInfo((prev) => ({
+              ...prev,
+              model: message.model,
+            }));
+          }
           // Auto-start screencast if a browser session exists
           if (message.hasBrowserSession) {
             send({ type: 'start_screencast', sessionId: message.sessionId });
