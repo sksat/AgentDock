@@ -24,11 +24,14 @@ describe('PermissionRequest', () => {
     expect(screen.getByText(/rm -rf/)).toBeInTheDocument();
   });
 
-  it('should render allow, allow for session, and deny buttons', () => {
+  it('should render allow, pattern-based allow, allow all, and deny buttons for Bash', () => {
     render(<PermissionRequest {...defaultProps} />);
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeInTheDocument();
+    // Pattern-based button shows the suggested pattern
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeInTheDocument();
+    // Also has "Allow all Bash" button for tool-wide permission
+    expect(screen.getByRole('button', { name: /Allow all Bash/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeInTheDocument();
   });
 
@@ -41,13 +44,34 @@ describe('PermissionRequest', () => {
     expect(onAllow).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.input);
   });
 
-  it('should call onAllowForSession when allow for session is clicked', () => {
+  it('should call onAllowForSession with pattern when pattern button is clicked', () => {
     const onAllowForSession = vi.fn();
     render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+    // For Bash with command "rm -rf /", the suggested pattern is "Bash(rm:*)"
+    fireEvent.click(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ }));
 
-    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, defaultProps.toolName, defaultProps.input);
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash(rm:*)', defaultProps.input);
+  });
+
+  it('should call onAllowForSession with tool name when Allow all button is clicked', () => {
+    const onAllowForSession = vi.fn();
+    render(<PermissionRequest {...defaultProps} onAllowForSession={onAllowForSession} />);
+
+    // "Allow all Bash" button allows all Bash commands
+    fireEvent.click(screen.getByRole('button', { name: /Allow all Bash/ }));
+
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'Bash', defaultProps.input);
+  });
+
+  it('should show simple Allow for session button for tools without pattern', () => {
+    const onAllowForSession = vi.fn();
+    render(<PermissionRequest {...defaultProps} toolName="UnknownTool" input={{}} onAllowForSession={onAllowForSession} />);
+
+    // For unknown tools, just show simple "Allow for session" button
+    fireEvent.click(screen.getByRole('button', { name: /^Allow for session$/ }));
+
+    expect(onAllowForSession).toHaveBeenCalledWith(defaultProps.requestId, 'UnknownTool', {});
   });
 
   it('should call onDeny when deny is clicked', () => {
@@ -94,17 +118,17 @@ describe('PermissionRequest', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Allow$/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
-  it('should disable buttons after clicking allow for session', () => {
+  it('should disable buttons after clicking pattern-based allow', () => {
     render(<PermissionRequest {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Allow for session/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 
@@ -114,7 +138,7 @@ describe('PermissionRequest', () => {
     fireEvent.click(screen.getByRole('button', { name: /Deny/ }));
 
     expect(screen.getByRole('button', { name: /^Allow$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Allow for session/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Deny/ })).toBeDisabled();
   });
 

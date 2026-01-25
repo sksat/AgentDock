@@ -7,7 +7,8 @@ export interface PermissionRequestProps {
   toolName: string;
   input: unknown;
   onAllow: (requestId: string, updatedInput: unknown) => void;
-  onAllowForSession: (requestId: string, toolName: string, updatedInput: unknown) => void;
+  /** @param pattern - Permission pattern like "Bash(git:*)" or tool name for tool-wide permission */
+  onAllowForSession: (requestId: string, pattern: string, updatedInput: unknown) => void;
   onDeny: (requestId: string, message: string) => void;
 }
 
@@ -76,6 +77,50 @@ function isBashInput(input: unknown): input is BashInput {
   );
 }
 
+/**
+ * Suggest a permission pattern based on a tool invocation.
+ * This matches the server-side suggestPattern function.
+ *
+ * Examples:
+ * - Bash with { command: "git status" } -> "Bash(git:*)"
+ * - Write with { file_path: "./src/app.ts" } -> "Write(./src/**)"
+ */
+function suggestPattern(toolName: string, input: unknown): string {
+  if (input === null || input === undefined || typeof input !== 'object') {
+    return toolName;
+  }
+
+  const inputObj = input as Record<string, unknown>;
+
+  switch (toolName) {
+    case 'Bash': {
+      const command = inputObj.command;
+      if (typeof command !== 'string' || command === '') {
+        return toolName;
+      }
+      // Extract first word (command name)
+      const firstWord = command.split(' ')[0];
+      return `Bash(${firstWord}:*)`;
+    }
+
+    case 'Read':
+    case 'Write':
+    case 'Edit': {
+      const filePath = inputObj.file_path;
+      if (typeof filePath !== 'string' || filePath === '') {
+        return toolName;
+      }
+      // Extract directory
+      const lastSlash = filePath.lastIndexOf('/');
+      const dir = lastSlash >= 0 ? filePath.substring(0, lastSlash) : '.';
+      return `${toolName}(${dir}/**)`;
+    }
+
+    default:
+      return toolName;
+  }
+}
+
 // Component for displaying Read tool requests (content only, header handled by PermissionRequest)
 function FileReadView() {
   return (
@@ -112,6 +157,11 @@ export function PermissionRequest({
   onDeny,
 }: PermissionRequestProps) {
   const [responded, setResponded] = useState(false);
+  const [showPatternInput, setShowPatternInput] = useState(false);
+
+  // Generate suggested pattern based on tool and input
+  const suggestedPattern = useMemo(() => suggestPattern(toolName, input), [toolName, input]);
+  const [customPattern, setCustomPattern] = useState(suggestedPattern);
 
   const handleAllow = useCallback(() => {
     setResponded(true);
@@ -120,6 +170,13 @@ export function PermissionRequest({
 
   const handleAllowForSession = useCallback(() => {
     setResponded(true);
+    // Use the custom pattern if user has edited it, otherwise use the suggested pattern
+    onAllowForSession(requestId, customPattern, input);
+  }, [requestId, customPattern, input, onAllowForSession]);
+
+  const handleAllowToolForSession = useCallback(() => {
+    setResponded(true);
+    // Allow the entire tool (dangerous for Bash)
     onAllowForSession(requestId, toolName, input);
   }, [requestId, toolName, input, onAllowForSession]);
 
@@ -127,6 +184,9 @@ export function PermissionRequest({
     setResponded(true);
     onDeny(requestId, 'User denied permission');
   }, [requestId, onDeny]);
+
+  // Check if we have a specific pattern (not just tool name)
+  const hasPattern = suggestedPattern !== toolName;
 
   // Determine if this is a file operation that should show a diff
   const diffViewData = useMemo(() => {
@@ -253,7 +313,24 @@ export function PermissionRequest({
         )}
       </div>
 
-      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex justify-end gap-3 shrink-0">
+      {/* Pattern input section (shown when user clicks to customize) */}
+      {showPatternInput && hasPattern && (
+        <div className="px-4 py-3 bg-bg-tertiary border-t border-border">
+          <label className="block text-xs text-text-secondary mb-1">Permission pattern:</label>
+          <input
+            type="text"
+            value={customPattern}
+            onChange={(e) => setCustomPattern(e.target.value)}
+            className="w-full px-3 py-2 rounded bg-bg-primary border border-border text-text-primary font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+            placeholder={suggestedPattern}
+          />
+          <p className="text-xs text-text-secondary mt-1">
+            Use <code className="bg-bg-primary px-1 rounded">:*</code> for prefix matching (e.g., <code className="bg-bg-primary px-1 rounded">git:*</code> matches <code className="bg-bg-primary px-1 rounded">git status</code> but not <code className="bg-bg-primary px-1 rounded">gitk</code>)
+          </p>
+        </div>
+      )}
+
+      <div className="px-4 py-3 bg-bg-tertiary border-t border-border flex flex-wrap items-center justify-end gap-3 shrink-0">
         <button
           onClick={handleDeny}
           disabled={responded}
@@ -268,20 +345,78 @@ export function PermissionRequest({
         >
           Deny
         </button>
-        <button
-          onClick={handleAllowForSession}
-          disabled={responded}
-          className={clsx(
-            'px-4 py-2 rounded-lg font-medium',
-            'bg-accent-primary text-white',
-            'hover:bg-accent-primary/90',
-            'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
-            'transition-colors',
-            responded && 'opacity-50 cursor-not-allowed'
-          )}
-        >
-          Allow for session
-        </button>
+
+        {/* Pattern-based allow for session (recommended) */}
+        {hasPattern && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleAllowForSession}
+              disabled={responded}
+              className={clsx(
+                'px-4 py-2 rounded-lg font-medium',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+              title={`Allow ${customPattern} for this session`}
+            >
+              Allow <code className="font-mono text-xs bg-white/20 px-1 rounded">{customPattern}</code>
+            </button>
+            <button
+              onClick={() => setShowPatternInput(!showPatternInput)}
+              disabled={responded}
+              className={clsx(
+                'px-2 py-2 rounded-lg',
+                'bg-accent-primary/80 text-white',
+                'hover:bg-accent-primary/70',
+                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+                'transition-colors',
+                responded && 'opacity-50 cursor-not-allowed'
+              )}
+              title="Edit pattern"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* Tool-wide allow for session (legacy/dangerous for some tools) */}
+        {!hasPattern ? (
+          <button
+            onClick={handleAllowForSession}
+            disabled={responded}
+            className={clsx(
+              'px-4 py-2 rounded-lg font-medium',
+              'bg-accent-primary text-white',
+              'hover:bg-accent-primary/90',
+              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+              'transition-colors',
+              responded && 'opacity-50 cursor-not-allowed'
+            )}
+          >
+            Allow for session
+          </button>
+        ) : (
+          <button
+            onClick={handleAllowToolForSession}
+            disabled={responded}
+            className={clsx(
+              'px-3 py-2 rounded-lg font-medium text-sm',
+              'bg-bg-secondary text-text-secondary border border-border',
+              'hover:bg-bg-tertiary hover:text-text-primary',
+              'focus:outline-none focus:ring-2 focus:ring-accent-primary/50',
+              'transition-colors',
+              responded && 'opacity-50 cursor-not-allowed'
+            )}
+            title={`Allow all ${toolName} operations (use with caution)`}
+          >
+            Allow all {toolName}
+          </button>
+        )}
         <button
           onClick={handleAllow}
           disabled={responded}
