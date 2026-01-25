@@ -79,6 +79,8 @@ export function BrowserView({
   useEffect(() => {
     if (!isLoading) {
       // Reset timeout state when not loading
+      // This is intentional - we need to sync loadingTimedOut with isLoading
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingTimedOut(false);
       return;
     }
