@@ -201,7 +201,7 @@ importers:
         version: link:../playwright-mcp
       '@hono/node-server':
         specifier: ^1.14.0
-        version: 1.19.8(hono@4.11.5)
+        version: 1.19.9(hono@4.11.5)
       better-sqlite3:
         specifier: ^12.6.0
         version: 12.6.0
@@ -665,6 +665,12 @@ packages:
 
   '@hono/node-server@1.19.8':
     resolution: {integrity: sha512-0/g2lIOPzX8f3vzW1ggQgvG5mjtFBDBHFAzI5SFAi2DzSqS9luJwqg9T6O/gKYLi+inS7eNxBeIFkkghIPvrMA==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -3516,6 +3522,10 @@ snapshots:
   '@exodus/bytes@1.9.0': {}
 
   '@hono/node-server@1.19.8(hono@4.11.5)':
+    dependencies:
+      hono: 4.11.5
+
+  '@hono/node-server@1.19.9(hono@4.11.5)':
     dependencies:
       hono: 4.11.5
 
