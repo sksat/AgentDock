@@ -159,7 +159,7 @@ function App() {
     }
   }, [sessionView, activeSessionId, startMachineMonitor, stopMachineMonitor]);
 
-  const { isConnected, send } = useWebSocket(WS_URL, {
+  const { connectionState, isConnected, send } = useWebSocket(WS_URL, {
     onMessage: handleServerMessage,
     onConnect: () => {
       console.log('Connected to server');
@@ -286,11 +286,19 @@ function App() {
         <div className="flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${
-              isConnected ? 'bg-accent-success' : 'bg-accent-danger'
+              connectionState === 'connected'
+                ? 'bg-accent-success'
+                : connectionState === 'connecting'
+                  ? 'bg-accent-warning'
+                  : 'bg-accent-danger'
             }`}
           />
           <span className="text-sm text-text-secondary">
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {connectionState === 'connected'
+              ? 'Connected'
+              : connectionState === 'connecting'
+                ? 'Connecting...'
+                : 'Disconnected'}
           </span>
         </div>
       </header>
