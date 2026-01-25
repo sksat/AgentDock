@@ -13,7 +13,8 @@
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { execSync } from 'child_process';
-import { PodmanClaudeRunner, PodmanClaudeRunnerOptions } from '../podman-claude-runner.js';
+import { PodmanClaudeRunner } from '../podman-claude-runner.js';
+import type { PodmanClaudeRunnerOptions } from '../podman-claude-runner.js';
 import { createDefaultContainerConfig } from '../container-config.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';

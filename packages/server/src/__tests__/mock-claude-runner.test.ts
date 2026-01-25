@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MockClaudeRunner, Scenario, ScenarioStep } from '../mock-claude-runner.js';
+import { MockClaudeRunner } from '../mock-claude-runner.js';
+import type { Scenario, ScenarioStep } from '../mock-claude-runner.js';
 
 describe('MockClaudeRunner', () => {
   let runner: MockClaudeRunner;

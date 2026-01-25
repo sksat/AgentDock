@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import {
-  ContainerConfig,
   buildPodmanArgs,
   expandPath,
   createDefaultContainerConfig,
 } from '../container-config.js';
+import type { ContainerConfig } from '../container-config.js';
 
 // Helper to check if a path exists
 function pathExists(p: string): boolean {

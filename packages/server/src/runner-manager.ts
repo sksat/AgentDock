@@ -1,6 +1,8 @@
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent, ClaudePermissionMode } from './claude-runner.js';
+import { ClaudeRunner } from './claude-runner.js';
+import type { ClaudeRunnerOptions, ClaudeRunnerEvents, StartOptions, ImageContent, ClaudePermissionMode } from './claude-runner.js';
 import { EventEmitter } from 'events';
-import { isContainerBackend, type RunnerBackend } from '@agent-dock/shared';
+import { isContainerBackend } from '@agent-dock/shared';
+import type { RunnerBackend } from '@agent-dock/shared';
 
 // Re-export ClaudePermissionMode for use in server.ts
 export type { ClaudePermissionMode };

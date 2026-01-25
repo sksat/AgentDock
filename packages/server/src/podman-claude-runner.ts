@@ -11,12 +11,11 @@
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
-import { ClaudeStreamProcessor, ClaudePermissionMode } from './claude-stream-processor.js';
-import {
-  ClaudeRunnerEvents,
-  StartOptions,
-} from './claude-runner.js';
-import { ContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
+import { ClaudeStreamProcessor } from './claude-stream-processor.js';
+import type { ClaudePermissionMode } from './claude-stream-processor.js';
+import type { ClaudeRunnerEvents, StartOptions } from './claude-runner.js';
+import { buildPodmanArgs, getGitEnvVars } from './container-config.js';
+import type { ContainerConfig } from './container-config.js';
 
 // Regex for valid tool names: alphanumeric, hyphen, underscore, colon, slash, at-sign, dot
 // Examples: "Bash", "Read", "mcp__server:tool", "plugin@namespace"
