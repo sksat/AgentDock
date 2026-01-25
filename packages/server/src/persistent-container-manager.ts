@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
 import { WebSocket } from 'ws';
 import type { ContainerConfig } from './container-config.js';
-import { buildPodmanArgs } from './container-config.js';
+import { buildPodmanArgs, getGitEnvVars } from './container-config.js';
 
 export interface PersistentContainerOptions {
   containerConfig: ContainerConfig;
@@ -64,7 +64,9 @@ export class PersistentContainerManager extends EventEmitter {
     const { containerConfig, workingDir } = this.options;
 
     // Build podman args for a detached container that stays running
-    const baseArgs = buildPodmanArgs(containerConfig, workingDir, {});
+    // Include Git environment variables from host config
+    const gitEnv = getGitEnvVars();
+    const baseArgs = buildPodmanArgs(containerConfig, workingDir, gitEnv);
 
     // Replace 'run' with 'run -d' for detached mode and add sleep infinity
     // baseArgs structure: ['run', '-it', '--rm', '--userns=keep-id', ...mounts..., image]
@@ -72,13 +74,26 @@ export class PersistentContainerManager extends EventEmitter {
     // 1. Skip first 4 args (run, -it, --rm, --userns=keep-id) - we add our own
     // 2. Skip last element (image) - we add it after port mapping
     const mountArgs = baseArgs.slice(4, -1);
+
+    // Mount directories needed for MCP server execution inside container:
+    // - /tmp/agent-dock-mcp: MCP config files
+    // - project root: mcp-server dist files
+    const projectRoot = process.cwd().includes('packages/server')
+      ? process.cwd().replace('/packages/server', '')
+      : process.cwd();
+    const mcpMounts = [
+      '-v', '/tmp/agent-dock-mcp:/tmp/agent-dock-mcp:ro',
+      '-v', `${projectRoot}:${projectRoot}:ro`,
+    ];
+
     const args = [
       'run',
       '-d', // detached
       '--rm',
       '--userns=keep-id',
       ...mountArgs,
-      '-p', `${this.options.bridgePort}:3002`, // Expose bridge port
+      ...mcpMounts,
+      '-p', `${this.options.bridgePort}:${this.options.bridgePort}`, // Expose bridge port for host to connect
       containerConfig.image,
       'sleep', 'infinity', // Keep container running
     ];
@@ -127,14 +142,29 @@ export class PersistentContainerManager extends EventEmitter {
   }
 
   /**
-   * Start the browser bridge service inside the container
+   * Start the browser bridge service inside the container.
+   *
+   * If browserBridgeEnabled is true in containerConfig, the bridge is already
+   * started by the entrypoint script, so we only need to connect to it.
+   * Otherwise, we start it manually via podman exec.
    */
   async startBrowserBridge(): Promise<void> {
     if (!this.containerId) {
       throw new Error('Container not started');
     }
 
-    // Execute browser bridge inside the running container
+    const { containerConfig } = this.options;
+
+    // If browserBridgeEnabled is true, the entrypoint already started the bridge
+    // Just wait a bit and connect (Issue #78: same-container mode)
+    if (containerConfig.browserBridgeEnabled) {
+      console.log(`[PersistentContainer] Browser bridge started by entrypoint, connecting...`);
+      // Wait a bit for the bridge to be ready, then connect
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return this.connectToBridge();
+    }
+
+    // Execute browser bridge inside the running container (legacy mode)
     const proc = spawn('podman', [
       'exec',
       '-d', // detached

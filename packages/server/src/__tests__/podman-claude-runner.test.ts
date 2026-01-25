@@ -346,6 +346,130 @@ describe('PodmanClaudeRunner', () => {
     });
   });
 
+  describe('exec mode (Issue #78: same-container)', () => {
+    it('should use podman exec when containerId is provided', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+      });
+      runner.start('Hello');
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        'podman',
+        expect.arrayContaining(['exec', '-it', 'abc123def456', 'claude']),
+        expect.any(Object)
+      );
+    });
+
+    it('should NOT include run command when containerId is provided', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      expect(args).not.toContain('run');
+    });
+
+    it('should include prompt in exec mode', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+      });
+      runner.start('Hello Claude');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      expect(args).toContain('-p');
+      const pIndex = args.indexOf('-p');
+      expect(args[pIndex + 1]).toBe('Hello Claude');
+    });
+
+    it('should pass environment variables in exec mode', () => {
+      // Set up environment variable
+      const originalEnv = process.env.ANTHROPIC_API_KEY;
+      process.env.ANTHROPIC_API_KEY = 'test-api-key';
+
+      try {
+        runner = new PodmanClaudeRunner({
+          ...defaultOptions,
+          containerId: 'abc123def456',
+        });
+        runner.start('Hello', { thinkingEnabled: true });
+
+        const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+        const args = spawnCall[1] as string[];
+
+        // Find -e arguments for environment variables
+        const envArgs: string[] = [];
+        for (let i = 0; i < args.length; i++) {
+          if (args[i] === '-e' && args[i + 1]) {
+            envArgs.push(args[i + 1]);
+          }
+        }
+
+        expect(envArgs).toContain('MAX_THINKING_TOKENS=31999');
+        expect(envArgs.some(e => e.startsWith('ANTHROPIC_API_KEY='))).toBe(true);
+      } finally {
+        // Restore original environment
+        if (originalEnv !== undefined) {
+          process.env.ANTHROPIC_API_KEY = originalEnv;
+        } else {
+          delete process.env.ANTHROPIC_API_KEY;
+        }
+      }
+    });
+
+    it('should include MCP config in exec mode', () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+        mcpConfigPath: '/tmp/agent-dock-mcp/mcp-config-test123.json',
+        permissionToolName: 'mcp__bridge__permission_prompt',
+      });
+      runner.start('Hello');
+
+      const spawnCall = vi.mocked(pty.spawn).mock.calls[0];
+      const args = spawnCall[1] as string[];
+
+      expect(args).toContain('--mcp-config');
+      expect(args).toContain('/tmp/agent-dock-mcp/mcp-config-test123.json');
+      expect(args).toContain('--permission-prompt-tool');
+      expect(args).toContain('mcp__bridge__permission_prompt');
+    });
+
+    it('should emit started event with PID in exec mode', async () => {
+      runner = new PodmanClaudeRunner({
+        ...defaultOptions,
+        containerId: 'abc123def456',
+      });
+
+      const startedPromise = new Promise<{ pid: number }>((resolve) => {
+        runner.on('started', resolve);
+      });
+
+      runner.start('Hello');
+
+      const data = await startedPromise;
+      expect(data.pid).toBe(12345);
+    });
+
+    it('should still use podman run when containerId is NOT provided', () => {
+      runner = new PodmanClaudeRunner(defaultOptions);
+      runner.start('Hello');
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        'podman',
+        expect.arrayContaining(['run']),
+        expect.any(Object)
+      );
+    });
+  });
+
   describe('tool name validation', () => {
     it('should accept valid tool names', () => {
       runner = new PodmanClaudeRunner(defaultOptions);

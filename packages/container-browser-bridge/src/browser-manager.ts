@@ -27,7 +27,8 @@ export class BrowserManager extends EventEmitter {
 
   async launch(options: BrowserManagerOptions = {}): Promise<void> {
     if (this.browser) {
-      throw new Error('Browser already launched');
+      console.log('[BrowserManager] Browser already launched, skipping');
+      return;
     }
 
     const viewport = options.viewport ?? DEFAULT_VIEWPORT;

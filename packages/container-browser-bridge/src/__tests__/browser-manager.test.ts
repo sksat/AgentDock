@@ -25,9 +25,11 @@ describe('BrowserManager', () => {
       expect(manager.isLaunched()).toBe(true);
     });
 
-    it('should throw if browser already launched', async () => {
+    it('should skip launch if browser already launched', async () => {
       await manager.launch({ headless: true });
-      await expect(manager.launch({ headless: true })).rejects.toThrow('Browser already launched');
+      // Second launch should be a no-op (not throw)
+      await expect(manager.launch({ headless: true })).resolves.toBeUndefined();
+      expect(manager.isLaunched()).toBe(true);
     });
 
     it('should close browser', async () => {

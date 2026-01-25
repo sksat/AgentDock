@@ -16,6 +16,16 @@ export interface ClaudeRunnerOptions {
   claudePath?: string;
   mcpConfigPath?: string;
   permissionToolName?: string;
+  /**
+   * Bridge port for browser-in-container mode (Issue #78).
+   * Used to configure the browser bridge's listening port.
+   */
+  bridgePort?: number;
+  /**
+   * Container ID for exec mode (Issue #78: same-container mode).
+   * If provided, uses `podman exec` on this container instead of `podman run`.
+   */
+  containerId?: string;
 }
 
 export interface ImageContent {

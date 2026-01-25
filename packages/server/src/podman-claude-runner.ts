@@ -14,7 +14,7 @@ import {
   ClaudePermissionMode,
   StartOptions,
 } from './claude-runner.js';
-import { ContainerConfig, buildPodmanArgs } from './container-config.js';
+import { ContainerConfig, buildPodmanArgs, getGitEnvVars } from './container-config.js';
 
 // Permission mode cycle order (Shift+Tab cycles through these)
 const PERMISSION_MODE_ORDER: ClaudePermissionMode[] = ['default', 'acceptEdits', 'plan'];
@@ -50,6 +50,13 @@ export interface PodmanClaudeRunnerOptions {
   mcpConfigPath?: string;
   /** Permission tool name for MCP */
   permissionToolName?: string;
+  /**
+   * Container ID for exec mode (Issue #78: same-container mode).
+   * If provided, uses `podman exec` on this container instead of `podman run`.
+   * This allows Claude to run in the same container as the browser bridge,
+   * sharing localhost for dev server access.
+   */
+  containerId?: string;
 }
 
 export class PodmanClaudeRunner extends EventEmitter {
@@ -67,6 +74,7 @@ export class PodmanClaudeRunner extends EventEmitter {
       claudePath: options.claudePath ?? 'claude',
       mcpConfigPath: options.mcpConfigPath,
       permissionToolName: options.permissionToolName,
+      containerId: options.containerId,
     };
   }
 
@@ -142,10 +150,84 @@ export class PodmanClaudeRunner extends EventEmitter {
 
   /**
    * Start Claude Code inside a Podman container.
+   * If containerId is provided (exec mode), runs in existing container via podman exec.
+   * Otherwise (run mode), starts a new container via podman run.
    */
   start(prompt: string, options: StartOptions = {}): void {
+    if (this.options.containerId) {
+      // Exec mode: run Claude in existing container (Issue #78: same-container mode)
+      this.startExecMode(prompt, options);
+    } else {
+      // Run mode: start new container
+      this.startRunMode(prompt, options);
+    }
+  }
+
+  /**
+   * Start Claude using podman exec in an existing container.
+   * This allows Claude to share localhost with browser bridge.
+   */
+  private startExecMode(prompt: string, options: StartOptions = {}): void {
+    // Build environment variables to pass via -e flags
+    const envArgs: string[] = [];
+
+    // Pass ANTHROPIC_API_KEY to container
+    if (process.env.ANTHROPIC_API_KEY) {
+      envArgs.push('-e', `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`);
+    }
+
+    if (options.thinkingEnabled) {
+      envArgs.push('-e', 'MAX_THINKING_TOKENS=31999');
+      console.log('[PodmanClaudeRunner] Extended thinking enabled');
+    }
+
+    // Build podman exec arguments
+    const claudeArgs = this.buildClaudeArgs(prompt, options);
+    const podmanArgs = [
+      'exec',
+      '-it',
+      ...envArgs,
+      this.options.containerId!,
+      this.options.claudePath!,
+      ...claudeArgs,
+    ];
+
+    console.log('[PodmanClaudeRunner] Starting (exec mode):', 'podman', podmanArgs.join(' '));
+
+    // Spawn podman exec with PTY
+    this.ptyProcess = pty.spawn('podman', podmanArgs, {
+      name: 'xterm-color',
+      cols: 200,
+      rows: 50,
+      env: process.env as Record<string, string>,
+    });
+
+    console.log('[PodmanClaudeRunner] Exec started with PID:', this.ptyProcess.pid);
+
+    this._isRunning = true;
+    this.emit('started', { pid: this.ptyProcess.pid });
+
+    this.ptyProcess.onData((data: string) => {
+      this.handleStdout(data);
+    });
+
+    this.ptyProcess.onExit(({ exitCode, signal }) => {
+      console.log('[PodmanClaudeRunner] Exec exited:', exitCode, signal);
+      this._isRunning = false;
+      this.emit('exit', { code: exitCode, signal: signal !== undefined ? String(signal) : null });
+    });
+  }
+
+  /**
+   * Start Claude in a new container using podman run.
+   * This is the traditional mode where each Claude invocation gets a new container.
+   */
+  private startRunMode(prompt: string, options: StartOptions = {}): void {
     // Build environment variables to pass to container
-    const env: Record<string, string> = {};
+    // Include Git environment variables from host config
+    const env: Record<string, string> = {
+      ...getGitEnvVars(),
+    };
 
     // Pass ANTHROPIC_API_KEY to container
     if (process.env.ANTHROPIC_API_KEY) {

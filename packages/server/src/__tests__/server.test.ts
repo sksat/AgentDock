@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { createServer, isBrowserTool, isAgentDockTool, isAutoAllowedTool, type BridgeServer } from '../server.js';
 
 describe('BridgeServer', () => {
@@ -545,5 +545,333 @@ describe('isWebTool', () => {
     expect(isWebTool('Write')).toBe(false);
     expect(isWebTool('Read')).toBe(false);
     expect(isWebTool('AskUserQuestion')).toBe(false);
+  });
+});
+
+/**
+ * Regression tests for Issue #78: Screencast visibility in container mode.
+ *
+ * These tests verify that:
+ * 1. containerBrowserSessionManager.createSession() is called for container mode
+ * 2. containerId is passed to runnerManager.startSession()
+ * 3. screencast_frame events from containerBrowserSessionManager are forwarded to WebSocket
+ */
+describe('Container Browser Screencast (Issue #78)', () => {
+  let server: BridgeServer;
+  const TEST_PORT = 3098; // Different port to avoid conflicts
+
+  beforeAll(async () => {
+    // Create server with mock runner (no actual container)
+    server = createServer({
+      port: TEST_PORT,
+      disableUsageMonitor: true,
+      dbPath: ':memory:',
+      useMock: true, // Use mock runner
+    });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('should forward screencast_frame from containerBrowserSessionManager to WebSocket clients', async () => {
+    const containerBrowserSessionManager = server.getContainerBrowserSessionManager();
+
+    // Connect WebSocket client
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+    await new Promise<void>((resolve, reject) => {
+      ws.onopen = () => resolve();
+      ws.onerror = reject;
+    });
+
+    // Create a session first
+    const createResponse = await new Promise<any>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_created') {
+          ws.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws.addEventListener('message', handler);
+      ws.send(JSON.stringify({ type: 'create_session', name: 'Screencast Test' }));
+    });
+
+    const sessionId = createResponse.session.id;
+
+    // Attach to the session (required for sendToSession to work)
+    await new Promise<void>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_attached') {
+          ws.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws.addEventListener('message', handler);
+      ws.send(JSON.stringify({ type: 'attach_session', sessionId }));
+    });
+
+    // Set up listener for screencast_frame
+    const framePromise = new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout waiting for screencast_frame')), 5000);
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'screencast_frame' && data.sessionId === sessionId) {
+          clearTimeout(timeout);
+          ws.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws.addEventListener('message', handler);
+    });
+
+    // Simulate containerBrowserSessionManager emitting a frame event
+    // This tests that the event forwarding is correctly set up in server.ts
+    containerBrowserSessionManager.emit('frame', {
+      sessionId,
+      data: 'test-frame-data-base64',
+      metadata: {
+        deviceWidth: 1280,
+        deviceHeight: 720,
+        timestamp: Date.now(),
+      },
+    });
+
+    // WebSocket client should receive the frame
+    const frame = await framePromise;
+    expect(frame.type).toBe('screencast_frame');
+    expect(frame.sessionId).toBe(sessionId);
+    expect(frame.data).toBe('test-frame-data-base64');
+    expect(frame.metadata.deviceWidth).toBe(1280);
+    expect(frame.metadata.deviceHeight).toBe(720);
+
+    ws.close();
+  });
+
+  it('should forward screencast_status from containerBrowserSessionManager to WebSocket clients', async () => {
+    const containerBrowserSessionManager = server.getContainerBrowserSessionManager();
+
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+    await new Promise<void>((resolve, reject) => {
+      ws.onopen = () => resolve();
+      ws.onerror = reject;
+    });
+
+    // Create a session
+    const createResponse = await new Promise<any>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_created') {
+          ws.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws.addEventListener('message', handler);
+      ws.send(JSON.stringify({ type: 'create_session', name: 'Status Test' }));
+    });
+
+    const sessionId = createResponse.session.id;
+
+    // Attach to the session
+    await new Promise<void>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_attached') {
+          ws.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws.addEventListener('message', handler);
+      ws.send(JSON.stringify({ type: 'attach_session', sessionId }));
+    });
+
+    // Set up listener for screencast_status
+    const statusPromise = new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout waiting for screencast_status')), 5000);
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'screencast_status' && data.sessionId === sessionId) {
+          clearTimeout(timeout);
+          ws.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws.addEventListener('message', handler);
+    });
+
+    // Simulate containerBrowserSessionManager emitting a status event
+    containerBrowserSessionManager.emit('status', {
+      sessionId,
+      active: true,
+      browserUrl: 'https://example.com',
+      browserTitle: 'Example Domain',
+    });
+
+    // WebSocket client should receive the status
+    const status = await statusPromise;
+    expect(status.type).toBe('screencast_status');
+    expect(status.sessionId).toBe(sessionId);
+    expect(status.active).toBe(true);
+    expect(status.browserUrl).toBe('https://example.com');
+    expect(status.browserTitle).toBe('Example Domain');
+
+    ws.close();
+  });
+
+  it('should only send screencast events to clients attached to that session', async () => {
+    const containerBrowserSessionManager = server.getContainerBrowserSessionManager();
+
+    // Create two WebSocket clients
+    const ws1 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+    const ws2 = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        ws1.onopen = () => resolve();
+        ws1.onerror = reject;
+      }),
+      new Promise<void>((resolve, reject) => {
+        ws2.onopen = () => resolve();
+        ws2.onerror = reject;
+      }),
+    ]);
+
+    // ws1 creates session A
+    const sessionAResponse = await new Promise<any>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_created') {
+          ws1.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws1.addEventListener('message', handler);
+      ws1.send(JSON.stringify({ type: 'create_session', name: 'Session A' }));
+    });
+
+    const sessionAId = sessionAResponse.session.id;
+
+    // ws1 attaches to session A
+    await new Promise<void>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_attached') {
+          ws1.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws1.addEventListener('message', handler);
+      ws1.send(JSON.stringify({ type: 'attach_session', sessionId: sessionAId }));
+    });
+
+    // ws2 creates session B
+    const sessionBResponse = await new Promise<any>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_created') {
+          ws2.removeEventListener('message', handler);
+          resolve(data);
+        }
+      };
+      ws2.addEventListener('message', handler);
+      ws2.send(JSON.stringify({ type: 'create_session', name: 'Session B' }));
+    });
+
+    const sessionBId = sessionBResponse.session.id;
+
+    // ws2 attaches to session B
+    await new Promise<void>((resolve) => {
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'session_attached') {
+          ws2.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws2.addEventListener('message', handler);
+      ws2.send(JSON.stringify({ type: 'attach_session', sessionId: sessionBId }));
+    });
+
+    // Track frames received by each client
+    let ws1ReceivedFrameForSessionB = false;
+    let ws2ReceivedFrameForSessionA = false;
+
+    const ws1Handler = (event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'screencast_frame' && data.sessionId === sessionBId) {
+        ws1ReceivedFrameForSessionB = true;
+      }
+    };
+    ws1.addEventListener('message', ws1Handler);
+
+    const ws2Handler = (event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'screencast_frame' && data.sessionId === sessionAId) {
+        ws2ReceivedFrameForSessionA = true;
+      }
+    };
+    ws2.addEventListener('message', ws2Handler);
+
+    // Set up promises for expected frames
+    const ws1FramePromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 2000);
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'screencast_frame' && data.sessionId === sessionAId) {
+          clearTimeout(timeout);
+          ws1.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws1.addEventListener('message', handler);
+    });
+
+    const ws2FramePromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 2000);
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'screencast_frame' && data.sessionId === sessionBId) {
+          clearTimeout(timeout);
+          ws2.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      ws2.addEventListener('message', handler);
+    });
+
+    // Emit frame for session A
+    containerBrowserSessionManager.emit('frame', {
+      sessionId: sessionAId,
+      data: 'frame-a',
+      metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1000 },
+    });
+
+    // Emit frame for session B
+    containerBrowserSessionManager.emit('frame', {
+      sessionId: sessionBId,
+      data: 'frame-b',
+      metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1000 },
+    });
+
+    // Wait for frames to be delivered
+    await Promise.all([ws1FramePromise, ws2FramePromise]);
+
+    // Give time for any cross-session frames to be delivered
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // ws1 should NOT receive frame for session B
+    // ws2 should NOT receive frame for session A
+    // (This verifies session isolation)
+    expect(ws1ReceivedFrameForSessionB).toBe(false);
+    expect(ws2ReceivedFrameForSessionA).toBe(false);
+
+    ws1.removeEventListener('message', ws1Handler);
+    ws2.removeEventListener('message', ws2Handler);
+    ws1.close();
+    ws2.close();
   });
 });

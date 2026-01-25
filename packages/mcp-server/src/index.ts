@@ -8,6 +8,8 @@ import { PortMonitorHandler } from './port-monitor-handler.js';
 // Get bridge server URL from environment
 const BRIDGE_WS_URL = process.env.BRIDGE_WS_URL || 'ws://localhost:3001/ws';
 const SESSION_ID = process.env.SESSION_ID || 'default';
+// Browser bridge URL - if set, browser commands go directly to in-container bridge (Issue #78)
+const BROWSER_BRIDGE_URL = process.env.BROWSER_BRIDGE_URL;
 
 // Create MCP server
 const server = new McpServer({
@@ -27,11 +29,15 @@ async function getPermissionHandler(): Promise<PermissionHandler> {
 }
 
 // Create Playwright handler (will connect lazily)
+// In same-container mode (Issue #78), BROWSER_BRIDGE_URL points to the in-container bridge
 let playwrightHandler: PlaywrightHandler | null = null;
 
 async function getPlaywrightHandler(): Promise<PlaywrightHandler> {
   if (!playwrightHandler) {
-    playwrightHandler = new PlaywrightHandler(BRIDGE_WS_URL, SESSION_ID);
+    // Use BROWSER_BRIDGE_URL if available (same-container mode), otherwise use BRIDGE_WS_URL
+    const directBridgeMode = !!BROWSER_BRIDGE_URL;
+    const browserBridgeUrl = BROWSER_BRIDGE_URL || BRIDGE_WS_URL;
+    playwrightHandler = new PlaywrightHandler(browserBridgeUrl, SESSION_ID, directBridgeMode);
     await playwrightHandler.connect();
   }
   return playwrightHandler;

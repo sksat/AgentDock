@@ -57,8 +57,14 @@ describe('BrowserStreamer', () => {
       await streamer.start();
       // Navigate to trigger frame updates
       await page.goto('data:text/html,<h1>Test</h1>');
-      // Wait for frames to be captured
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Wait for at least one frame to be captured (with timeout)
+      const waitForFrame = async (timeout = 2000): Promise<void> => {
+        const start = Date.now();
+        while (frames.length === 0 && Date.now() - start < timeout) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      };
+      await waitForFrame();
 
       expect(frames.length).toBeGreaterThan(0);
       expect(frames[0].data).toBeDefined();

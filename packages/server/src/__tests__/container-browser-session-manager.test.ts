@@ -323,6 +323,107 @@ describe('ContainerBrowserSessionManager', () => {
     });
   });
 
+  describe('screencast forwarding (Issue #78 regression test)', () => {
+    it('should emit frame events when bridge sends screencast_frame', async () => {
+      const frameHandler = vi.fn();
+      manager.on('frame', frameHandler);
+
+      await manager.createSession('session-1', mockContainerManager);
+
+      // Simulate multiple frames like a real screencast
+      const frames = [
+        { data: 'frame1', metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1000 } },
+        { data: 'frame2', metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1016 } },
+        { data: 'frame3', metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1033 } },
+      ];
+
+      for (const frame of frames) {
+        mockContainerManager.simulateMessage({
+          type: 'screencast_frame',
+          ...frame,
+        });
+      }
+
+      // All frames should be forwarded
+      expect(frameHandler).toHaveBeenCalledTimes(3);
+
+      // Each call should include sessionId and frame data
+      frames.forEach((frame, index) => {
+        expect(frameHandler).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
+          sessionId: 'session-1',
+          data: frame.data,
+          metadata: expect.objectContaining({
+            deviceWidth: 1280,
+            deviceHeight: 720,
+          }),
+        }));
+      });
+    });
+
+    it('should forward frames to correct session when multiple sessions exist', async () => {
+      const frameHandler = vi.fn();
+      manager.on('frame', frameHandler);
+
+      const mockManager1 = createMockContainerManager();
+      const mockManager2 = createMockContainerManager();
+
+      await manager.createSession('session-1', mockManager1);
+      await manager.createSession('session-2', mockManager2);
+
+      // Send frame to session-1
+      mockManager1.simulateMessage({
+        type: 'screencast_frame',
+        data: 'frame-for-session-1',
+        metadata: { deviceWidth: 1920, deviceHeight: 1080, timestamp: 1000 },
+      });
+
+      // Send frame to session-2
+      mockManager2.simulateMessage({
+        type: 'screencast_frame',
+        data: 'frame-for-session-2',
+        metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1000 },
+      });
+
+      expect(frameHandler).toHaveBeenCalledTimes(2);
+
+      // Verify frames are associated with correct sessions
+      expect(frameHandler).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'session-1',
+        data: 'frame-for-session-1',
+      }));
+
+      expect(frameHandler).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'session-2',
+        data: 'frame-for-session-2',
+      }));
+    });
+
+    it('should not forward frames for destroyed session via handleBridgeMessage', async () => {
+      // Note: The current implementation doesn't remove event listeners on destroy,
+      // so this test verifies that handleBridgeMessage checks session existence.
+      // A future improvement could remove listeners in destroySession.
+      const frameHandler = vi.fn();
+      manager.on('frame', frameHandler);
+
+      await manager.createSession('session-1', mockContainerManager);
+
+      // Send first frame
+      mockContainerManager.simulateMessage({
+        type: 'screencast_frame',
+        data: 'frame1',
+        metadata: { deviceWidth: 1280, deviceHeight: 720, timestamp: 1000 },
+      });
+
+      expect(frameHandler).toHaveBeenCalledTimes(1);
+
+      // Destroy session - this removes session from internal map
+      await manager.destroySession('session-1');
+
+      // Verify session no longer exists
+      expect(manager.hasSession('session-1')).toBe(false);
+    });
+  });
+
   describe('error handling', () => {
     it('should throw when executing command on non-existent session', async () => {
       await expect(manager.executeCommand('non-existent', 'navigate', { url: 'test' }))

@@ -4,6 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 
 export interface ContainerMount {
   /** Host path (supports ~ expansion) */
@@ -27,6 +28,10 @@ export interface ContainerConfig {
   extraMounts: ContainerMount[];
   /** Additional arguments to pass to podman */
   extraArgs: string[];
+  /** Enable browser bridge in the container (Issue #78: same-container mode) */
+  browserBridgeEnabled?: boolean;
+  /** Bridge port number (default: 3002) */
+  bridgePort?: number;
 }
 
 /**
@@ -79,6 +84,15 @@ export function buildPodmanArgs(
   // Environment variables
   for (const [key, value] of Object.entries(env)) {
     args.push('-e', `${key}=${value}`);
+  }
+
+  // Browser bridge environment variables (Issue #78: same-container mode)
+  // With --network=host, the bridge listens directly on bridgePort on the host.
+  // Each session should use a unique bridgePort to avoid conflicts.
+  if (config.browserBridgeEnabled) {
+    const bridgePort = config.bridgePort ?? 3002;
+    args.push('-e', 'BROWSER_BRIDGE_ENABLED=true');
+    args.push('-e', `BRIDGE_PORT=${bridgePort}`);
   }
 
   // Extra arguments
@@ -157,4 +171,37 @@ export function createDefaultContainerConfig(
     extraMounts,
     extraArgs: options?.extraArgs ?? [],
   };
+}
+
+/**
+ * Get a git config value from the host system.
+ * Returns null if the config is not set or git is not available.
+ */
+function getGitConfig(key: string): string | null {
+  try {
+    return execSync(`git config --global ${key}`, { encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get Git environment variables for container.
+ * Reads user.name and user.email from host's git config
+ * and returns them as environment variables for the container entrypoint.
+ */
+export function getGitEnvVars(): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  const userName = getGitConfig('user.name');
+  const userEmail = getGitConfig('user.email');
+
+  if (userName) {
+    env['GIT_USER_NAME'] = userName;
+  }
+  if (userEmail) {
+    env['GIT_USER_EMAIL'] = userEmail;
+  }
+
+  return env;
 }
