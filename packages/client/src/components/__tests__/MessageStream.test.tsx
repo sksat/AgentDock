@@ -797,7 +797,7 @@ describe('ToolMessage - Browser tool formatting', () => {
     expect(screen.getByText('some tool')).toBeInTheDocument();
   });
 
-  it('should show expanded content by default', () => {
+  it('should show expanded content by default for browser_navigate (Input hidden)', () => {
     const messages: MessageStreamItem[] = [
       {
         type: 'tool',
@@ -813,10 +813,31 @@ describe('ToolMessage - Browser tool formatting', () => {
     ];
     render(<MessageStream messages={messages} />);
 
-    // Should show Input/Output sections by default (expanded)
-    expect(screen.getByText('Input')).toBeInTheDocument();
+    // browser_navigate: Input is hidden (url is shown in summary), only Output shown
+    expect(screen.queryByText('Input')).not.toBeInTheDocument();
     expect(screen.getByText('Output')).toBeInTheDocument();
     expect(screen.getByText('Navigation successful')).toBeInTheDocument();
+  });
+
+  it('should show collapsed Input for browser_click', () => {
+    const messages: MessageStreamItem[] = [
+      {
+        type: 'tool',
+        content: {
+          toolUseId: 'tool-1',
+          toolName: 'mcp__bridge__browser_click',
+          input: { element: 'Submit button', ref: 'btn-1' },
+          output: 'Click successful',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+    ];
+    render(<MessageStream messages={messages} />);
+
+    // browser_click: Input is shown (collapsed by default means it's rendered)
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('Output')).toBeInTheDocument();
   });
 });
 
@@ -1474,5 +1495,128 @@ Internal reminder that should not be shown
     expect(outputPre).toBeInTheDocument();
     // system-reminder content should be completely removed
     expect(outputPre?.textContent).not.toContain('Internal reminder');
+  });
+
+  describe('ToolMessage input display optimization', () => {
+    // Note: ToolMessage is expanded by default (useState(true))
+
+    it('should hide input for WebSearch when only query is present', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'WebSearch',
+          toolUseId: 'ws-1',
+          input: { query: 'test query' },
+          output: 'Search results...',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should NOT show Input section (query is covered by header)
+      expect(screen.queryByText('Input')).not.toBeInTheDocument();
+      // Should show Output
+      expect(screen.getByText('Output')).toBeInTheDocument();
+    });
+
+    it('should show extra fields for WebSearch with allowed_domains', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'WebSearch',
+          toolUseId: 'ws-1',
+          input: { query: 'test query', allowed_domains: ['example.com'] },
+          output: 'Search results...',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should show Input section with only extra fields
+      expect(screen.getByText('Input')).toBeInTheDocument();
+      // Should show allowed_domains in the input
+      expect(screen.getByText(/allowed_domains/)).toBeInTheDocument();
+    });
+
+    it('should hide input for Glob with pattern and path', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'Glob',
+          toolUseId: 'glob-1',
+          input: { pattern: '**/*.ts', path: 'src' },
+          output: 'file1.ts\nfile2.ts',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should NOT show Input section (pattern and path are covered by header)
+      expect(screen.queryByText('Input')).not.toBeInTheDocument();
+      // Should show Output
+      expect(screen.getByText('Output')).toBeInTheDocument();
+    });
+
+    it('should show extra fields for Grep with output_mode', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'Grep',
+          toolUseId: 'grep-1',
+          input: { pattern: 'TODO', path: 'src', output_mode: 'content' },
+          output: 'Found matches...',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should show Input section with only extra fields
+      expect(screen.getByText('Input')).toBeInTheDocument();
+      // Should show output_mode in the input (pattern and path are covered)
+      expect(screen.getByText(/output_mode/)).toBeInTheDocument();
+    });
+
+    it('should show prompt for WebFetch since url is covered', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'WebFetch',
+          toolUseId: 'wf-1',
+          input: { url: 'https://example.com', prompt: 'summarize this' },
+          output: 'Summary...',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should show Input section with only prompt
+      expect(screen.getByText('Input')).toBeInTheDocument();
+      expect(screen.getByText(/prompt/)).toBeInTheDocument();
+    });
+
+    it('should hide input for Task when only description is present', () => {
+      const messages: MessageStreamItem[] = [{
+        type: 'tool',
+        content: {
+          toolName: 'Task',
+          toolUseId: 'task-1',
+          input: { description: 'Search for files' },
+          output: 'Task completed',
+          isComplete: true,
+        },
+        timestamp: '2024-01-01T00:00:00Z',
+      }];
+      render(<MessageStream messages={messages} />);
+
+      // Should NOT show Input section (description is covered by header)
+      expect(screen.queryByText('Input')).not.toBeInTheDocument();
+      // Should show Output
+      expect(screen.getByText('Output')).toBeInTheDocument();
+    });
   });
 });

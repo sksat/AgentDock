@@ -337,6 +337,22 @@ function formatFilePath(filePath: string, workingDir?: string): string {
   return filePath;
 }
 
+/** Tool display configuration for header and expanded content */
+interface ToolDisplayConfig {
+  icon: string;
+  summary: string;
+  detailInput?: unknown;
+  inputDisplay: 'expanded' | 'collapsed' | 'hidden';
+}
+
+/** Extract remaining fields from input after removing specified keys */
+function omitFields(input: Record<string, unknown>, keys: string[]): Record<string, unknown> | undefined {
+  const remaining = Object.fromEntries(
+    Object.entries(input).filter(([k]) => !keys.includes(k))
+  );
+  return Object.keys(remaining).length > 0 ? remaining : undefined;
+}
+
 // Base64 prefixes for common image formats
 const BASE64_PNG_PREFIX = 'iVBORw0KGgo';
 const BASE64_JPEG_PREFIX = '/9j/';
@@ -700,63 +716,87 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
   // Helper to format file paths
   const fmtPath = (path: string) => formatFilePath(path, workingDir);
 
-  // Get tool display info based on toolName
-  const getToolInfo = (): { icon: string; description: string } => {
+  // Get tool display configuration
+  const getToolDisplayConfig = (): ToolDisplayConfig => {
     switch (content.toolName) {
       case 'Bash': {
         const command = inp.command as string || '';
-        const description = inp.description as string || command.split('\n')[0].slice(0, 60) + (command.length > 60 ? '...' : '');
-        return { icon: '💻', description };
+        const summary = inp.description as string || command.split('\n')[0].slice(0, 60) + (command.length > 60 ? '...' : '');
+        return { icon: '💻', summary, inputDisplay: 'hidden' }; // Bash has custom display
       }
       case 'Read': {
-        return { icon: '📖', description: fmtPath(inp.file_path as string || '') };
+        return { icon: '📖', summary: fmtPath(inp.file_path as string || ''), inputDisplay: 'hidden' };
       }
       case 'Write': {
-        return { icon: '✏️', description: fmtPath(inp.file_path as string || '') };
+        return { icon: '✏️', summary: fmtPath(inp.file_path as string || ''), inputDisplay: 'hidden' }; // Write has custom display
       }
       case 'Edit': {
-        return { icon: '🔧', description: fmtPath(inp.file_path as string || '') };
+        return { icon: '🔧', summary: fmtPath(inp.file_path as string || ''), inputDisplay: 'hidden' }; // Edit has custom display
       }
       case 'Glob': {
         const pattern = inp.pattern as string || '';
         const path = inp.path as string || '';
-        return { icon: '🔍', description: pattern + (path ? ` in ${fmtPath(path)}` : '') };
+        return { icon: '🔍', summary: pattern + (path ? ` in ${fmtPath(path)}` : ''), inputDisplay: 'hidden' };
       }
       case 'Grep': {
         const pattern = inp.pattern as string || '';
         const path = inp.path as string || '';
-        return { icon: '🔎', description: `"${pattern}"` + (path ? ` in ${fmtPath(path)}` : '') };
+        const detail = omitFields(inp, ['pattern', 'path']);
+        return {
+          icon: '🔎',
+          summary: `"${pattern}"` + (path ? ` in ${fmtPath(path)}` : ''),
+          detailInput: detail,
+          inputDisplay: detail ? 'collapsed' : 'hidden',
+        };
       }
       case 'Task': {
         const taskDescription = inp.description as string || inp.prompt as string || '';
-        return { icon: '🤖', description: taskDescription.slice(0, 60) + (taskDescription.length > 60 ? '...' : '') };
+        const detail = omitFields(inp, ['description', 'prompt']);
+        return {
+          icon: '🤖',
+          summary: taskDescription.slice(0, 60) + (taskDescription.length > 60 ? '...' : ''),
+          detailInput: detail,
+          inputDisplay: detail ? 'collapsed' : 'hidden',
+        };
       }
       case 'WebFetch': {
-        return { icon: '🌐', description: inp.url as string || '' };
+        const detail = omitFields(inp, ['url']);
+        return {
+          icon: '🌐',
+          summary: inp.url as string || '',
+          detailInput: detail,
+          inputDisplay: detail ? 'collapsed' : 'hidden',
+        };
       }
       case 'WebSearch': {
-        return { icon: '🔍', description: inp.query as string || '' };
+        const detail = omitFields(inp, ['query']);
+        return {
+          icon: '🔍',
+          summary: inp.query as string || '',
+          detailInput: detail,
+          inputDisplay: detail ? 'collapsed' : 'hidden',
+        };
       }
       case 'TodoWrite': {
-        return { icon: '📝', description: 'Update todo list' };
+        return { icon: '📝', summary: 'Update todo list', inputDisplay: 'hidden' };
       }
       default: {
         // For MCP tools, extract a nicer name
         if (content.toolName.startsWith('mcp__')) {
           const browserInfo = formatBrowserTool(content.toolName, content.input);
           if (browserInfo) {
-            return { icon: '🌐', description: `${browserInfo.prefix}:${browserInfo.shortName} ${browserInfo.description}` };
+            return { icon: '🌐', summary: `${browserInfo.prefix}:${browserInfo.shortName} ${browserInfo.description}`, inputDisplay: browserInfo.inputDisplay };
           }
           // Generic MCP tool
           const shortName = content.toolName.replace(/^mcp__[^_]+__/, '');
-          return { icon: '🔌', description: shortName };
+          return { icon: '🔌', summary: shortName, inputDisplay: 'expanded' };
         }
-        return { icon: '🔧', description: content.toolName };
+        return { icon: '🔧', summary: content.toolName, inputDisplay: 'expanded' };
       }
     }
   };
 
-  const toolInfo = getToolInfo();
+  const toolConfig = getToolDisplayConfig();
 
   // Render expanded content based on tool type
   const renderExpandedContent = () => {
@@ -883,15 +923,20 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
       // Fall through to default if no image data
     }
 
-    // Default: show input and output
+    // Default: show input based on inputDisplay config
+    const showInput = toolConfig.inputDisplay !== 'hidden';
+    const inputToShow = toolConfig.detailInput ?? (showInput ? content.input : undefined);
+
     return (
       <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
-        <div className="border-b border-border">
-          <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Input</div>
-          <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto max-h-48 overflow-y-auto">
-            {JSON.stringify(content.input, null, 2)}
-          </pre>
-        </div>
+        {showInput && inputToShow !== undefined && (
+          <div className="border-b border-border">
+            <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Input</div>
+            <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto max-h-48 overflow-y-auto">
+              {JSON.stringify(inputToShow, null, 2)}
+            </pre>
+          </div>
+        )}
         <div>
           <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium flex items-center gap-2">
             Output
@@ -923,10 +968,10 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
                 ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
                 : 'bg-accent-warning animate-pulse'
             )}></span>
-            <span className="text-base">{toolInfo.icon}</span>
+            <span className="text-base">{toolConfig.icon}</span>
             <span className="text-text-primary font-medium">{getToolDisplayName(content.toolName)}</span>
             <span className="text-text-secondary text-sm truncate max-w-[400px]">
-              {toolInfo.description}
+              {toolConfig.summary}
             </span>
           </div>
           <div className="mt-1 ml-4 rounded-lg border border-border overflow-hidden">
@@ -954,10 +999,10 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
               ? content.isError ? 'bg-accent-danger' : 'bg-accent-success'
               : 'bg-accent-warning animate-pulse'
           )}></span>
-          <span className="text-base">{toolInfo.icon}</span>
+          <span className="text-base">{toolConfig.icon}</span>
           <span className="text-text-primary font-medium">{getToolDisplayName(content.toolName)}</span>
           <span className="text-text-secondary text-sm truncate max-w-[400px]">
-            {toolInfo.description}
+            {toolConfig.summary}
           </span>
           <svg
             className={clsx('w-4 h-4 text-text-secondary transition-transform', isExpanded && 'rotate-180')}
@@ -975,7 +1020,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
 }
 
 // Helper to format browser tool display
-function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string } | null {
+function formatBrowserTool(toolName: string, input: unknown): { prefix: string; shortName: string; description: string; inputDisplay: 'expanded' | 'collapsed' | 'hidden' } | null {
   // Match AgentDock bridge browser tools (mcp__bridge__browser_*)
   const bridgeMatch = toolName.match(/^mcp__bridge__browser_(.+)$/);
   // Match external MCP Playwright browser tools (mcp__plugin_playwright_*__browser_*)
@@ -1060,10 +1105,17 @@ function formatBrowserTool(toolName: string, input: unknown): { prefix: string; 
       description = '';
   }
 
+  // Determine inputDisplay based on action type
+  // navigate, snapshot, navigate_back: summary has all info -> hidden
+  // click, type, hover, etc.: show input but collapsed by default
+  const hiddenActions = ['navigate', 'navigate_back', 'snapshot', 'close', 'install'];
+  const inputDisplay: 'expanded' | 'collapsed' | 'hidden' = hiddenActions.includes(action) ? 'hidden' : 'collapsed';
+
   return {
     prefix: isExternalPlaywright ? 'playwright' : 'browser',
     shortName: action.replace(/_/g, ' '),
     description,
+    inputDisplay,
   };
 }
 
