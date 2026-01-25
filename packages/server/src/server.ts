@@ -1432,6 +1432,8 @@ export function createServer(options: ServerOptions): BridgeServer {
                 cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
                 cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
                 isCumulative: true,
+                contextWindow: usage.contextWindow,
+                modelName: modelName,
               });
             }
           }
