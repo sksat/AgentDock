@@ -35,6 +35,19 @@ describe('PermissionRequest', () => {
     expect(screen.getByRole('button', { name: /Deny/ })).toBeInTheDocument();
   });
 
+  it('should have matching heights for split button parts', () => {
+    render(<PermissionRequest {...defaultProps} />);
+
+    const mainButton = screen.getByRole('button', { name: /Allow.*Bash\(rm:\*\)/ });
+    const dropdownToggle = screen.getByRole('button', { name: /More options/ });
+
+    // Both buttons should have the same height (split button design requirement)
+    const mainHeight = mainButton.getBoundingClientRect().height;
+    const dropdownHeight = dropdownToggle.getBoundingClientRect().height;
+
+    expect(dropdownHeight).toBe(mainHeight);
+  });
+
   it('should call onAllow with updatedInput when allow is clicked', () => {
     const onAllow = vi.fn();
     render(<PermissionRequest {...defaultProps} onAllow={onAllow} />);
