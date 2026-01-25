@@ -9,6 +9,8 @@ import type { ScreencastMetadata } from '@agent-dock/shared';
 interface BrowserSession {
   controller: BrowserController;
   streamer: BrowserStreamer;
+  /** Cached last frame for reconnecting clients */
+  lastFrame?: BrowserSessionFrame;
 }
 
 /**
@@ -104,7 +106,7 @@ export class BrowserSessionManager extends EventEmitter {
 
     // Set up event forwarding
     streamer.on('frame', (frame: FrameData) => {
-      this.emit('frame', {
+      const frameData: BrowserSessionFrame = {
         sessionId,
         data: frame.data,
         metadata: {
@@ -112,7 +114,13 @@ export class BrowserSessionManager extends EventEmitter {
           deviceHeight: frame.metadata.deviceHeight,
           timestamp: frame.metadata.timestamp,
         },
-      } satisfies BrowserSessionFrame);
+      };
+      // Cache the last frame for reconnecting clients
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.lastFrame = frameData;
+      }
+      this.emit('frame', frameData);
     });
 
     streamer.on('error', (error: Error) => {
@@ -230,6 +238,16 @@ export class BrowserSessionManager extends EventEmitter {
       browserUrl: page?.url(),
       browserTitle: page ? await page.title() : undefined,
     };
+  }
+
+  /**
+   * Get the last frame for a session (for reconnecting clients)
+   *
+   * @param sessionId - Session identifier
+   * @returns Last frame or undefined if no frame has been captured
+   */
+  getLastFrame(sessionId: string): BrowserSessionFrame | undefined {
+    return this.sessions.get(sessionId)?.lastFrame;
   }
 
   /**
