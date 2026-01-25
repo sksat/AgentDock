@@ -15,8 +15,9 @@ vi.mock('node-pty', () => ({
 }));
 
 import * as pty from 'node-pty';
-import { PodmanClaudeRunner, PodmanClaudeRunnerOptions } from '../podman-claude-runner.js';
-import { ContainerConfig } from '../container-config.js';
+import { PodmanClaudeRunner } from '../podman-claude-runner.js';
+import type { PodmanClaudeRunnerOptions } from '../podman-claude-runner.js';
+import type { ContainerConfig } from '../container-config.js';
 
 describe('PodmanClaudeRunner', () => {
   let runner: PodmanClaudeRunner;

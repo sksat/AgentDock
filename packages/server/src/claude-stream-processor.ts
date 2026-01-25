@@ -10,7 +10,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { StreamEvent, type ResultModelUsage } from './stream-parser.js';
+import type { StreamEvent, ResultModelUsage } from './stream-parser.js';
 
 // Permission mode as reported by Claude Code's system event
 export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan';

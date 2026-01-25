@@ -2,11 +2,12 @@ import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 import { spawn, ChildProcess } from 'child_process';
-import { type ResultModelUsage } from './stream-parser.js';
-import { ClaudeStreamProcessor, ClaudePermissionMode, UsageData, ControlResponse } from './claude-stream-processor.js';
+import type { ResultModelUsage } from './stream-parser.js';
+import { ClaudeStreamProcessor } from './claude-stream-processor.js';
+import type { ClaudePermissionMode, UsageData, ControlResponse } from './claude-stream-processor.js';
 
 // Re-export for backward compatibility
-export { ClaudePermissionMode, UsageData, ControlResponse } from './claude-stream-processor.js';
+export type { ClaudePermissionMode, UsageData, ControlResponse } from './claude-stream-processor.js';
 
 export interface ClaudeRunnerOptions {
   workingDir?: string;

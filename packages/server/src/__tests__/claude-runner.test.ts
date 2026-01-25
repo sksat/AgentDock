@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ClaudeRunner, ClaudeRunnerOptions, ClaudeRunnerEvents, ClaudePermissionMode } from '../claude-runner.js';
+import { ClaudeRunner } from '../claude-runner.js';
+import type { ClaudeRunnerOptions, ClaudeRunnerEvents, ClaudePermissionMode } from '../claude-runner.js';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 
