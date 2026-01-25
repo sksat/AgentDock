@@ -53,6 +53,7 @@ export interface IClaudeRunner extends EventEmitter {
   start(prompt: string, options?: StartOptions): void;
   stop(): void;
   sendInput(input: string): void;
+  sendUserMessage(text: string): boolean;
   requestPermissionModeChange(targetMode: ClaudePermissionMode): boolean;
   on<K extends keyof ClaudeRunnerEvents>(event: K, listener: ClaudeRunnerEvents[K]): this;
 }
@@ -185,7 +186,7 @@ export class RunnerManager {
 
   /**
    * Request permission mode change for a running session
-   * Sends Shift+Tab key sequence to Claude Code to cycle through modes
+   * Sends control_request to Claude Code to change permission mode
    * @returns true if mode change was requested, false if session is not running
    */
   requestPermissionModeChange(sessionId: string, targetMode: ClaudePermissionMode): boolean {
@@ -194,6 +195,19 @@ export class RunnerManager {
       return false;
     }
     return runner.requestPermissionModeChange(targetMode);
+  }
+
+  /**
+   * Send a follow-up user message to a running session via stdin.
+   * This allows continuing the conversation without restarting Claude.
+   * @returns true if message was sent, false if session is not running or stdin unavailable
+   */
+  sendUserMessage(sessionId: string, text: string): boolean {
+    const runner = this.runners.get(sessionId);
+    if (!runner?.isRunning) {
+      return false;
+    }
+    return runner.sendUserMessage(text);
   }
 
   getRunningCount(): number {

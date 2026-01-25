@@ -1437,7 +1437,31 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionId,
           result: resultData.result,
         });
-        // Note: Don't set idle here - wait for exit event to process queue
+
+        // Process queued input immediately via stdin (multi-turn conversation)
+        // With stdin kept open for control_request, we can continue the conversation
+        // without waiting for exit
+        const queue = sessionInputQueue.get(sessionId);
+        if (queue && queue.length > 0) {
+          const nextInput = queue.shift()!;
+          if (queue.length === 0) {
+            sessionInputQueue.delete(sessionId);
+          }
+          console.log(`[Server] Processing queued input via stdin for session ${sessionId}: ${nextInput.substring(0, 50)}...`);
+          const sent = runnerManager.sendUserMessage(sessionId, nextInput);
+          if (sent) {
+            // Status remains 'running' - new turn started
+            console.log(`[Server] Follow-up message sent via stdin for session ${sessionId}`);
+          } else {
+            // Fallback: stdin not available, wait for exit to start new process
+            console.log(`[Server] Could not send via stdin, re-queuing input for session ${sessionId}`);
+            queue.unshift(nextInput);
+            sessionInputQueue.set(sessionId, queue);
+          }
+        } else {
+          // No queued input - set idle
+          updateAndBroadcastStatus(sessionId, 'idle');
+        }
         break;
       }
 
@@ -2079,7 +2103,37 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // Check if already running - auto-queue the input instead of returning error
         if (runnerManager.hasRunningSession(message.sessionId)) {
-          // Queue the input (same as stream_input)
+          // Check if session is idle (waiting for input after result)
+          // If idle but runner is still active, send via stdin directly
+          const currentStatus = sessionManager.getSession(message.sessionId)?.status;
+          if (currentStatus === 'idle') {
+            // Session completed a turn, runner still active - send via stdin
+            console.log(`[Server] Session ${message.sessionId} is idle with active runner, sending via stdin`);
+            const sent = runnerManager.sendUserMessage(message.sessionId, message.content);
+            if (sent) {
+              updateAndBroadcastStatus(message.sessionId, 'running');
+              // Add to history and broadcast
+              const timestamp = new Date().toISOString();
+              sessionManager.addToHistory(message.sessionId, {
+                type: 'user',
+                content: message.content,
+                timestamp,
+              });
+              sendToSession(message.sessionId, {
+                type: 'user_input',
+                sessionId: message.sessionId,
+                content: message.content,
+                source: message.source || 'web',
+                slackContext: message.slackContext,
+                timestamp,
+              });
+              return;
+            }
+            // If sendUserMessage failed, fall through to queue
+            console.log(`[Server] sendUserMessage failed, falling back to queue`);
+          }
+
+          // Queue the input (session is actively processing)
           let queue = sessionInputQueue.get(message.sessionId);
           if (!queue) {
             queue = [];

@@ -419,6 +419,25 @@ export class ClaudeRunner extends EventEmitter {
     // as stdin is closed after sending the image
   }
 
+  /**
+   * Send a follow-up user message via stdin (for multi-turn conversations).
+   * This allows continuing the conversation without restarting Claude.
+   * @param text The user message text
+   * @returns true if message was sent, false if stdin is not available
+   */
+  sendUserMessage(text: string): boolean {
+    const stdin = this.childProcess?.stdin;
+    if (!stdin || stdin.writableEnded) {
+      console.log('[ClaudeRunner] Cannot send user message: no stdin available');
+      return false;
+    }
+
+    const userMessage = this.buildUserMessage(text);
+    console.log('[ClaudeRunner] Sending follow-up user message via stdin');
+    stdin.write(userMessage + '\n');
+    return true;
+  }
+
   private buildArgs(prompt: string, options: StartOptions): string[] {
     const hasImages = options.images && options.images.length > 0;
 
@@ -483,17 +502,6 @@ export class ClaudeRunner extends EventEmitter {
   private parseLine(line: string): void {
     try {
       const event = JSON.parse(line) as StreamEvent;
-      // Debug: uncomment to log thinking events for streaming investigation
-      // if (event.type === 'assistant' && event.message?.content) {
-      //   const hasThinking = event.message.content.some((b) => b.type === 'thinking');
-      //   if (hasThinking) {
-      //     const thinkingBlocks = event.message.content.filter((b) => b.type === 'thinking');
-      //     console.log('[ClaudeRunner] Thinking event received:', {
-      //       blockCount: thinkingBlocks.length,
-      //       lengths: thinkingBlocks.map((b) => (b as { thinking: string }).thinking.length),
-      //     });
-      //   }
-      // }
       this.processEvent(event);
     } catch {
       // Ignore non-JSON lines (likely terminal control sequences)

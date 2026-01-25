@@ -732,4 +732,51 @@ describe('ClaudeRunner', () => {
       });
     });
   });
+
+  describe('multi-turn conversation (stdin kept open)', () => {
+    it('should allow sending follow-up user messages via stdin after result', () => {
+      const runner = new ClaudeRunner();
+      const resultHandler = vi.fn();
+      runner.on('result', resultHandler);
+      runner.start('first message');
+
+      // Clear initial message write
+      vi.clearAllMocks();
+
+      // Simulate first result
+      const resultMessage = JSON.stringify({
+        type: 'result',
+        result: 'First response',
+        session_id: 'session_abc',
+      });
+      mockProcess.stdout.emit('data', Buffer.from(resultMessage + '\n'));
+
+      expect(resultHandler).toHaveBeenCalledWith({
+        result: 'First response',
+        sessionId: 'session_abc',
+      });
+
+      // After result, runner should still be running (stdin open)
+      expect(runner.isRunning).toBe(true);
+
+      // Send follow-up message via sendUserMessage (new method)
+      runner.sendUserMessage('second message');
+
+      // Should have written to stdin
+      expect(mockProcess.stdin.write).toHaveBeenCalledTimes(1);
+      const writtenData = mockProcess.stdin.write.mock.calls[0][0];
+      const parsed = JSON.parse(writtenData.replace('\n', ''));
+      expect(parsed.type).toBe('user');
+      expect(parsed.message.content[0].text).toBe('second message');
+    });
+
+    it('should return false from sendUserMessage if stdin is not available', () => {
+      const runner = new ClaudeRunner();
+      // Don't start - no process
+
+      const result = runner.sendUserMessage('test');
+
+      expect(result).toBe(false);
+    });
+  });
 });
