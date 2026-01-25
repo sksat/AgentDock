@@ -1464,6 +1464,39 @@ export function useSession(): UseSessionReturn {
             }
             return newMap;
           });
+
+          // Update sessionModelUsage if contextWindow is provided
+          if (message.contextWindow !== undefined && message.modelName) {
+            setSessionModelUsage((prev) => {
+              const newMap = new Map(prev);
+              const currentUsage = newMap.get(sessionId) ?? [];
+              const existingIndex = currentUsage.findIndex(m => m.modelName === message.modelName);
+
+              if (existingIndex >= 0) {
+                // Update existing entry
+                const updated = [...currentUsage];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  contextWindow: message.contextWindow,
+                };
+                newMap.set(sessionId, updated);
+              } else {
+                // Create new entry
+                newMap.set(sessionId, [
+                  ...currentUsage,
+                  {
+                    modelName: message.modelName!,
+                    inputTokens: message.inputTokens,
+                    outputTokens: message.outputTokens,
+                    cacheCreationTokens: message.cacheCreationInputTokens ?? 0,
+                    cacheReadTokens: message.cacheReadInputTokens ?? 0,
+                    contextWindow: message.contextWindow,
+                  },
+                ]);
+              }
+              return newMap;
+            });
+          }
           break;
         }
 
