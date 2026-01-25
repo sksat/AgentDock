@@ -710,7 +710,7 @@ export function InputArea({
                 if (occupancy === null || occupancy < 40) {
                   return (
                     <div className="flex items-center gap-1.5">
-                      <span>{tokenUsage.inputTokens.toLocaleString()} in</span>
+                      <span>{tokenUsage.inputTokens.toLocaleString()} tokens</span>
                     </div>
                   );
                 }

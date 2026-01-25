@@ -572,7 +572,7 @@ describe('Context window occupancy', () => {
     );
 
     // 50,000 / 200,000 = 25% - low occupancy shows simple token display
-    expect(screen.getByText('50,000 in')).toBeInTheDocument();
+    expect(screen.getByText('50,000 tokens')).toBeInTheDocument();
     expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
   });
 
@@ -613,7 +613,7 @@ describe('Context window occupancy', () => {
     );
 
     // Fallback: shows input tokens only
-    expect(screen.getByText('50,000 in')).toBeInTheDocument();
+    expect(screen.getByText('50,000 tokens')).toBeInTheDocument();
     expect(screen.queryByText(/% used/)).not.toBeInTheDocument();
   });
 
