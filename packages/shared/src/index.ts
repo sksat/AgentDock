@@ -1025,6 +1025,17 @@ export interface GlobalSettings {
   tmpfsBasePath: string;
   /** Cache directory path (for remote-git repository clones) */
   cacheDir: string;
+  /** System prompt template (supports {{variable}} syntax) */
+  systemPromptTemplate: string;
+}
+
+/** Variables available for system prompt template expansion */
+export interface SystemPromptVariables {
+  session_id: string;
+  session_url: string;
+  repository_name?: string;
+  repository_path?: string;
+  working_dir: string;
 }
 
 /** Client -> Server: Request to get current settings */

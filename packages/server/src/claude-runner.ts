@@ -41,6 +41,8 @@ export interface StartOptions {
   thinkingEnabled?: boolean;
   /** Permission mode to use for the session */
   permissionMode?: ClaudePermissionMode;
+  /** System prompt to inject (will be appended to Claude's default system prompt) */
+  systemPrompt?: string;
 }
 
 export interface ClaudeRunnerEvents {
@@ -424,6 +426,11 @@ export class ClaudeRunner extends EventEmitter {
     // Set permission mode at startup
     if (options.permissionMode) {
       args.push('--permission-mode', options.permissionMode);
+    }
+
+    // Append system prompt if provided
+    if (options.systemPrompt) {
+      args.push('--append-system-prompt', options.systemPrompt);
     }
 
     return args;

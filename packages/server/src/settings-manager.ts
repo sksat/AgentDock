@@ -1,21 +1,6 @@
 import type Database from 'better-sqlite3';
-import type { RunnerBackend } from '@agent-dock/shared';
+import type { GlobalSettings } from '@agent-dock/shared';
 import * as path from 'path';
-
-export interface GlobalSettings {
-  defaultThinkingEnabled: boolean;
-  defaultModel: string;
-  defaultPermissionMode: string;
-  defaultRunnerBackend: RunnerBackend;
-  /** Default browser in container setting (true means browser runs in container when podman) */
-  defaultBrowserInContainer: boolean;
-  /** Auto-allow WebFetch/WebSearch tools without permission */
-  autoAllowWebTools: boolean;
-  /** Base path for tmpfs copies (for local repository type) */
-  tmpfsBasePath: string;
-  /** Cache directory path (for remote-git repository clones) */
-  cacheDir: string;
-}
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   defaultThinkingEnabled: false,
@@ -26,6 +11,12 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   autoAllowWebTools: false, // Default: require permission for web tools
   tmpfsBasePath: '/tmp/agent-dock-repos/',
   cacheDir: path.resolve(process.cwd(), 'cache'),
+  systemPromptTemplate: `This session is managed by AgentDock.
+Session ID: {{session_id}}
+Session URL: {{session_url}}
+
+When creating pull requests, include:
+Generated with [Claude Code](https://claude.ai/code) via [AgentDock](https://github.com/sksat/AgentDock)`,
 };
 
 export class SettingsManager {
