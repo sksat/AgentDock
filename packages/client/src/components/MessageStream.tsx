@@ -929,7 +929,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
 
     return (
       <div className="mt-1 ml-4 border border-border rounded-lg overflow-hidden ">
-        {showInput && inputToShow && (
+        {showInput && inputToShow !== undefined && (
           <div className="border-b border-border">
             <div className="px-3 py-1 bg-bg-secondary/50 text-xs text-text-secondary font-medium">Input</div>
             <pre className="px-3 py-2 bg-bg-secondary text-text-primary text-sm font-mono overflow-x-auto max-h-48 overflow-y-auto">
