@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { BrowserView } from '../BrowserView';
 import type { ScreencastMetadata } from '@agent-dock/shared';
 
@@ -183,6 +183,10 @@ describe('BrowserView', () => {
   });
 
   describe('loading state', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should show loading indicator when active but no frame yet', () => {
       render(
         <BrowserView
@@ -193,6 +197,118 @@ describe('BrowserView', () => {
       // Should show some loading state, not "not active"
       expect(screen.queryByText(/Browser not active/i)).not.toBeInTheDocument();
       expect(screen.getByText(/Loading browser view/i)).toBeInTheDocument();
+    });
+
+    it('should show retry option after loading timeout', () => {
+      vi.useFakeTimers();
+      const handleStartBrowser = vi.fn();
+
+      render(
+        <BrowserView
+          {...defaultProps}
+          isActive={true}
+          onStartBrowser={handleStartBrowser}
+        />
+      );
+
+      // Initially shows loading
+      expect(screen.getByText(/Loading browser view/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument();
+
+      // Advance time past the timeout (10 seconds)
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+
+      // Should now show retry option
+      expect(screen.getByText(/Connection failed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('should call onStartBrowser when retry button is clicked', () => {
+      vi.useFakeTimers();
+      const handleStartBrowser = vi.fn();
+
+      render(
+        <BrowserView
+          {...defaultProps}
+          isActive={true}
+          onStartBrowser={handleStartBrowser}
+        />
+      );
+
+      // Advance time past the timeout
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+
+      // Click retry button
+      fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
+      expect(handleStartBrowser).toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it('should show loading state again after clicking retry', () => {
+      vi.useFakeTimers();
+      const handleStartBrowser = vi.fn();
+
+      render(
+        <BrowserView
+          {...defaultProps}
+          isActive={true}
+          onStartBrowser={handleStartBrowser}
+        />
+      );
+
+      // Advance time past the timeout
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+
+      // Verify timeout state
+      expect(screen.getByText(/Connection failed/i)).toBeInTheDocument();
+
+      // Click retry button
+      fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
+
+      // Should show loading state again (not timeout state)
+      expect(screen.getByText(/Loading browser view/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Connection failed/i)).not.toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('should reset timeout when frame arrives', () => {
+      vi.useFakeTimers();
+      const { rerender } = render(
+        <BrowserView
+          {...defaultProps}
+          isActive={true}
+        />
+      );
+
+      // Advance time but not past timeout
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      // Frame arrives
+      rerender(
+        <BrowserView
+          {...defaultProps}
+          isActive={true}
+          frame={{ data: mockFrameData, metadata: mockMetadata }}
+        />
+      );
+
+      // Should show browser, not loading or timeout
+      expect(screen.queryByText(/Loading browser view/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Connection failed/i)).not.toBeInTheDocument();
+
+      vi.useRealTimers();
     });
   });
 

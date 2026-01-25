@@ -2780,6 +2780,27 @@ Keep it concise but comprehensive.`;
               };
               break;
             }
+          } else {
+            // Session already exists - send current status and last frame to reconnect client
+            const lastStatus = containerBrowserSessionManager.getLastStatus(message.sessionId);
+            sendToSession(message.sessionId, {
+              type: 'screencast_status',
+              sessionId: message.sessionId,
+              active: lastStatus?.active ?? true,
+              browserUrl: lastStatus?.browserUrl,
+              browserTitle: lastStatus?.browserTitle,
+            });
+            // Also send the last frame so client can display browser immediately
+            const lastFrame = containerBrowserSessionManager.getLastFrame(message.sessionId);
+            if (lastFrame) {
+              sendToSession(message.sessionId, {
+                type: 'screencast_frame',
+                sessionId: message.sessionId,
+                data: lastFrame.data,
+                metadata: lastFrame.metadata,
+              });
+            }
+            console.log(`[ContainerBrowserSession] Reconnected client for session ${message.sessionId}`);
           }
         } else {
           // Use host browser session manager
@@ -2794,6 +2815,29 @@ Keep it concise but comprehensive.`;
                 message: error instanceof Error ? error.message : 'Failed to create browser session',
               };
               break;
+            }
+          } else {
+            // Session already exists - send current status and last frame to reconnect client
+            const status = await browserSessionManager.getStatus(message.sessionId);
+            if (status) {
+              sendToSession(message.sessionId, {
+                type: 'screencast_status',
+                sessionId: message.sessionId,
+                active: status.active,
+                browserUrl: status.browserUrl,
+                browserTitle: status.browserTitle,
+              });
+              // Also send the last frame so client can display browser immediately
+              const lastFrame = browserSessionManager.getLastFrame(message.sessionId);
+              if (lastFrame) {
+                sendToSession(message.sessionId, {
+                  type: 'screencast_frame',
+                  sessionId: message.sessionId,
+                  data: lastFrame.data,
+                  metadata: lastFrame.metadata,
+                });
+              }
+              console.log(`[BrowserSession] Reconnected client for session ${message.sessionId}`);
             }
           }
         }

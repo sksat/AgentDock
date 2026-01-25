@@ -1087,6 +1087,8 @@ export function useSession(): UseSessionReturn {
             }));
           }
           // Auto-start screencast if a browser session exists
+          // Don't set active=true immediately - wait for server to confirm via screencast_status
+          // This prevents showing "Loading" state when browser session is actually stale
           if (message.hasBrowserSession) {
             send({ type: 'start_screencast', sessionId: message.sessionId });
           }

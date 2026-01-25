@@ -9,6 +9,8 @@ import type { ScreencastMetadata } from '@agent-dock/shared';
 interface BrowserSession {
   controller: BrowserController;
   streamer: BrowserStreamer;
+  /** Cached last frame for reconnecting clients */
+  lastFrame?: BrowserSessionFrame;
 }
 
 /**
@@ -104,7 +106,7 @@ export class BrowserSessionManager extends EventEmitter {
 
     // Set up event forwarding
     streamer.on('frame', (frame: FrameData) => {
-      this.emit('frame', {
+      const frameData: BrowserSessionFrame = {
         sessionId,
         data: frame.data,
         metadata: {
@@ -112,7 +114,13 @@ export class BrowserSessionManager extends EventEmitter {
           deviceHeight: frame.metadata.deviceHeight,
           timestamp: frame.metadata.timestamp,
         },
-      } satisfies BrowserSessionFrame);
+      };
+      // Cache the last frame for reconnecting clients
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.lastFrame = frameData;
+      }
+      this.emit('frame', frameData);
     });
 
     streamer.on('error', (error: Error) => {
@@ -209,6 +217,52 @@ export class BrowserSessionManager extends EventEmitter {
    */
   getController(sessionId: string): BrowserController | undefined {
     return this.sessions.get(sessionId)?.controller;
+  }
+
+  /**
+   * Get the current status of a session
+   *
+   * @param sessionId - Session identifier
+   * @returns Current session status or undefined if session doesn't exist
+   */
+  async getStatus(sessionId: string): Promise<BrowserSessionStatus | undefined> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const page = session.controller.getPage();
+
+    // Safely get URL and title - these can throw if page is closing/navigating
+    let browserUrl: string | undefined;
+    let browserTitle: string | undefined;
+    if (page) {
+      try {
+        browserUrl = page.url();
+        browserTitle = await page.title();
+      } catch {
+        // Page may be closing or navigating, use undefined
+        browserUrl = undefined;
+        browserTitle = undefined;
+      }
+    }
+
+    return {
+      sessionId,
+      active: session.streamer.isActive(),
+      browserUrl,
+      browserTitle,
+    };
+  }
+
+  /**
+   * Get the last frame for a session (for reconnecting clients)
+   *
+   * @param sessionId - Session identifier
+   * @returns Last frame or undefined if no frame has been captured
+   */
+  getLastFrame(sessionId: string): BrowserSessionFrame | undefined {
+    return this.sessions.get(sessionId)?.lastFrame;
   }
 
   /**

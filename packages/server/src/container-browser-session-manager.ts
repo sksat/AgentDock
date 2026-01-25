@@ -47,6 +47,10 @@ interface ContainerBrowserSession {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
   }>;
+  /** Cached last frame for reconnecting clients */
+  lastFrame?: ContainerBrowserSessionFrame;
+  /** Cached last status for reconnecting clients */
+  lastStatus?: ContainerBrowserSessionStatus;
 }
 
 /**
@@ -86,10 +90,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
 
     containerManager.on('bridge_disconnected', () => {
       console.log(`[ContainerBrowserSession] Bridge disconnected for session ${sessionId}`);
-      this.emit('status', {
+      const statusData: ContainerBrowserSessionStatus = {
         sessionId,
         active: false,
-      } satisfies ContainerBrowserSessionStatus);
+      };
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.lastStatus = statusData;
+      }
+      this.emit('status', statusData);
     });
 
     // Store session
@@ -113,10 +122,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
     });
 
     // Emit initial status
-    this.emit('status', {
+    const initialStatus: ContainerBrowserSessionStatus = {
       sessionId,
       active: true,
-    } satisfies ContainerBrowserSessionStatus);
+    };
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.lastStatus = initialStatus;
+    }
+    this.emit('status', initialStatus);
   }
 
   /**
@@ -159,7 +173,7 @@ export class ContainerBrowserSessionManager extends EventEmitter {
       case 'screencast_frame': {
         // Screencast frame
         if (msg.data && msg.metadata) {
-          this.emit('frame', {
+          const frameData: ContainerBrowserSessionFrame = {
             sessionId,
             data: msg.data,
             metadata: {
@@ -167,19 +181,31 @@ export class ContainerBrowserSessionManager extends EventEmitter {
               deviceHeight: msg.metadata.deviceHeight,
               timestamp: msg.metadata.timestamp,
             },
-          } satisfies ContainerBrowserSessionFrame);
+          };
+          // Cache the last frame for reconnecting clients
+          const session = this.sessions.get(sessionId);
+          if (session) {
+            session.lastFrame = frameData;
+          }
+          this.emit('frame', frameData);
         }
         break;
       }
 
       case 'screencast_status': {
         // Browser status update
-        this.emit('status', {
+        const statusData: ContainerBrowserSessionStatus = {
           sessionId,
           active: msg.active ?? false,
           browserUrl: msg.url,
           browserTitle: msg.title,
-        } satisfies ContainerBrowserSessionStatus);
+        };
+        // Cache the last status for reconnecting clients
+        const session = this.sessions.get(sessionId);
+        if (session) {
+          session.lastStatus = statusData;
+        }
+        this.emit('status', statusData);
         break;
       }
 
@@ -190,10 +216,15 @@ export class ContainerBrowserSessionManager extends EventEmitter {
 
       case 'browser_closed': {
         console.log(`[ContainerBrowserSession] Browser closed for session ${sessionId}`);
-        this.emit('status', {
+        const closedStatus: ContainerBrowserSessionStatus = {
           sessionId,
           active: false,
-        } satisfies ContainerBrowserSessionStatus);
+        };
+        const closedSession = this.sessions.get(sessionId);
+        if (closedSession) {
+          closedSession.lastStatus = closedStatus;
+        }
+        this.emit('status', closedStatus);
         break;
       }
 
@@ -372,6 +403,20 @@ export class ContainerBrowserSessionManager extends EventEmitter {
    */
   getContainerManager(sessionId: string): PersistentContainerManager | undefined {
     return this.sessions.get(sessionId)?.containerManager;
+  }
+
+  /**
+   * Get the last frame for a session (for reconnecting clients)
+   */
+  getLastFrame(sessionId: string): ContainerBrowserSessionFrame | undefined {
+    return this.sessions.get(sessionId)?.lastFrame;
+  }
+
+  /**
+   * Get the last status for a session (for reconnecting clients)
+   */
+  getLastStatus(sessionId: string): ContainerBrowserSessionStatus | undefined {
+    return this.sessions.get(sessionId)?.lastStatus;
   }
 
   /**
