@@ -5,6 +5,8 @@ test.describe('ExitPlanMode permission workflow', () => {
     await page.goto('/');
     await expect(page.getByText('Connected')).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: 'New Session' }).click();
+    // Wait for session to be created and input field to be available
+    await expect(page.getByRole('textbox', { name: 'Type a message...' })).toBeVisible({ timeout: 5000 });
   });
 
   test('should show permission popup for ExitPlanMode and approve plan', async ({ page }) => {
