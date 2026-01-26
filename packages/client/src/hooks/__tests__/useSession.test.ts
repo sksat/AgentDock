@@ -1057,6 +1057,7 @@ describe('useSession', () => {
           type: 'session_status_changed',
           sessionId: 'session-1',
           status: 'running',
+          isVibing: true,
         });
       });
 
@@ -1101,6 +1102,7 @@ describe('useSession', () => {
           type: 'session_status_changed',
           sessionId: 'session-1',
           status: 'running',
+          isVibing: true,
         });
       });
 
@@ -1139,13 +1141,14 @@ describe('useSession', () => {
         result.current.selectSession('session-1');
       });
 
-      // Simulate attach to get isRunning state
+      // Simulate attach to get isVibing state
       act(() => {
         result.current.handleServerMessage({
           type: 'session_attached',
           sessionId: 'session-1',
           history: [],
           isRunning: true,
+          isVibing: true,
         });
       });
 
@@ -1164,6 +1167,7 @@ describe('useSession', () => {
           sessionId: 'session-2',
           history: [],
           isRunning: false,
+          isVibing: false,
         });
       });
 
@@ -1195,6 +1199,7 @@ describe('useSession', () => {
           sessionId: 'session-1',
           history: [],
           isRunning: true,
+          isVibing: true,
         });
       });
 
@@ -1211,6 +1216,7 @@ describe('useSession', () => {
           sessionId: 'session-2',
           history: [],
           isRunning: false,
+          isVibing: false,
         });
       });
 
@@ -1227,6 +1233,7 @@ describe('useSession', () => {
           sessionId: 'session-1',
           history: [],
           isRunning: true,
+          isVibing: true,
         });
       });
 
@@ -1258,6 +1265,7 @@ describe('useSession', () => {
           type: 'session_status_changed',
           sessionId: 'session-1',
           status: 'running',
+          isVibing: true,
         });
       });
 
@@ -1304,6 +1312,7 @@ describe('useSession', () => {
           sessionId: 'session-1',
           history: [],
           isRunning: true,
+          isVibing: true,
         });
       });
 

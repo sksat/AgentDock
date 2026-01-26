@@ -229,6 +229,34 @@ export const streamingThinkingScenario: Scenario = {
   ],
 };
 
+/** Scenario that requires permission (write file) */
+export const permissionScenario: Scenario = {
+  name: 'permission',
+  promptPattern: /write something|write file|create file/i,
+  steps: [
+    {
+      type: 'system',
+      subtype: 'init',
+      model: 'claude-sonnet-4-20250514',
+      tools: ['Read', 'Write', 'Edit', 'Bash'],
+      permissionMode: 'default',
+    },
+    { type: 'thinking', thinking: 'I need to write a file, which requires permission.' },
+    {
+      type: 'permission_request',
+      toolName: 'Write',
+      input: { file_path: '/tmp/test.txt', content: 'Hello, World!' },
+    },
+    { type: 'text', text: 'File written successfully.' },
+    {
+      type: 'usage',
+      inputTokens: 500,
+      outputTokens: 100,
+    },
+    { type: 'result', result: 'Write complete' },
+  ],
+};
+
 /** All test scenarios */
 export const testScenarios: Scenario[] = [
   thinkingScenario,
@@ -238,4 +266,5 @@ export const testScenarios: Scenario[] = [
   echoScenario,
   slowThinkingScenario,
   streamingThinkingScenario,
+  permissionScenario,
 ];
