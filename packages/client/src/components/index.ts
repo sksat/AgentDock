@@ -7,6 +7,7 @@ export { NavRail, type NavRailProps, type NavView } from './NavRail';
 export { NewSessionModal, type NewSessionModalProps } from './NewSessionModal';
 export { PermissionModeSelector, type PermissionModeSelectorProps } from './PermissionModeSelector';
 export { PermissionRequest, type PermissionRequestProps } from './PermissionRequest';
+export { ProcessStatusIndicator, type ProcessStatusIndicatorProps } from './ProcessStatusIndicator';
 export { ProjectSelector, type ProjectSelectorProps } from './ProjectSelector';
 export { RepositoriesPage, type RepositoriesPageProps } from './RepositoriesPage';
 export { SettingsPage } from './SettingsPage';

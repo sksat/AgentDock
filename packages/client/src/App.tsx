@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSession } from './hooks/useSession';
 import { useNavigation } from './hooks/useNavigation';
-import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, RepositoriesPage, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
+import { AskUserQuestion, LoadingIndicator, MessageStream, InputArea, NewSessionModal, PermissionRequest, ProcessStatusIndicator, RepositoriesPage, Sidebar, Toast, WelcomePage, NavRail, SettingsPage, UsagePage } from './components';
 import type { MessageStreamHandle } from './components/MessageStream';
 import { BrowserView } from './components/BrowserView';
 import { MachineView } from './components/MachineView';
@@ -421,6 +421,11 @@ function App() {
                     <span className="font-medium">Browser: Host</span>
                   </span>
                 )}
+                {/* CLI process status indicator */}
+                <ProcessStatusIndicator
+                  isVibing={session?.isVibing ?? false}
+                  onStop={interrupt}
+                />
               </div>
               {usageInfo && (
               <div className="flex items-center gap-4">
