@@ -1249,6 +1249,7 @@ export function createServer(options: ServerOptions): BridgeServer {
     } catch (error) {
       console.error(`[Server] processQueuedInput error:`, error);
       updateAndBroadcastStatus(sessionId, 'idle');
+      setVibing(sessionId, false);  // Error - no longer vibing
       sendToSession(sessionId, {
         type: 'error',
         sessionId,
@@ -1311,6 +1312,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           });
           // Update session status
           updateAndBroadcastStatus(sessionId, 'waiting_input');
+          setVibing(sessionId, false);  // Waiting for user input
           // Store in history as question
           sessionManager.addToHistory(sessionId, {
             type: 'question',
@@ -1869,6 +1871,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           sessionAllowedPatterns.delete(message.sessionId);
           sessionRunnerBackends.delete(message.sessionId);
           sessionBrowserInContainer.delete(message.sessionId);
+          sessionVibingState.delete(message.sessionId);
 
           // Clean up browser sessions
           await browserSessionManager.destroySession(message.sessionId);
@@ -2363,6 +2366,7 @@ export function createServer(options: ServerOptions): BridgeServer {
           return;
         } catch (error) {
           updateAndBroadcastStatus(message.sessionId, 'idle');
+          setVibing(message.sessionId, false);  // Error - no longer vibing
           response = {
             type: 'error',
             sessionId: message.sessionId,
@@ -2385,6 +2389,7 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         runnerManager.stopSession(message.sessionId);
         updateAndBroadcastStatus(message.sessionId, 'idle');
+        setVibing(message.sessionId, false);  // Interrupted - no longer vibing
         response = {
           type: 'result',
           sessionId: message.sessionId,
@@ -2674,6 +2679,7 @@ export function createServer(options: ServerOptions): BridgeServer {
 
         // Update session status
         updateAndBroadcastStatus(message.sessionId, 'running');
+        setVibing(message.sessionId, true);  // Agent is now compacting/working
 
         // Create a summary prompt based on conversation history
         const summaryPrompt = `Please provide a brief summary of our conversation so far. Focus on:
@@ -2781,6 +2787,7 @@ Keep it concise but comprehensive.`;
           return;
         } catch (error) {
           updateAndBroadcastStatus(message.sessionId, 'idle');
+          setVibing(message.sessionId, false);  // Error - no longer vibing
           response = {
             type: 'error',
             sessionId: message.sessionId,

@@ -148,25 +148,25 @@ Interactive commands:
 
 ### Simple Response
 ```bash
-npx tsx scripts/debug-claude-stream.ts -o recordings/simple.json \
+npx tsx packages/server/scripts/debug-claude-stream.ts -o recordings/simple.json \
   -p "Reply with just 'hello'"
 ```
 
 ### Permission Request
 ```bash
-npx tsx scripts/debug-claude-stream.ts -o recordings/permission.json \
+npx tsx packages/server/scripts/debug-claude-stream.ts -o recordings/permission.json \
   -p "Write 'test' to /tmp/test.txt" --interactive
 ```
 
 ### AskUserQuestion
 ```bash
-npx tsx scripts/debug-claude-stream.ts -o recordings/question.json \
+npx tsx packages/server/scripts/debug-claude-stream.ts -o recordings/question.json \
   -p "Ask me which color I prefer" --interactive
 ```
 
 ### Thinking + Tool Use
 ```bash
-npx tsx scripts/debug-claude-stream.ts -o recordings/thinking-tool.json \
+npx tsx packages/server/scripts/debug-claude-stream.ts -o recordings/thinking-tool.json \
   -p "Read the file package.json and tell me the name"
 ```
 

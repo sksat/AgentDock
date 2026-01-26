@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MockClaudeRunner } from '../mock-claude-runner.js';
 import type { Scenario } from '../mock-claude-runner.js';
 
