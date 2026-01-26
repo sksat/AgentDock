@@ -1116,8 +1116,9 @@ export function useSession(): UseSessionReturn {
               return newMap;
             });
           }
-          // Restore isLoading state based on whether session is running
-          if (message.isRunning) {
+          // Restore isLoading state based on vibing state (not just isRunning)
+          // This fixes the issue where reloading shows vibing when waiting for permission
+          if (message.isVibing) {
             setIsLoading(true);
           } else {
             setIsLoading(false);
@@ -1143,14 +1144,14 @@ export function useSession(): UseSessionReturn {
         case 'session_status_changed': {
           setSessions((prev) =>
             prev.map((s) =>
-              s.id === message.sessionId ? { ...s, status: message.status } : s
+              s.id === message.sessionId ? { ...s, status: message.status, isVibing: message.isVibing } : s
             )
           );
-          // Update isLoading based on status (for queued input processing)
+          // Update isLoading based on vibing state from server
           if (message.sessionId === activeSessionId) {
-            if (message.status === 'running') {
+            if (message.isVibing) {
               setIsLoading(true);
-            } else if (message.status === 'idle') {
+            } else {
               setIsLoading(false);
               setLoadingReason(null);
             }

@@ -660,6 +660,9 @@ export function createServer(options: ServerOptions): BridgeServer {
   // Map session ID to pending permission request (for restoring on reload)
   const sessionPendingPermissions = new Map<string, { requestId: string; toolName: string; input: unknown }>();
 
+  // Map session ID to vibing state (agent doing autonomous work)
+  const sessionVibingState = new Map<string, boolean>();
+
   // Map session ID to queued input (to be sent after current execution completes)
   const sessionInputQueue = new Map<string, string[]>();
 
@@ -753,12 +756,15 @@ export function createServer(options: ServerOptions): BridgeServer {
     }
   }
 
-  // Broadcast session status change to all clients
-  function broadcastStatusChange(sessionId: string, status: SessionStatus): void {
+  // Broadcast session status change to all clients (with optional vibing state)
+  function broadcastStatusChange(sessionId: string, status: SessionStatus, isVibing?: boolean): void {
+    // Use provided isVibing, or fall back to current state
+    const vibingState = isVibing ?? sessionVibingState.get(sessionId) ?? false;
     const message: ServerMessage = {
       type: 'session_status_changed',
       sessionId,
       status,
+      isVibing: vibingState,
     };
     const messageStr = JSON.stringify(message);
     for (const ws of allClients) {
@@ -766,6 +772,27 @@ export function createServer(options: ServerOptions): BridgeServer {
         ws.send(messageStr);
       }
     }
+  }
+
+  /**
+   * Set vibing state for a session and broadcast the change.
+   * Vibing = agent is doing autonomous work (thinking, tool execution, etc.)
+   * NOT vibing = waiting for user input, permission, or idle
+   */
+  function setVibing(sessionId: string, isVibing: boolean): void {
+    const currentVibing = sessionVibingState.get(sessionId) ?? false;
+    if (currentVibing !== isVibing) {
+      sessionVibingState.set(sessionId, isVibing);
+      const currentStatus = sessionManager.getSession(sessionId)?.status ?? 'idle';
+      broadcastStatusChange(sessionId, currentStatus, isVibing);
+    }
+  }
+
+  /**
+   * Get current vibing state for a session
+   */
+  function getVibing(sessionId: string): boolean {
+    return sessionVibingState.get(sessionId) ?? false;
   }
 
   // Broadcast session created to all clients (for real-time session list updates)
@@ -1111,8 +1138,9 @@ export function createServer(options: ServerOptions): BridgeServer {
       return;
     }
 
-    // Update status to running
+    // Update status to running and set vibing
     updateAndBroadcastStatus(sessionId, 'running');
+    setVibing(sessionId, true);  // Agent is now working on queued input
 
     // Start Claude CLI with MCP permission handling
     try {
@@ -1484,8 +1512,9 @@ export function createServer(options: ServerOptions): BridgeServer {
             sessionInputQueue.set(sessionId, queue);
           }
         } else {
-          // No queued input - set idle
+          // No queued input - set idle and stop vibing
           updateAndBroadcastStatus(sessionId, 'idle');
+          setVibing(sessionId, false);  // Work complete, no more autonomous work
         }
         break;
       }
@@ -1530,10 +1559,12 @@ export function createServer(options: ServerOptions): BridgeServer {
             processQueuedInput(sessionId, nextInput).catch((error) => {
               console.error(`[Server] Error processing queued input:`, error);
               updateAndBroadcastStatus(sessionId, 'idle');
+              setVibing(sessionId, false);  // Error during queue processing
             });
           }, 0);
         } else {
           updateAndBroadcastStatus(sessionId, 'idle');
+          setVibing(sessionId, false);  // Process exited, no more work
         }
         break;
       }
@@ -1636,8 +1667,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           toolName: string;
           input: unknown;
         };
-        // Update session status
+        // Update session status and vibing state
         updateAndBroadcastStatus(sessionId, 'waiting_permission');
+        setVibing(sessionId, false);  // Waiting for user permission
         // Store pending permission for restoration on reload
         sessionPendingPermissions.set(sessionId, {
           requestId: permData.requestId,
@@ -1816,6 +1848,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             pendingPermission: pendingPermission ?? undefined,
             hasBrowserSession,
             isRunning: runnerManager.hasRunningSession(message.sessionId),
+            isVibing: getVibing(message.sessionId),  // Current vibing state
             permissionMode: currentMode,
             model: session.model ?? undefined,
           };
@@ -2139,6 +2172,7 @@ export function createServer(options: ServerOptions): BridgeServer {
             const sent = runnerManager.sendUserMessage(message.sessionId, message.content);
             if (sent) {
               updateAndBroadcastStatus(message.sessionId, 'running');
+              setVibing(message.sessionId, true);  // Agent is now working
               // Add to history and broadcast
               const timestamp = new Date().toISOString();
               sessionManager.addToHistory(message.sessionId, {
@@ -2206,8 +2240,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           timestamp,
         }, ws);
 
-        // Update session status
+        // Update session status and vibing state
         updateAndBroadcastStatus(message.sessionId, 'running');
+        setVibing(message.sessionId, true);  // Agent is now working
 
         // Convert ImageAttachment to ImageContent for the runner
         const images = message.images?.map((img) => ({
@@ -2457,6 +2492,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           const mockRunner = runner as import('./mock-claude-runner.js').MockClaudeRunner;
           mockRunner.respondToPermission(message.requestId, message.response);
           updateAndBroadcastStatus(message.sessionId, 'running');
+          if (message.response.behavior === 'allow') {
+            setVibing(message.sessionId, true);  // Agent resuming work after permission granted
+          }
           return;
         }
 
@@ -2471,6 +2509,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           }));
           pendingPermissionRequests.delete(message.requestId);
           updateAndBroadcastStatus(message.sessionId, 'running');
+          if (message.response.behavior === 'allow') {
+            setVibing(message.sessionId, true);  // Agent resuming work after permission granted
+          }
           // No response needed back to client
           return;
         } else {
@@ -2581,8 +2622,9 @@ export function createServer(options: ServerOptions): BridgeServer {
           runner.sendInput(answerText);
         }
 
-        // Update session status back to running
+        // Update session status back to running and resume vibing
         updateAndBroadcastStatus(message.sessionId, 'running');
+        setVibing(message.sessionId, true);  // Agent resuming work after question answered
 
         // No response needed
         return;

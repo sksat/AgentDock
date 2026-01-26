@@ -601,6 +601,8 @@ export interface SessionAttachedMessage {
   hasBrowserSession?: boolean;
   /** Whether the session is currently running (Claude CLI is executing) */
   isRunning?: boolean;
+  /** Whether the agent is currently doing autonomous work (vibing) */
+  isVibing?: boolean;
   /** Current permission mode for the session */
   permissionMode?: PermissionMode;
   /** Model name stored in session (for contextWindow lookup after reload) */
@@ -621,6 +623,8 @@ export interface SessionStatusChangedMessage {
   type: 'session_status_changed';
   sessionId: string;
   status: SessionStatus;
+  /** Whether the agent is currently doing autonomous work (vibing) */
+  isVibing?: boolean;
 }
 
 /** User input broadcast to all clients attached to a session */
@@ -858,6 +862,8 @@ export interface SessionInfo {
   createdAt: string;
   workingDir: string;
   status: SessionStatus;
+  /** Whether the agent is currently doing autonomous work (vibing) */
+  isVibing?: boolean;
   claudeSessionId?: string; // Claude CLI's session ID for --resume
   permissionMode?: PermissionMode;
   model?: string;
