@@ -257,6 +257,41 @@ export const permissionScenario: Scenario = {
   ],
 };
 
+/** Scenario for ExitPlanMode with permission request */
+export const exitPlanModeScenario: Scenario = {
+  name: 'exit-plan-mode',
+  promptPattern: /plan|approve|exit\s*plan/i,
+  steps: [
+    {
+      type: 'system',
+      subtype: 'init',
+      model: 'claude-sonnet-4-20250514',
+      tools: ['Read', 'Write', 'Edit', 'Bash', 'EnterPlanMode', 'ExitPlanMode'],
+      permissionMode: 'plan',
+    },
+    { type: 'thinking', thinking: 'I am in plan mode. Let me create a plan for this task.' },
+    { type: 'text', text: 'Here is my implementation plan:\n\n## Plan\n1. Analyze the codebase\n2. Implement the feature\n3. Write tests\n4. Update documentation' },
+    {
+      type: 'permission_request',
+      toolName: 'ExitPlanMode',
+      input: {
+        allowedPrompts: [
+          { tool: 'Bash', prompt: 'run tests' },
+        ],
+      },
+      resultOnAllow: 'Plan approved by user. Starting implementation.',
+      resultOnDeny: 'Plan not approved. Please provide feedback.',
+    },
+    { type: 'text', text: 'Great! Your plan has been approved. I will now proceed with the implementation.' },
+    {
+      type: 'usage',
+      inputTokens: 1500,
+      outputTokens: 400,
+    },
+    { type: 'result', result: 'Plan approved and ready for implementation' },
+  ],
+};
+
 /** All test scenarios */
 export const testScenarios: Scenario[] = [
   thinkingScenario,
@@ -267,4 +302,5 @@ export const testScenarios: Scenario[] = [
   slowThinkingScenario,
   streamingThinkingScenario,
   permissionScenario,
+  exitPlanModeScenario,
 ];

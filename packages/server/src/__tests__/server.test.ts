@@ -499,7 +499,8 @@ describe('isAutoAllowedTool', () => {
   });
 
   it('should return true for UI/internal tools (no system changes)', () => {
-    expect(isAutoAllowedTool('ExitPlanMode')).toBe(true);
+    // ExitPlanMode is NOT auto-allowed - requires user approval of the plan
+    expect(isAutoAllowedTool('ExitPlanMode')).toBe(false);
     expect(isAutoAllowedTool('TodoWrite')).toBe(true);
     expect(isAutoAllowedTool('TaskOutput')).toBe(true);
     expect(isAutoAllowedTool('EnterPlanMode')).toBe(true);
