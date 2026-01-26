@@ -120,7 +120,7 @@ export function LoadingIndicator({ onInterrupt, message }: LoadingIndicatorProps
   const displayMessage = message ?? `${VIBING_WORDS[messageIndex]}...`;
 
   return (
-    <div className="px-4 py-2 border-t border-border flex items-center justify-between">
+    <div data-testid="loading-indicator" className="px-4 py-2 border-t border-border flex items-center justify-between">
       <div className="flex items-center gap-2 text-text-secondary">
         <img src="/agentdock-animated.svg" alt="" className="h-5 w-auto" />
         <span className="transition-opacity duration-300">
