@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
     define: {
       // Expose stable mode flag to client code
       'import.meta.env.VITE_STABLE_MODE': JSON.stringify(noWatch),
+      'import.meta.env.VITE_SERVER_PORT': JSON.stringify(serverPort),
     },
     server: {
       host: hostExpose ? true : undefined,
