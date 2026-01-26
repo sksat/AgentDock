@@ -603,4 +603,107 @@ export class MockClaudeRunner extends EventEmitter {
     });
     return runner;
   }
+
+  /**
+   * Creates a scenario that enters plan mode.
+   * In plan mode, Claude plans but doesn't execute until user approves.
+   */
+  static withEnterPlanModeScenario(): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.setScenario({
+      name: 'enter-plan-mode',
+      steps: [
+        {
+          type: 'system',
+          subtype: 'init',
+          model: 'claude-sonnet-4-20250514',
+          tools: ['Read', 'Write', 'Edit', 'Bash', 'EnterPlanMode', 'ExitPlanMode'],
+          permissionMode: 'plan',
+        },
+        { type: 'text', text: 'I am now in plan mode. I will analyze and plan before executing.' },
+        { type: 'result', result: 'Entered plan mode' },
+      ],
+    });
+    return runner;
+  }
+
+  /**
+   * Creates a scenario that exits plan mode with permission request.
+   * This simulates Claude Code CLI behavior where ExitPlanMode requires user approval.
+   */
+  static withExitPlanModeScenario(): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.setScenario({
+      name: 'exit-plan-mode',
+      steps: [
+        {
+          type: 'system',
+          subtype: 'init',
+          model: 'claude-sonnet-4-20250514',
+          tools: ['Read', 'Write', 'Edit', 'Bash', 'EnterPlanMode', 'ExitPlanMode'],
+          permissionMode: 'plan',
+        },
+        { type: 'thinking', thinking: 'I have completed planning. Now requesting to exit plan mode.' },
+        { type: 'text', text: 'Here is my implementation plan:\n1. First step\n2. Second step' },
+        {
+          type: 'permission_request',
+          toolName: 'ExitPlanMode',
+          input: { allowedPrompts: [] },
+          resultOnAllow: 'Plan approved. Exiting plan mode.',
+          resultOnDeny: 'Plan not approved. Staying in plan mode.',
+        },
+        { type: 'text', text: 'Plan has been reviewed. Proceeding with implementation.' },
+        { type: 'result', result: 'Plan mode exited' },
+      ],
+    });
+    return runner;
+  }
+
+  /**
+   * Creates a scenario for full plan workflow: enter -> plan -> exit
+   */
+  static withFullPlanWorkflowScenario(): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.setScenario({
+      name: 'full-plan-workflow',
+      steps: [
+        {
+          type: 'system',
+          subtype: 'init',
+          model: 'claude-sonnet-4-20250514',
+          tools: ['Read', 'Write', 'Edit', 'Bash', 'EnterPlanMode', 'ExitPlanMode', 'TodoWrite'],
+          permissionMode: 'plan',
+        },
+        { type: 'thinking', thinking: 'Entering plan mode to design the implementation.' },
+        {
+          type: 'tool_use',
+          id: 'read-1',
+          name: 'Read',
+          input: { file_path: '/project/src/index.ts' },
+        },
+        {
+          type: 'tool_result',
+          toolUseId: 'read-1',
+          content: 'export function main() { console.log("Hello"); }',
+          isError: false,
+        },
+        { type: 'text', text: 'Based on my analysis, here is the implementation plan:\n\n## Plan\n1. Add new feature\n2. Update tests\n3. Update documentation' },
+        {
+          type: 'permission_request',
+          toolName: 'ExitPlanMode',
+          input: {
+            allowedPrompts: [
+              { tool: 'Bash', prompt: 'run tests' },
+            ],
+          },
+          resultOnAllow: 'Plan approved by user. Starting implementation.',
+          resultOnDeny: 'User requested changes to the plan.',
+        },
+        { type: 'thinking', thinking: 'User approved the plan. Now implementing.' },
+        { type: 'text', text: 'Implementing the approved plan...' },
+        { type: 'result', result: 'Implementation complete based on approved plan.' },
+      ],
+    });
+    return runner;
+  }
 }

@@ -354,8 +354,8 @@ export function isAgentDockTool(toolName: string): boolean {
  */
 const AUTO_ALLOWED_TOOLS = new Set([
   'AskUserQuestion',  // UI interaction tool
-  'ExitPlanMode',     // Plan mode signal
-  'EnterPlanMode',    // Plan mode signal
+  // ExitPlanMode is NOT auto-allowed - requires user approval of the plan
+  'EnterPlanMode',    // Plan mode signal (auto-allowed, just enters planning)
   'TodoWrite',        // Internal todo list
   'TaskOutput',       // Task output retrieval
 ]);
@@ -367,7 +367,11 @@ const AUTO_ALLOWED_TOOLS = new Set([
  * This is appropriate for:
  *   1. AgentDock integrated MCP tools (mcp__bridge__*) - trusted, UI-integrated tools
  *   2. Direct browser tools (browser_*) - AgentDock internal tools
- *   3. UI/internal tools (AskUserQuestion, ExitPlanMode, TodoWrite, etc.)
+ *   3. UI/internal tools (AskUserQuestion, EnterPlanMode, TodoWrite, etc.)
+ *
+ * Note: ExitPlanMode is NOT auto-allowed because it represents the user's approval
+ * of Claude's implementation plan. The user must explicitly approve before Claude
+ * can proceed with the implementation.
  *
  * Security note: Only tools that are either:
  *   - Provided by AgentDock itself and designed for safe operation
@@ -1348,6 +1352,14 @@ export function createServer(options: ServerOptions): BridgeServer {
         } else if (toolName === 'ExitPlanMode') {
           // Track for permission mode sync on tool_result (after approval)
           pendingPlanModeTools.set(toolUseId, 'exit');
+          // ExitPlanMode requires user approval, so broadcast to client
+          sendToSession(sessionId, {
+            type: 'tool_use',
+            sessionId,
+            toolName,
+            toolUseId,
+            input,
+          });
           // Store in history
           sessionManager.addToHistory(sessionId, {
             type: 'tool_use',
