@@ -76,9 +76,9 @@ test.describe('ProcessStatusIndicator', () => {
     // Click Stop button
     await page.getByRole('button', { name: 'Stop' }).click();
 
-    // Click Stop in confirmation dialog (there are two Stop buttons now)
-    const stopButtons = page.getByRole('button', { name: 'Stop' });
-    await stopButtons.last().click();
+    // Click Stop in confirmation dialog (target the button inside the dialog)
+    const confirmationDialog = page.getByRole('dialog', { name: 'Stop confirmation' });
+    await confirmationDialog.getByRole('button', { name: 'Stop' }).click();
 
     // Should show Idle indicator (process stopped)
     await expect(page.getByText('Idle')).toBeVisible({ timeout: 5000 });

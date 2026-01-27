@@ -76,6 +76,8 @@ export function ProcessStatusIndicator({
         {showConfirm && (
           <div
             ref={confirmRef}
+            role="dialog"
+            aria-label="Stop confirmation"
             className="absolute top-full left-0 mt-1 z-50 p-3 bg-bg-secondary border border-border rounded-lg shadow-lg min-w-[200px]"
           >
             <p className="text-sm text-text-primary mb-3">
