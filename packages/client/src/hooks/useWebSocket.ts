@@ -111,12 +111,15 @@ export function useWebSocket(
       const ws = wsRef.current;
       wsRef.current = null;
 
-      // If still connecting, wait for open/error before closing
-      // This prevents "WebSocket closed before connection established" errors
-      if (ws.readyState === WebSocket.CONNECTING) {
-        ws.onopen = () => ws.close();
-        ws.onerror = () => ws.close();
-      } else {
+      // Clear event handlers to prevent state updates from closed WebSocket
+      // This is important for React StrictMode which unmounts/remounts components
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+
+      // Close the WebSocket if it's open or connecting
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
     }

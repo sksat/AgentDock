@@ -220,8 +220,10 @@ describe('useWebSocket', () => {
       unmount();
     });
 
-    // onDisconnect should have been called
-    expect(onDisconnect).toHaveBeenCalled();
+    // onDisconnect should NOT be called because we clear event handlers
+    // before closing to prevent state updates from old WebSocket
+    // (important for React StrictMode)
+    expect(onDisconnect).not.toHaveBeenCalled();
   });
 
   it('should handle disconnect during CONNECTING state without errors', async () => {
@@ -263,16 +265,15 @@ describe('useWebSocket', () => {
       unmount();
     });
 
-    // close() should NOT have been called yet (waiting for open/error)
-    expect(closeSpy).not.toHaveBeenCalled();
-
-    // Simulate connection completing after unmount
-    act(() => {
-      (mockInstances[0] as SlowMockWebSocket).triggerOpen();
-    });
-
-    // NOW close should have been called
+    // close() should be called immediately (we clear handlers first to prevent
+    // state updates, so it's safe to close even in CONNECTING state)
     expect(closeSpy).toHaveBeenCalled();
+
+    // Event handlers should have been cleared before close
+    expect(mockInstances[0].onopen).toBeNull();
+    expect(mockInstances[0].onclose).toBeNull();
+    expect(mockInstances[0].onmessage).toBeNull();
+    expect(mockInstances[0].onerror).toBeNull();
 
     // Restore
     // @ts-expect-error - Mock WebSocket for testing
