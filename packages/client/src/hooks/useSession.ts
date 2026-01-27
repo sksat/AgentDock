@@ -18,6 +18,7 @@ import type {
   RepositoryType,
   SelectedProject,
 } from '@agent-dock/shared';
+import { getContextWindow } from '@agent-dock/shared';
 import type { MessageStreamItem, ToolContent, SystemMessageContent, ImageAttachment, UserMessageContent, QuestionMessageContent } from '../components/MessageStream';
 
 export interface PendingPermission {
@@ -140,6 +141,7 @@ export interface UseSessionReturn {
   systemInfo: SystemInfo | null;
   usageInfo: UsageInfo | null;
   modelUsage: ModelUsage[] | null;
+  currentContextWindow: number | undefined;
   globalUsage: GlobalUsage | null;
   screencast: ScreencastState | null;
   todoState: TodoState;
@@ -459,6 +461,16 @@ export function useSession(): UseSessionReturn {
     () => (activeSessionId ? (sessionModelUsage.get(activeSessionId) ?? null) : null),
     [activeSessionId, sessionModelUsage]
   );
+  // Calculate currentContextWindow with fallback chain:
+  // 1. From modelUsage (DB-persisted, includes CLI value or previous fallback)
+  // 2. From model-limits lookup (static fallback for known models)
+  const currentContextWindow = useMemo(() => {
+    if (!activeSessionId) return undefined;
+    const modelName = systemInfo?.model;
+    const usage = sessionModelUsage.get(activeSessionId);
+    const fromUsage = usage?.find(m => m.modelName === modelName)?.contextWindow;
+    return fromUsage ?? getContextWindow(modelName) ?? undefined;
+  }, [activeSessionId, systemInfo?.model, sessionModelUsage]);
   const pendingPermission = useMemo(
     () => (activeSessionId ? (sessionPendingPermission.get(activeSessionId) ?? null) : null),
     [activeSessionId, sessionPendingPermission]
@@ -1649,6 +1661,7 @@ export function useSession(): UseSessionReturn {
     systemInfo,
     usageInfo,
     modelUsage,
+    currentContextWindow,
     globalUsage,
     screencast,
     todoState,

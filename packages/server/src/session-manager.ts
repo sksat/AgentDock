@@ -93,6 +93,7 @@ export class SessionManager {
     addUsage: Database.Statement;
     getUsage: Database.Statement;
     upsertModelUsage: Database.Statement;
+    setModelUsageCumulative: Database.Statement;
     getModelUsage: Database.Statement;
     // Thread binding operations (for Slack persistence)
     insertThreadBinding: Database.Statement;
@@ -145,6 +146,17 @@ export class SessionManager {
           output_tokens = output_tokens + excluded.output_tokens,
           cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
           cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+          context_window = COALESCE(excluded.context_window, context_window)
+      `),
+      // Set cumulative usage (overwrite instead of add) - used for CLI's cumulative values
+      setModelUsageCumulative: this.db.prepare(`
+        INSERT INTO session_model_usage (session_id, model_name, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, context_window)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id, model_name) DO UPDATE SET
+          input_tokens = excluded.input_tokens,
+          output_tokens = excluded.output_tokens,
+          cache_creation_tokens = excluded.cache_creation_tokens,
+          cache_read_tokens = excluded.cache_read_tokens,
           context_window = COALESCE(excluded.context_window, context_window)
       `),
       getModelUsage: this.db.prepare(`
@@ -529,12 +541,30 @@ export class SessionManager {
   }
 
   /**
-   * Add usage for a specific model in a session
+   * Add usage for a specific model in a session (delta values - accumulated)
    */
   addModelUsage(sessionId: string, modelName: string, usage: SessionUsage, contextWindow?: number): void {
     // Persist ephemeral session first (usage means session is active)
     this.ensurePersisted(sessionId);
     this.stmts.upsertModelUsage.run(
+      sessionId,
+      modelName,
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.cacheCreationTokens,
+      usage.cacheReadTokens,
+      contextWindow ?? null
+    );
+  }
+
+  /**
+   * Set cumulative usage for a specific model in a session (overwrites existing values)
+   * Used for CLI's cumulative modelUsage values from result events
+   */
+  setModelUsageCumulative(sessionId: string, modelName: string, usage: SessionUsage, contextWindow?: number): void {
+    // Persist ephemeral session first (usage means session is active)
+    this.ensurePersisted(sessionId);
+    this.stmts.setModelUsageCumulative.run(
       sessionId,
       modelName,
       usage.inputTokens,
