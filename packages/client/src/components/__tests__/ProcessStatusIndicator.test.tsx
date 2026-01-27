@@ -106,6 +106,39 @@ describe('ProcessStatusIndicator', () => {
       // Dialog should be hidden
       expect(screen.queryByText(/stop claude code process\?/i)).not.toBeInTheDocument();
     });
+
+    it('should close confirmation dialog when clicking outside', () => {
+      render(<ProcessStatusIndicator isVibing={true} onStop={() => {}} />);
+
+      // Open dialog
+      fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+      expect(screen.getByText(/stop claude code process\?/i)).toBeInTheDocument();
+
+      // Click outside the dialog (on the document body)
+      fireEvent.mouseDown(document.body);
+
+      // Dialog should be hidden
+      expect(screen.queryByText(/stop claude code process\?/i)).not.toBeInTheDocument();
+    });
+
+    it('should reset confirmation dialog when isVibing becomes false', () => {
+      const { rerender } = render(
+        <ProcessStatusIndicator isVibing={true} onStop={() => {}} />
+      );
+
+      // Open dialog
+      fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+      expect(screen.getByText(/stop claude code process\?/i)).toBeInTheDocument();
+
+      // isVibing becomes false (e.g., process stopped externally)
+      rerender(<ProcessStatusIndicator isVibing={false} onStop={() => {}} />);
+
+      // Now isVibing becomes true again
+      rerender(<ProcessStatusIndicator isVibing={true} onStop={() => {}} />);
+
+      // Dialog should NOT be open (it was reset)
+      expect(screen.queryByText(/stop claude code process\?/i)).not.toBeInTheDocument();
+    });
   });
 
   describe('robustness', () => {

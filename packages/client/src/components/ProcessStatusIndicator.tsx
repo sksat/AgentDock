@@ -14,6 +14,14 @@ export function ProcessStatusIndicator({
   const [showConfirm, setShowConfirm] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
 
+  // Reset confirmation dialog when isVibing becomes false
+  // This prevents the dialog from being open when the process restarts
+  useEffect(() => {
+    if (!isVibing) {
+      setShowConfirm(false);
+    }
+  }, [isVibing]);
+
   // Close confirmation on click outside
   useEffect(() => {
     if (!showConfirm) return;
