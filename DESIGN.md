@@ -895,14 +895,14 @@ Browser MCP もコンテナ内で動作。localhost が共有される。
 │                                                             │
 │  AgentDock Server (:3001)                                   │
 │       │                                                     │
-│       │ WebSocket (ws://localhost:3002)                     │
+│       │ WebSocket (ws://localhost:3010)                     │
 │       ▼                                                     │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ Claude Code + Browser コンテナ                       │   │
 │  │ (claude-browser イメージ, ポートマッピング)          │   │
 │  │                                                      │   │
 │  │  ┌─────────────────┐  ┌─────────────────────────┐   │   │
-│  │  │ Claude Code     │  │ Browser Bridge (:3002)  │   │   │
+│  │  │ Claude Code     │  │ Browser Bridge (:3010)  │   │   │
 │  │  │ pnpm dev :5173  │  │ Playwright              │   │   │
 │  │  │                 │  │ → localhost:5173 ✅     │   │   │
 │  │  └─────────────────┘  └─────────────────────────┘   │   │
@@ -915,7 +915,7 @@ Browser MCP もコンテナ内で動作。localhost が共有される。
 **特徴:**
 - Browser bridge と Claude Code が同じコンテナ内で実行
 - コンテナ内の localhost が共有されるため、dev server にアクセス可能
-- ポートマッピング (`-p ${bridgePort}:3002`) でホストから bridge に接続
+- ポートマッピング (`-p ${bridgePort}:3010`) でホストから bridge に接続
 - `--network=host` を使わないため、複数セッションでポート競合しない
 
 ### コンポーネント
@@ -951,7 +951,7 @@ Browser MCP もコンテナ内で動作。localhost が共有される。
 | 変数名 | 説明 | デフォルト |
 |--------|------|-----------|
 | `BROWSER_BRIDGE_ENABLED` | Browser bridge を起動するか | `false` |
-| `BRIDGE_PORT` | Bridge のポート番号 | `3002` |
+| `BRIDGE_PORT` | Bridge のポート番号 | `3010` |
 | `GIT_USER_NAME` | Git user.name | (ホストから取得) |
 | `GIT_USER_EMAIL` | Git user.email | (ホストから取得) |
 

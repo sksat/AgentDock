@@ -82,7 +82,7 @@ RUN npm install && npm run build
 WORKDIR /workspace
 
 # Expose bridge port
-EXPOSE 3002
+EXPOSE 3010
 
 # Entrypoint handles Git configuration (Issue #80)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

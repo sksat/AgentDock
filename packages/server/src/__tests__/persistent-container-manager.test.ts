@@ -32,7 +32,7 @@ describe('PersistentContainerManager', () => {
     manager = new PersistentContainerManager({
       containerConfig: mockContainerConfig,
       workingDir: '/test/dir',
-      bridgePort: 3002,
+      bridgePort: 3010,
     });
   });
 
