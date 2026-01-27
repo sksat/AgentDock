@@ -18,6 +18,7 @@ export function ProcessStatusIndicator({
   // This prevents the dialog from being open when the process restarts
   useEffect(() => {
     if (!isVibing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowConfirm(false);
     }
   }, [isVibing]);
