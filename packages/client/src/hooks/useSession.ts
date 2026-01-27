@@ -275,6 +275,7 @@ function convertHistoryForDisplay(history: ServerMessageItem[]): MessageStreamIt
       // All tools are merged into unified 'tool' type
       processedToolUseIds.add(content.toolUseId);
       result.push({
+        id: content.toolUseId, // Use toolUseId as stable ID for tool messages
         type: 'tool',
         content: {
           toolUseId: content.toolUseId,
@@ -294,8 +295,9 @@ function convertHistoryForDisplay(history: ServerMessageItem[]): MessageStreamIt
         processedToolUseIds.add(content.toolUseId);
       }
     } else {
-      // Pass through other message types
+      // Pass through other message types with generated IDs
       result.push({
+        id: crypto.randomUUID(),
         type: item.type as MessageStreamItem['type'],
         content: item.content,
         timestamp: item.timestamp,
@@ -375,6 +377,7 @@ export function useSession(): UseSessionReturn {
         newMap.set(activeSessionId, [
           ...current,
           {
+            id: crypto.randomUUID(),
             type: 'user',
             content: pendingMessage,
             timestamp: new Date().toISOString(),
@@ -639,6 +642,7 @@ export function useSession(): UseSessionReturn {
       updateSessionMessages(activeSessionId, (prev) => [
         ...prev,
         {
+          id: crypto.randomUUID(),
           type: 'user',
           content: messageContent,
           timestamp: new Date().toISOString(),
@@ -683,6 +687,7 @@ export function useSession(): UseSessionReturn {
       updateSessionMessages(activeSessionId, (prev) => [
         ...prev,
         {
+          id: crypto.randomUUID(),
           type: 'system',
           content,
           timestamp: new Date().toISOString(),
@@ -698,6 +703,7 @@ export function useSession(): UseSessionReturn {
     updateSessionMessages(activeSessionId, (prev) => [
       ...prev,
       {
+        id: crypto.randomUUID(),
         type: 'user',
         content: '/compact',
         timestamp: new Date().toISOString(),
@@ -757,6 +763,7 @@ export function useSession(): UseSessionReturn {
         updateSessionMessages(sessionId, (prev) => [
           ...prev,
           {
+            id: crypto.randomUUID(),
             type: 'question',
             content: questionContent,
             timestamp: new Date().toISOString(),
@@ -1177,6 +1184,7 @@ export function useSession(): UseSessionReturn {
             return [
               ...prev,
               {
+                id: crypto.randomUUID(),
                 type: 'assistant',
                 content: message.text,
                 timestamp: new Date().toISOString(),
@@ -1221,6 +1229,7 @@ export function useSession(): UseSessionReturn {
             return [
               ...prev,
               {
+                id: crypto.randomUUID(),
                 type: 'thinking',
                 content: message.thinking,
                 timestamp: new Date().toISOString(),
@@ -1238,6 +1247,7 @@ export function useSession(): UseSessionReturn {
           updateSessionMessages(sessionId, (prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               type: 'tool',
               content: {
                 toolUseId,
@@ -1380,6 +1390,7 @@ export function useSession(): UseSessionReturn {
           updateSessionMessages(sessionId, (prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               type: 'todo_update',
               content: { toolUseId, todos },
               timestamp: new Date().toISOString(),
@@ -1437,6 +1448,7 @@ export function useSession(): UseSessionReturn {
           updateSessionMessages(sessionId, (prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               type: 'system',
               content: message.content,
               timestamp: new Date().toISOString(),
@@ -1587,6 +1599,7 @@ export function useSession(): UseSessionReturn {
           updateSessionMessages(sessionId, (prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               type: 'user',
               content: {
                 text: message.content,
