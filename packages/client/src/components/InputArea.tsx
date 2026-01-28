@@ -7,7 +7,7 @@ import { ProjectSelector } from './ProjectSelector';
 import { RunnerBackendToggle } from './RunnerBackendToggle';
 import type { ImageAttachment } from './MessageStream';
 import type { RunnerBackend, Repository, SelectedProject, RecentProject } from '@agent-dock/shared';
-import { calculateOccupancyRate } from '@agent-dock/shared';
+import { calculateOccupancyRate, getContextWindow } from '@agent-dock/shared';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -700,10 +700,12 @@ export function InputArea({
 
               {/* Context window usage */}
               {tokenUsage && (() => {
+                // Use contextWindowProp if provided, otherwise fallback to model-limits lookup
+                const effectiveContextWindow = contextWindowProp ?? getContextWindow(model) ?? undefined;
                 const occupancy = calculateOccupancyRate(
                   tokenUsage.inputTokens,
                   model,
-                  contextWindowProp
+                  effectiveContextWindow
                 );
 
                 // Unknown model: simple token display without percentage

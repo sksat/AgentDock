@@ -13,6 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 import { tmpdir, homedir } from 'node:os';
 import type { ClientMessage, ServerMessage, GlobalUsageMessage, SessionStatus, SessionInfo, BrowserCommand, PermissionMode, RunnerBackend, MachinePortsMessage, MachineProcessInfo, MachinePortInfo } from '@agent-dock/shared';
+import { getContextWindow } from '@agent-dock/shared';
 import type { BrowserController } from '@anthropic/playwright-mcp';
 import { SessionManager } from './session-manager.js';
 import { RunnerManager, defaultRunnerFactory } from './runner-manager.js';
@@ -1471,15 +1472,22 @@ export function createServer(options: ServerOptions): BridgeServer {
           const currentModel = session?.model;
 
           for (const [modelName, usage] of Object.entries(resultData.modelUsage)) {
-            // Save context window to DB
-            if (usage.contextWindow) {
-              sessionManager.addModelUsage(
-                sessionId,
-                modelName,
-                { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
-                usage.contextWindow
-              );
-            }
+            // Get contextWindow from CLI or use fallback from model-limits
+            const contextWindow = usage.contextWindow ?? getContextWindow(modelName) ?? undefined;
+
+            // Save cumulative values to DB (overwrite, not add)
+            // This ensures reload shows the same values as CLI
+            sessionManager.setModelUsageCumulative(
+              sessionId,
+              modelName,
+              {
+                inputTokens: usage.inputTokens ?? 0,
+                outputTokens: usage.outputTokens ?? 0,
+                cacheCreationTokens: usage.cacheCreationInputTokens ?? 0,
+                cacheReadTokens: usage.cacheReadInputTokens ?? 0,
+              },
+              contextWindow
+            );
 
             // Send cumulative usage for current model to client
             if (modelName === currentModel && usage.inputTokens !== undefined) {
@@ -1491,7 +1499,7 @@ export function createServer(options: ServerOptions): BridgeServer {
                 cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
                 cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
                 isCumulative: true,
-                contextWindow: usage.contextWindow,
+                contextWindow,  // Always include (from CLI or fallback)
                 modelName: modelName,
               });
             }

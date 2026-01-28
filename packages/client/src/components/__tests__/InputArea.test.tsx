@@ -682,4 +682,62 @@ describe('Context window occupancy', () => {
     // Should cap at 100%, not show 125%
     expect(screen.getByText('100% | 250,000 tokens')).toBeInTheDocument();
   });
+
+  it('should display pie chart for unknown model when contextWindow prop is provided', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="unknown-future-model"
+        tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+        contextWindow={200000}
+      />
+    );
+
+    // contextWindow prop overrides unknown model fallback
+    // 50,000 / 200,000 = 25%
+    expect(screen.getByText('25% | 50,000 tokens')).toBeInTheDocument();
+  });
+
+  it('should use contextWindow prop over model-limits lookup when both available', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-sonnet-4-5-20250929"  // Known model: 200,000
+        tokenUsage={{ inputTokens: 50000, outputTokens: 1000 }}
+        contextWindow={100000}  // Override with smaller value
+      />
+    );
+
+    // contextWindow prop (100,000) should take precedence
+    // 50,000 / 100,000 = 50%
+    expect(screen.getByText('50% | 50,000 tokens')).toBeInTheDocument();
+  });
+
+  it('should fallback to model-limits when contextWindow prop is undefined', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        model="claude-opus-4-5-20251101"  // Known model: 200,000
+        tokenUsage={{ inputTokens: 100000, outputTokens: 1000 }}
+      />
+    );
+
+    // No contextWindow prop, should use model-limits (200,000)
+    // 100,000 / 200,000 = 50%
+    expect(screen.getByText('50% | 100,000 tokens')).toBeInTheDocument();
+  });
+
+  it('should handle undefined model gracefully with contextWindow prop', () => {
+    render(
+      <InputArea
+        onSend={() => {}}
+        tokenUsage={{ inputTokens: 25000, outputTokens: 1000 }}
+        contextWindow={100000}
+      />
+    );
+
+    // model is undefined, but contextWindow is provided
+    // 25,000 / 100,000 = 25%
+    expect(screen.getByText('25% | 25,000 tokens')).toBeInTheDocument();
+  });
 });

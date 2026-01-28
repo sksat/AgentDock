@@ -558,3 +558,96 @@ describe('Predefined scenarios', () => {
     });
   });
 });
+
+describe('Usage scenarios', () => {
+  it('should emit result with modelUsage including contextWindow', async () => {
+    const runner = MockClaudeRunner.withUsageScenario('claude-sonnet-4-20250514');
+    const resultHandler = vi.fn();
+    const systemHandler = vi.fn();
+
+    runner.on('system', systemHandler);
+    runner.on('result', resultHandler);
+
+    runner.start('test message');
+
+    await vi.waitFor(() => {
+      expect(resultHandler).toHaveBeenCalled();
+    });
+
+    expect(systemHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-sonnet-4-20250514',
+      })
+    );
+
+    expect(resultHandler).toHaveBeenCalledWith({
+      result: 'Task completed',
+      sessionId: expect.any(String),
+      modelUsage: {
+        'claude-sonnet-4-20250514': {
+          inputTokens: 50000,
+          outputTokens: 1000,
+          cacheReadInputTokens: 10000,
+          cacheCreationInputTokens: 5000,
+          contextWindow: 200000,
+        },
+      },
+    });
+  });
+
+  it('should emit result with modelUsage without contextWindow', async () => {
+    const runner = MockClaudeRunner.withUsageNoContextWindowScenario('claude-sonnet-4-20250514');
+    const resultHandler = vi.fn();
+
+    runner.on('result', resultHandler);
+
+    runner.start('test message');
+
+    await vi.waitFor(() => {
+      expect(resultHandler).toHaveBeenCalled();
+    });
+
+    expect(resultHandler).toHaveBeenCalledWith({
+      result: 'Task completed',
+      sessionId: expect.any(String),
+      modelUsage: {
+        'claude-sonnet-4-20250514': {
+          inputTokens: 50000,
+          outputTokens: 1000,
+        },
+      },
+    });
+  });
+
+  it('should work with custom model name', async () => {
+    const runner = MockClaudeRunner.withUsageScenario('claude-opus-4-5-20251101');
+    const resultHandler = vi.fn();
+    const systemHandler = vi.fn();
+
+    runner.on('system', systemHandler);
+    runner.on('result', resultHandler);
+
+    runner.start('test message');
+
+    await vi.waitFor(() => {
+      expect(resultHandler).toHaveBeenCalled();
+    });
+
+    expect(systemHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-opus-4-5-20251101',
+      })
+    );
+
+    expect(resultHandler).toHaveBeenCalledWith({
+      result: 'Task completed',
+      sessionId: expect.any(String),
+      modelUsage: {
+        'claude-opus-4-5-20251101': expect.objectContaining({
+          inputTokens: 50000,
+          contextWindow: 200000,
+        }),
+      },
+    });
+  });
+});

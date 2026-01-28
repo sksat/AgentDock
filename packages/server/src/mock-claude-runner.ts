@@ -30,9 +30,18 @@ export interface ToolResultStep {
   delay?: number;
 }
 
+export interface ResultModelUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  contextWindow?: number;
+}
+
 export interface ResultStep {
   type: 'result';
   result: string;
+  modelUsage?: Record<string, ResultModelUsage>;
   delay?: number;
 }
 
@@ -268,6 +277,7 @@ export class MockClaudeRunner extends EventEmitter {
         this.emit('result', {
           result: step.result,
           sessionId: this.sessionId,
+          modelUsage: step.modelUsage,
         });
         break;
 
@@ -702,6 +712,71 @@ export class MockClaudeRunner extends EventEmitter {
         { type: 'thinking', thinking: 'User approved the plan. Now implementing.' },
         { type: 'text', text: 'Implementing the approved plan...' },
         { type: 'result', result: 'Implementation complete based on approved plan.' },
+      ],
+    });
+    return runner;
+  }
+
+  /**
+   * Scenario with modelUsage including contextWindow
+   * Used for testing context window display
+   */
+  static withUsageScenario(modelName: string = 'claude-sonnet-4-20250514'): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.setScenario({
+      name: 'usage',
+      steps: [
+        {
+          type: 'system',
+          subtype: 'init',
+          model: modelName,
+          tools: ['Read', 'Write', 'Edit'],
+        },
+        { type: 'text', text: 'I will help you with that.' },
+        {
+          type: 'result',
+          result: 'Task completed',
+          modelUsage: {
+            [modelName]: {
+              inputTokens: 50000,
+              outputTokens: 1000,
+              cacheReadInputTokens: 10000,
+              cacheCreationInputTokens: 5000,
+              contextWindow: 200000,
+            },
+          },
+        },
+      ],
+    });
+    return runner;
+  }
+
+  /**
+   * Scenario with modelUsage but WITHOUT contextWindow
+   * Used for testing fallback behavior
+   */
+  static withUsageNoContextWindowScenario(modelName: string = 'claude-sonnet-4-20250514'): MockClaudeRunner {
+    const runner = new MockClaudeRunner();
+    runner.setScenario({
+      name: 'usage-no-context-window',
+      steps: [
+        {
+          type: 'system',
+          subtype: 'init',
+          model: modelName,
+          tools: ['Read', 'Write', 'Edit'],
+        },
+        { type: 'text', text: 'I will help you with that.' },
+        {
+          type: 'result',
+          result: 'Task completed',
+          modelUsage: {
+            [modelName]: {
+              inputTokens: 50000,
+              outputTokens: 1000,
+            },
+          },
+        },
       ],
     });
     return runner;
