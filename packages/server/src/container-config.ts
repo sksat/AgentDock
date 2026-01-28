@@ -30,7 +30,7 @@ export interface ContainerConfig {
   extraArgs: string[];
   /** Enable browser bridge in the container (Issue #78: same-container mode) */
   browserBridgeEnabled?: boolean;
-  /** Bridge port number (default: 3002) */
+  /** Bridge port number (default: 3010) */
   bridgePort?: number;
 }
 
@@ -90,7 +90,7 @@ export function buildPodmanArgs(
   // With --network=host, the bridge listens directly on bridgePort on the host.
   // Each session should use a unique bridgePort to avoid conflicts.
   if (config.browserBridgeEnabled) {
-    const bridgePort = config.bridgePort ?? 3002;
+    const bridgePort = config.bridgePort ?? 3010;
     args.push('-e', 'BROWSER_BRIDGE_ENABLED=true');
     args.push('-e', `BRIDGE_PORT=${bridgePort}`);
   }

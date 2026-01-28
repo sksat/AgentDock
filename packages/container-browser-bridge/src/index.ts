@@ -8,7 +8,7 @@ export * from './types.js';
 
 // CLI entry point
 async function main(): Promise<void> {
-  const port = parseInt(process.env.BRIDGE_PORT ?? '3002', 10);
+  const port = parseInt(process.env.BRIDGE_PORT ?? '3010', 10);
 
   console.log(`[ContainerBrowserBridge] Starting on port ${port}...`);
 

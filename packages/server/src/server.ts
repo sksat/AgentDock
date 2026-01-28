@@ -615,7 +615,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         const configWithBrowser: ContainerConfig = {
           ...browserContainerConfig!,
           browserBridgeEnabled: true,
-          bridgePort: opts.bridgePort ?? 3002,
+          bridgePort: opts.bridgePort ?? 3010,
         };
         return new PodmanClaudeRunner({
           workingDir: opts.workingDir,
@@ -724,7 +724,7 @@ export function createServer(options: ServerOptions): BridgeServer {
         throw new Error('Browser container mode not configured');
       }
       // Use a port based on session hash for uniqueness
-      const bridgePort = 3002 + (sessionId.charCodeAt(0) % 1000);
+      const bridgePort = 3010 + (sessionId.charCodeAt(0) % 1000);
 
       // Create a new config with browserBridgeEnabled for same-container mode (Issue #78)
       // This allows Browser MCP and dev servers to share the same localhost
@@ -1168,10 +1168,10 @@ export function createServer(options: ServerOptions): BridgeServer {
       // Get browserInContainer setting for this session (Issue #78)
       const browserInContainer = shouldUseContainerBrowser(sessionId);
 
-      // Generate unique bridge port for this session (3002-4001 range)
+      // Generate unique bridge port for this session (3010-4009 range)
       // Must match the port calculation in getOrCreateContainerManager
       const bridgePort = browserInContainer
-        ? 3002 + (sessionId.charCodeAt(0) % 1000)
+        ? 3010 + (sessionId.charCodeAt(0) % 1000)
         : undefined;
 
       // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
@@ -2299,10 +2299,10 @@ export function createServer(options: ServerOptions): BridgeServer {
           // Get browserInContainer setting for this session (Issue #78)
           const browserInContainer = shouldUseContainerBrowser(message.sessionId);
 
-          // Generate unique bridge port for this session (3002-4001 range)
+          // Generate unique bridge port for this session (3010-4009 range)
           // IMPORTANT: Must match the port calculation in getOrCreateContainerManager
           const bridgePort = browserInContainer
-            ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
+            ? 3010 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
           // Start persistent container if browserInContainer is true (Issue #78: same-container mode)
@@ -2727,10 +2727,10 @@ Keep it concise but comprehensive.`;
           // Get browserInContainer setting for this session (Issue #78)
           const browserInContainer = shouldUseContainerBrowser(message.sessionId);
 
-          // Generate unique bridge port for this session (3002-4001 range)
+          // Generate unique bridge port for this session (3010-4009 range)
           // IMPORTANT: Must match the port calculation in getOrCreateContainerManager
           const bridgePort = browserInContainer
-            ? 3002 + (message.sessionId.charCodeAt(0) % 1000)
+            ? 3010 + (message.sessionId.charCodeAt(0) % 1000)
             : undefined;
 
           // Start persistent container if browserInContainer is true (Issue #78: same-container mode)

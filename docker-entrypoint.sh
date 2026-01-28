@@ -22,8 +22,8 @@ git config --global url."https://github.com/".insteadOf "git@github.com:" 2>/dev
 # Start browser bridge in background (Issue #78: same-container mode)
 # This allows Browser MCP and Claude Code to share the same localhost
 if [ "$BROWSER_BRIDGE_ENABLED" = "true" ]; then
-    echo "[entrypoint] Starting browser bridge on port ${BRIDGE_PORT:-3002}..."
-    BRIDGE_PORT="${BRIDGE_PORT:-3002}" node /home/node/browser-bridge/dist/index.js &
+    echo "[entrypoint] Starting browser bridge on port ${BRIDGE_PORT:-3010}..."
+    BRIDGE_PORT="${BRIDGE_PORT:-3010}" node /home/node/browser-bridge/dist/index.js &
     BRIDGE_PID=$!
     echo "[entrypoint] Browser bridge started with PID: $BRIDGE_PID"
 fi
