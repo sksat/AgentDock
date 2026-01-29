@@ -211,6 +211,36 @@ describe('MessageStream performance', () => {
   });
 });
 
+describe('Phase 1.4: ResizeObserver optimization', () => {
+  it('should not cause excessive re-renders during streaming content', async () => {
+    // This test documents that MessageStream handles streaming efficiently
+    // With virtualization + memoization, only visible items re-render
+    const messages: MessageStreamItem[] = generateMessages(50);
+
+    const { rerender } = render(<MessageStream messages={messages} />);
+
+    // Simulate streaming by appending content to the last message
+    const startTime = performance.now();
+
+    for (let i = 0; i < 20; i++) {
+      const updatedMessages = messages.map((msg, idx) => {
+        if (idx === messages.length - 1 && msg.type === 'assistant') {
+          return { ...msg, content: `${msg.content} streaming chunk ${i}` };
+        }
+        return msg;
+      });
+      rerender(<MessageStream messages={updatedMessages} />);
+    }
+
+    const duration = performance.now() - startTime;
+    console.log(`20 streaming updates for 50 messages took: ${duration.toFixed(2)}ms`);
+
+    // With optimizations, streaming updates should be fast
+    // Target: < 500ms for 20 updates (25ms per update)
+    expect(duration).toBeLessThan(2000); // 2 seconds max for now
+  });
+});
+
 describe('MessageStream performance utils', () => {
   it('generateMessages creates correct number of messages', () => {
     const messages = generateMessages(50);

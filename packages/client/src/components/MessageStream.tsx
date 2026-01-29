@@ -479,18 +479,27 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
 
   // Use ResizeObserver + MutationObserver to scroll to bottom when content changes
   // ResizeObserver catches element resizing, MutationObserver catches DOM changes (streaming text)
+  // Uses requestAnimationFrame to debounce scroll calls for smooth 60fps updates
   useEffect(() => {
     if (!containerRef.current) return;
 
     const container = containerRef.current;
+    let rafId: number | null = null;
 
+    // Debounced scroll handler using requestAnimationFrame
+    // This batches multiple rapid mutations into a single scroll per frame (16.67ms at 60fps)
     const handleContentChange = () => {
-      if (autoScrollRef.current) {
-        scrollToBottom();
-      }
+      if (rafId !== null) return; // Already scheduled
+
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (autoScrollRef.current) {
+          scrollToBottom();
+        }
+      });
     };
 
-    // ResizeObserver for element size changes
+    // ResizeObserver for element size changes (only observe the virtual list wrapper)
     const resizeObserver = new ResizeObserver(handleContentChange);
     Array.from(container.children).forEach(child => resizeObserver.observe(child));
 
@@ -506,6 +515,9 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     handleContentChange();
 
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };

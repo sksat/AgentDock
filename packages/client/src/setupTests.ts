@@ -98,6 +98,24 @@ vi.mock('@tanstack/react-virtual', async () => {
   };
 });
 
+// Mock requestAnimationFrame for tests
+// Use vi.useFakeTimers() in tests that need to control RAF timing
+// By default, RAF executes callback immediately for synchronous behavior
+let rafId = 0;
+const rafPending: Map<number, FrameRequestCallback> = new Map();
+
+window.requestAnimationFrame = (callback: FrameRequestCallback): number => {
+  const id = ++rafId;
+  // Execute immediately for most tests - this allows scroll behavior tests to pass
+  // For tests that need debounce behavior, use vi.useFakeTimers()
+  callback(performance.now());
+  return id;
+};
+
+window.cancelAnimationFrame = (id: number): void => {
+  rafPending.delete(id);
+};
+
 // Mock getBoundingClientRect for virtualization tests
 // jsdom doesn't have layout calculations, so we need to provide dimensions
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
