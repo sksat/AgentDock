@@ -16,8 +16,8 @@ const baseUrl = useRealData ? 'http://localhost:5174' : '/';
 test.describe('Performance - Message Rendering', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(baseUrl);
-    // Wait for WebSocket connection
-    await expect(page.getByText('Connected')).toBeVisible({ timeout: 10000 });
+    // Wait for WebSocket connection - use exact match to avoid matching session preview text
+    await expect(page.getByText('Connected', { exact: true })).toBeVisible({ timeout: 10000 });
   });
 
   test('should measure initial page load performance', async ({ page }) => {
@@ -74,11 +74,11 @@ test.describe('Performance - Message Rendering', () => {
     await input.fill('Hello, this is a test message for performance testing.');
     await input.press('Enter');
 
-    // Wait for user message to appear
-    await expect(page.getByText('Hello, this is a test message')).toBeVisible({ timeout: 5000 });
+    // Wait for user message to appear in the message list (not sidebar)
+    const messageItems = page.locator('[data-testid="message-item"]');
+    await expect(messageItems.first()).toBeVisible({ timeout: 5000 });
 
     // Count message items
-    const messageItems = page.locator('[data-testid="message-item"]');
     const count = await messageItems.count();
     console.log(`Message items rendered: ${count}`);
 
@@ -129,7 +129,7 @@ test.describe('Performance - Virtualization Verification', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('http://localhost:5174');
-    await expect(page.getByText('Connected')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Connected', { exact: true })).toBeVisible({ timeout: 10000 });
   });
 
   test('should limit DOM elements with virtualization', async ({ page }) => {
