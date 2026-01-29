@@ -653,11 +653,43 @@ const MessageItem = memo(
   },
   (prev, next) => {
     // Custom comparison: only re-render if relevant props actually changed
-    return (
-      prev.message === next.message &&
-      prev.thinkingExpanded === next.thinkingExpanded &&
-      prev.workingDir === next.workingDir
-    );
+    // Use deep comparison for message content to avoid unnecessary re-renders
+
+    // Quick reference check first (if same object, definitely equal)
+    if (prev.message === next.message) {
+      return prev.thinkingExpanded === next.thinkingExpanded && prev.workingDir === next.workingDir;
+    }
+
+    // If different objects, compare by id and content
+    if (prev.message.id !== next.message.id) return false;
+    if (prev.message.type !== next.message.type) return false;
+    if (prev.thinkingExpanded !== next.thinkingExpanded) return false;
+    if (prev.workingDir !== next.workingDir) return false;
+
+    // Content comparison based on message type
+    switch (prev.message.type) {
+      case 'assistant':
+      case 'thinking':
+        // String content - direct comparison
+        return prev.message.content === next.message.content;
+      case 'tool': {
+        // Tool content - compare output and completion status
+        const prevTool = prev.message.content as ToolContent;
+        const nextTool = next.message.content as ToolContent;
+        return (
+          prevTool.toolUseId === nextTool.toolUseId &&
+          prevTool.output === nextTool.output &&
+          prevTool.isComplete === nextTool.isComplete &&
+          prevTool.isError === nextTool.isError
+        );
+      }
+      case 'user':
+        // User messages rarely change, but compare text
+        return JSON.stringify(prev.message.content) === JSON.stringify(next.message.content);
+      default:
+        // For other types, use JSON comparison as fallback
+        return JSON.stringify(prev.message.content) === JSON.stringify(next.message.content);
+    }
   }
 );
 
