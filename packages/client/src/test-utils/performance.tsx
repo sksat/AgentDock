@@ -10,10 +10,13 @@ export function generateMessages(count: number): MessageStreamItem[] {
   for (let i = 0; i < count; i++) {
     const type = types[i % types.length];
     const timestamp = new Date(Date.now() + i * 1000).toISOString();
+    // Generate stable ID for each message
+    const id = `msg-${type}-${i}`;
 
     switch (type) {
       case 'user':
         messages.push({
+          id,
           type: 'user',
           content: { text: `User message ${i}` } as UserMessageContent,
           timestamp,
@@ -21,6 +24,7 @@ export function generateMessages(count: number): MessageStreamItem[] {
         break;
       case 'assistant':
         messages.push({
+          id,
           type: 'assistant',
           content: `Assistant response ${i}. This is a longer message to simulate real content. `.repeat(3),
           timestamp,
@@ -28,6 +32,7 @@ export function generateMessages(count: number): MessageStreamItem[] {
         break;
       case 'tool':
         messages.push({
+          id,
           type: 'tool',
           content: {
             toolUseId: `tool-${i}`,
@@ -42,6 +47,7 @@ export function generateMessages(count: number): MessageStreamItem[] {
         break;
       case 'thinking':
         messages.push({
+          id,
           type: 'thinking',
           content: `Thinking about step ${i}...`.repeat(2),
           timestamp,
@@ -100,6 +106,7 @@ export function measureRenderTime(renderFn: () => void): number {
  */
 export function createIndexedMessage(index: number, type: MessageStreamItem['type'] = 'assistant'): MessageStreamItem {
   return {
+    id: `msg-${type}-${index}`,
     type,
     content: type === 'user'
       ? { text: `Message ${index}` }

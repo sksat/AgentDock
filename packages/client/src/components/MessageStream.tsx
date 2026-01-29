@@ -61,6 +61,25 @@ export interface MessageStreamProps {
   sessionId?: string;
 }
 
+/**
+ * Generate a stable key for a message without an id.
+ * Uses type + timestamp to create a unique key.
+ * For tool messages, uses toolUseId which is always unique.
+ */
+function getStableMessageKey(message: MessageStreamItem): string {
+  // For tool messages, use the toolUseId which is guaranteed unique
+  if (message.type === 'tool' && message.content) {
+    const toolContent = message.content as ToolContent;
+    if (toolContent.toolUseId) {
+      return toolContent.toolUseId;
+    }
+  }
+
+  // For other messages, use type + timestamp
+  // This should be unique enough since messages are added sequentially
+  return `${message.type}-${message.timestamp}`;
+}
+
 // cat -n format pattern: leading spaces, line number, tab or →, content
 const CAT_LINE_PATTERN = /^\s*(\d+)[\t→](.*)$/;
 
@@ -548,9 +567,9 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 space-y-4"
       >
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <MessageItem
-            key={message.id ?? `${message.type}-${message.timestamp}-${index}`}
+            key={message.id ?? getStableMessageKey(message)}
             message={message}
             thinkingExpanded={thinkingExpanded}
             onToggleThinking={toggleThinkingExpanded}
@@ -598,28 +617,39 @@ interface MessageItemProps {
 
 const MessageItem = memo(
   function MessageItem({ message, thinkingExpanded, onToggleThinking, workingDir }: MessageItemProps) {
-    switch (message.type) {
-      case 'user':
-        // Support both old string format and new object format with images
-        if (typeof message.content === 'string') {
-          return <UserMessage content={{ text: message.content }} />;
-        }
-        return <UserMessage content={message.content as UserMessageContent} />;
-      case 'assistant':
-        return <AssistantMessage content={message.content as string} />;
-      case 'thinking':
-        return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
-      case 'tool':
-        return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
-      case 'system':
-        return <SystemMessage content={message.content as SystemMessageContent} />;
-      case 'question':
-        return <QuestionMessage content={message.content as QuestionMessageContent} />;
-      case 'todo_update':
-        return <TodoUpdateMessage content={message.content as TodoUpdateContent} />;
-      default:
-        return null;
-    }
+    // Generate stable key for this message
+    const messageId = message.id ?? getStableMessageKey(message);
+
+    const renderContent = () => {
+      switch (message.type) {
+        case 'user':
+          // Support both old string format and new object format with images
+          if (typeof message.content === 'string') {
+            return <UserMessage content={{ text: message.content }} />;
+          }
+          return <UserMessage content={message.content as UserMessageContent} />;
+        case 'assistant':
+          return <AssistantMessage content={message.content as string} />;
+        case 'thinking':
+          return <ThinkingMessage content={message.content as string} isExpanded={thinkingExpanded} onToggle={onToggleThinking} />;
+        case 'tool':
+          return <ToolMessage content={message.content as ToolContent} workingDir={workingDir} />;
+        case 'system':
+          return <SystemMessage content={message.content as SystemMessageContent} />;
+        case 'question':
+          return <QuestionMessage content={message.content as QuestionMessageContent} />;
+        case 'todo_update':
+          return <TodoUpdateMessage content={message.content as TodoUpdateContent} />;
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <div data-testid="message-item" data-message-id={messageId}>
+        {renderContent()}
+      </div>
+    );
   },
   (prev, next) => {
     // Custom comparison: only re-render if relevant props actually changed
@@ -635,7 +665,7 @@ function UserMessage({ content }: { content: UserMessageContent }) {
   const hasImages = content.images && content.images.length > 0;
 
   return (
-    <div data-testid="message-item" className="flex justify-end">
+    <div className="flex justify-end">
       <div className="max-w-[80%] flex flex-col gap-2 items-end">
         {/* Images */}
         {hasImages && (
@@ -667,7 +697,7 @@ function UserMessage({ content }: { content: UserMessageContent }) {
 
 function AssistantMessage({ content }: { content: string }) {
   return (
-    <div data-testid="message-item" className="flex justify-start">
+    <div className="flex justify-start">
       <div className="max-w-[80%] px-4 py-3 rounded-lg bg-bg-tertiary text-text-primary prose prose-invert prose-sm max-w-none">
         <Streamdown mode="streaming">{content}</Streamdown>
       </div>
@@ -683,7 +713,7 @@ interface ThinkingMessageProps {
 
 function ThinkingMessage({ content, isExpanded, onToggle }: ThinkingMessageProps) {
   return (
-    <div data-testid="message-item" className="flex justify-start">
+    <div className="flex justify-start">
       <div className=" rounded-lg border border-border/50 overflow-hidden">
         <button
           onClick={onToggle}
@@ -959,7 +989,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
 
   if (isScreenshotTool && screenshotImageData) {
     return (
-      <div data-testid="message-item" className="flex justify-start">
+      <div className="flex justify-start">
         <div className="rounded-lg overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-1.5">
             <span className={clsx(
@@ -987,7 +1017,7 @@ function ToolMessage({ content, workingDir }: { content: ToolContent; workingDir
   }
 
   return (
-    <div data-testid="message-item" className="flex justify-start">
+    <div className="flex justify-start">
       <div className="rounded-lg overflow-hidden">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -1136,7 +1166,7 @@ function SystemMessage({ content }: { content: SystemMessageContent }) {
   const hasMore = lines.length > 1;
 
   return (
-    <div data-testid="message-item" className="flex justify-start">
+    <div className="flex justify-start">
       <div className="rounded-lg overflow-hidden">
         {/* Compact header - always visible */}
         <button
@@ -1169,7 +1199,7 @@ function QuestionMessage({ content }: { content: QuestionMessageContent }) {
   // Guard against invalid content
   if (!content || !Array.isArray(content.answers)) {
     return (
-      <div data-testid="message-item" className="flex justify-start">
+      <div className="flex justify-start">
         <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-success mt-1.5"></span>
           <div className="text-sm">
@@ -1187,7 +1217,7 @@ function QuestionMessage({ content }: { content: QuestionMessageContent }) {
     .join(', ');
 
   return (
-    <div data-testid="message-item" className="flex justify-start">
+    <div className="flex justify-start">
       <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
         <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-success mt-1.5"></span>
         <div className="text-sm">
@@ -1205,7 +1235,7 @@ function TodoUpdateMessage({ content }: { content: TodoUpdateContent }) {
   // Guard against invalid content
   if (!content || !Array.isArray(content.todos)) {
     return (
-      <div data-testid="message-item" className="flex justify-start">
+      <div className="flex justify-start">
         <div className="flex items-start gap-2 px-3 py-1.5 rounded-lg">
           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent-primary mt-1.5"></span>
           <div className="text-sm">
@@ -1222,7 +1252,7 @@ function TodoUpdateMessage({ content }: { content: TodoUpdateContent }) {
 
   return (
     // data-todo-update-id is used for scrolling from TodoPanel when a task is clicked
-    <div data-testid="message-item" data-todo-update-id={content.toolUseId} className="flex justify-start">
+    <div data-todo-update-id={content.toolUseId} className="flex justify-start">
       <div className="max-w-[80%] rounded-lg border border-border overflow-hidden bg-bg-secondary">
         <div className="px-3 py-2 bg-bg-tertiary border-b border-border flex items-center gap-2">
           <span className="text-text-primary font-medium text-sm">ToDo</span>
