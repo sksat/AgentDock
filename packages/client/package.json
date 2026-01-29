@@ -14,6 +14,7 @@
   "dependencies": {
     "@agent-dock/shared": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-virtual": "^3.13.18",
     "clsx": "^2.1.1",
     "react": "^19.2.0",
     "react-diff-viewer-continued": "^3.4.0",
