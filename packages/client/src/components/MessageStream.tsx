@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import clsx from 'clsx';
 import { Streamdown } from 'streamdown';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useThinkingPreference } from '../hooks/useThinkingPreference';
 import { TodoItem } from './TodoItem';
 import { DiffView } from './DiffView';
@@ -435,18 +436,31 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
   const prevMessagesLengthRef = useRef(messages.length);
   const prevSessionIdRef = useRef(sessionId);
 
+  // Virtualizer for efficient rendering of large message lists
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 120, // Estimated height per message in pixels
+    overscan: 5, // Render 5 extra items above/below for smoother scrolling
+    // Use stable message keys so DOM elements are preserved when messages are prepended
+    getItemKey: (index) => {
+      const message = messages[index];
+      return message.id ?? getStableMessageKey(message);
+    },
+  });
+
   // Ref to track autoScroll state for use in ResizeObserver callback
   const autoScrollRef = useRef(autoScroll);
   useEffect(() => {
     autoScrollRef.current = autoScroll;
   }, [autoScroll]);
 
-  // Scroll to bottom using the anchor element
+  // Scroll to bottom using virtualizer
   const scrollToBottom = useCallback(() => {
-    if (scrollAnchorRef.current) {
-      scrollAnchorRef.current.scrollIntoView({ behavior: 'instant', block: 'end' });
+    if (messages.length > 0) {
+      virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: 'auto' });
     }
-  }, []);
+  }, [messages.length, virtualizer]);
 
   // Reset autoScroll when user posts (detect new user message)
   // This effect must run BEFORE the ResizeObserver effect so autoScrollRef is updated
@@ -454,7 +468,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.type === 'user') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setAutoScroll(true);
         autoScrollRef.current = true; // Update ref immediately for ResizeObserver
         scrollToBottom();
@@ -500,7 +514,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
   // Reset autoScroll and scroll to bottom when session changes
   useEffect(() => {
     if (sessionId !== prevSessionIdRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setAutoScroll(true);
       autoScrollRef.current = true; // Update ref immediately for ResizeObserver
       scrollToBottom();
@@ -565,18 +579,43 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
+        className="flex-1 overflow-y-auto p-4"
       >
-        {messages.map((message) => (
-          <MessageItem
-            key={message.id ?? getStableMessageKey(message)}
-            message={message}
-            thinkingExpanded={thinkingExpanded}
-            onToggleThinking={toggleThinkingExpanded}
-            workingDir={workingDir}
-          />
-        ))}
-        {/* Scroll anchor for reliable scrollIntoView */}
+        {/* Virtualized message list for efficient rendering */}
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const message = messages[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+                className="pb-4"
+              >
+                <MessageItem
+                  message={message}
+                  thinkingExpanded={thinkingExpanded}
+                  onToggleThinking={toggleThinkingExpanded}
+                  workingDir={workingDir}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {/* Scroll anchor for fallback scrollIntoView */}
         <div ref={scrollAnchorRef} aria-hidden="true" />
       </div>
 
