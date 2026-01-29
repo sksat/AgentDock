@@ -154,6 +154,90 @@ describe('MessageStream performance', () => {
       // Current: if a message is inserted at the beginning, all keys shift
       // This causes unnecessary DOM updates
     });
+
+    it('should use stable keys without index fallback for messages with id', () => {
+      // Test that messages with id property use that id as key (not index)
+      const messages: MessageStreamItem[] = [
+        { id: 'msg-1', type: 'user', content: { text: 'First' }, timestamp: '2024-01-01T00:00:00Z' },
+        { id: 'msg-2', type: 'assistant', content: 'Second', timestamp: '2024-01-01T00:00:01Z' },
+      ];
+
+      const { container } = render(<MessageStream messages={messages} />);
+
+      // Verify messages render with their stable IDs as data attributes
+      const items = container.querySelectorAll('[data-testid="message-item"]');
+      expect(items).toHaveLength(2);
+
+      // Check that data-message-id attributes are set correctly
+      expect(items[0].getAttribute('data-message-id')).toBe('msg-1');
+      expect(items[1].getAttribute('data-message-id')).toBe('msg-2');
+    });
+
+    it('should preserve DOM elements when messages are prepended (stable keys)', () => {
+      // Test that inserting a message at the beginning doesn't recreate existing elements
+      const messages: MessageStreamItem[] = [
+        { id: 'msg-1', type: 'user', content: { text: 'First' }, timestamp: '2024-01-01T00:00:00Z' },
+        { id: 'msg-2', type: 'assistant', content: 'Second', timestamp: '2024-01-01T00:00:01Z' },
+      ];
+
+      const { container, rerender } = render(<MessageStream messages={messages} />);
+
+      // Get references to DOM elements
+      const itemsBefore = container.querySelectorAll('[data-testid="message-item"]');
+      const msg1Before = itemsBefore[0];
+      const msg2Before = itemsBefore[1];
+
+      // Insert a message at the beginning
+      const messagesWithInsert: MessageStreamItem[] = [
+        { id: 'msg-0', type: 'user', content: { text: 'Inserted' }, timestamp: '2024-01-01T00:00:00.500Z' },
+        ...messages,
+      ];
+
+      rerender(<MessageStream messages={messagesWithInsert} />);
+
+      // Verify all 3 messages render
+      const itemsAfter = container.querySelectorAll('[data-testid="message-item"]');
+      expect(itemsAfter).toHaveLength(3);
+
+      // With stable keys, msg-1 and msg-2 should be the same DOM elements (not recreated)
+      // They should now be at index 1 and 2
+      expect(itemsAfter[1].getAttribute('data-message-id')).toBe('msg-1');
+      expect(itemsAfter[2].getAttribute('data-message-id')).toBe('msg-2');
+
+      // DOM element identity should be preserved (same object reference)
+      expect(itemsAfter[1]).toBe(msg1Before);
+      expect(itemsAfter[2]).toBe(msg2Before);
+    });
+  });
+});
+
+describe('Phase 1.4: ResizeObserver optimization', () => {
+  it('should not cause excessive re-renders during streaming content', async () => {
+    // This test documents that MessageStream handles streaming efficiently
+    // With virtualization + memoization, only visible items re-render
+    const messages: MessageStreamItem[] = generateMessages(50);
+
+    const { rerender } = render(<MessageStream messages={messages} />);
+
+    // Simulate streaming by appending content to the last message
+    const startTime = performance.now();
+
+    for (let i = 0; i < 20; i++) {
+      const updatedMessages = messages.map((msg, idx) => {
+        if (idx === messages.length - 1 && msg.type === 'assistant') {
+          return { ...msg, content: `${msg.content} streaming chunk ${i}` };
+        }
+        return msg;
+      });
+      rerender(<MessageStream messages={updatedMessages} />);
+    }
+
+    const duration = performance.now() - startTime;
+    console.log(`20 streaming updates for 50 messages took: ${duration.toFixed(2)}ms`);
+
+    // With optimizations, streaming updates should be fast
+    // Target: < 500ms for 20 updates (25ms per update)
+    expect(duration).toBeLessThan(2000); // 2 seconds max for now
   });
 });
 

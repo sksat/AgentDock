@@ -166,9 +166,9 @@ export function SettingsPage({ globalSettings, updateSettings }: SettingsPagePro
     if (globalSettings) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplaySettings(globalSettings);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setEditingSystemPrompt(globalSettings.systemPromptTemplate);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSystemPromptDirty(false);
     }
   }, [globalSettings]);
