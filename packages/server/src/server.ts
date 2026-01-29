@@ -2630,13 +2630,31 @@ export function createServer(options: ServerOptions): BridgeServer {
           break;
         }
 
-        // Send the answer to the runner (for mock runner, this triggers wait_for_input to continue)
+        // Send the answer to the runner
         const runner = runnerManager.getRunner(message.sessionId);
-        if (runner) {
-          // Convert answers to a string (take the first answer value)
-          const answerValues = Object.values(message.answers);
-          const answerText = answerValues.join(', ');
-          runner.sendInput(answerText);
+        if (!runner) {
+          console.error(`[Server] question_response: runner not found for session ${message.sessionId}`);
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Runner not found for session',
+          };
+          break;
+        }
+
+        // Convert answers to a string and send via sendUserMessage
+        // (sendInput only works in PTY mode, but we use child process mode)
+        const answerValues = Object.values(message.answers);
+        const answerText = answerValues.join(', ');
+        const sent = runner.sendUserMessage(answerText);
+        if (!sent) {
+          console.error(`[Server] question_response: failed to send answer to Claude Code for session ${message.sessionId}`);
+          response = {
+            type: 'error',
+            sessionId: message.sessionId,
+            message: 'Failed to send answer to Claude Code',
+          };
+          break;
         }
 
         // Update session status back to running and resume vibing
