@@ -10,13 +10,13 @@ importers:
     devDependencies:
       playwright:
         specifier: ^1.57.0
-        version: 1.58.0
+        version: 1.58.1
 
   packages/browser-streamer:
     dependencies:
       playwright:
         specifier: ^1.52.0
-        version: 1.58.0
+        version: 1.58.1
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -111,7 +111,7 @@ importers:
     dependencies:
       playwright-core:
         specifier: ^1.52.0
-        version: 1.58.0
+        version: 1.58.1
       ws:
         specifier: ^8.18.1
         version: 8.19.0
@@ -133,7 +133,7 @@ importers:
     devDependencies:
       '@playwright/test':
         specifier: ^1.50.0
-        version: 1.58.0
+        version: 1.58.1
 
   packages/mcp-server:
     dependencies:
@@ -173,7 +173,7 @@ importers:
     dependencies:
       playwright:
         specifier: ^1.52.0
-        version: 1.58.0
+        version: 1.58.1
       zod:
         specifier: ^4.0.0
         version: 4.3.6
@@ -707,8 +707,8 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@playwright/test@1.58.0':
-    resolution: {integrity: sha512-fWza+Lpbj6SkQKCrU6si4iu+fD2dD3gxNHFhUPxsfXBPhnv3rRSQVd0NtBUT9Z/RhF/boCBcuUaMUSTRTopjZg==}
+  '@playwright/test@1.58.1':
+    resolution: {integrity: sha512-6LdVIUERWxQMmUSSQi0I53GgCBYgM2RpGngCPY7hSeju+VrKjq3lvs7HpJoPbDiY5QM5EYRtRX5fvrinnMAz3w==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -2551,13 +2551,13 @@ packages:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
 
-  playwright-core@1.58.0:
-    resolution: {integrity: sha512-aaoB1RWrdNi3//rOeKuMiS65UCcgOVljU46At6eFcOFPFHWtd2weHRRow6z/n+Lec0Lvu0k9ZPKJSjPugikirw==}
+  playwright-core@1.58.1:
+    resolution: {integrity: sha512-bcWzOaTxcW+VOOGBCQgnaKToLJ65d6AqfLVKEWvexyS3AS6rbXl+xdpYRMGSRBClPvyj44njOWoxjNdL/H9UNg==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.58.0:
-    resolution: {integrity: sha512-2SVA0sbPktiIY/MCOPX8e86ehA/e+tDNq+e5Y8qjKYti2Z/JG7xnronT/TXTIkKbYGWlCbuucZ6dziEgkoEjQQ==}
+  playwright@1.58.1:
+    resolution: {integrity: sha512-+2uTZHxSCcxjvGc5C891LrS1/NlxglGxzrC4seZiVjcYVQfUa87wBL6rTDqzGjuoWNjnBzRqKmF6zRYGMvQUaQ==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -3589,9 +3589,9 @@ snapshots:
       - hono
       - supports-color
 
-  '@playwright/test@1.58.0':
+  '@playwright/test@1.58.1':
     dependencies:
-      playwright: 1.58.0
+      playwright: 1.58.1
 
   '@rolldown/pluginutils@1.0.0-beta.53': {}
 
@@ -5733,11 +5733,11 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  playwright-core@1.58.0: {}
+  playwright-core@1.58.1: {}
 
-  playwright@1.58.0:
+  playwright@1.58.1:
     dependencies:
-      playwright-core: 1.58.0
+      playwright-core: 1.58.1
     optionalDependencies:
       fsevents: 2.3.2
 
